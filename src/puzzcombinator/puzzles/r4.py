@@ -318,20 +318,30 @@ class R4DecoderPuzzle(Puzzle):
 
     # -- rendering ---------------------------------------------------------
 
-    def render(self, audience: Audience) -> RenderFragment:
+    def svg_assets(self, audience: Audience = Audience.PLAYER) -> dict[str, str]:
+        """The grid and decoder as standalone SVG documents, keyed by name.
+
+        Each value is a complete ``<svg>`` document — write it to a ``.svg`` file
+        to print a piece on its own page or send it to a print service. Honours
+        the reveal flags for ``PLAYER``; ``GAME_MASTER`` shows everything.
+        """
         gm = audience is Audience.GAME_MASTER
-        show_letters = gm or self.reveal_grid
-        show_shading = gm or self.reveal_decoder
         dim = self.size
         shaded = {(r, c) for r in range(dim) for c in range(dim) if self.grille[r][c] == SHADED}
-        grid_svg = _svg(dim, letters=self.grid if show_letters else None)
-        decoder_svg = _svg(dim, shaded=shaded if show_shading else None)
+        return {
+            "grid": _svg(dim, letters=self.grid if (gm or self.reveal_grid) else None),
+            "decoder": _svg(dim, shaded=shaded if (gm or self.reveal_decoder) else None),
+        }
+
+    def render(self, audience: Audience) -> RenderFragment:
+        gm = audience is Audience.GAME_MASTER
+        assets = self.svg_assets(audience)
         parts = [
             f'<section class="puzzle r4" data-id="{html.escape(self.id)}">',
             "<h3>R4 Decoder</h3>",
             '<div class="r4-pieces">',
-            f"<figure><figcaption>Letter grid</figcaption>{grid_svg}</figure>",
-            f"<figure><figcaption>Decoder</figcaption>{decoder_svg}</figure>",
+            f"<figure><figcaption>Letter grid</figcaption>{assets['grid']}</figure>",
+            f"<figure><figcaption>Decoder</figcaption>{assets['decoder']}</figure>",
             "</div>",
             "<p>Place the decoder over the grid (red triangles aligned, top-left), "
             "read the letters in the open squares, then rotate the decoder 90&deg; "

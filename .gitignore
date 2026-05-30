@@ -30,3 +30,4 @@ env/
 
 # Generated example output
 examples/*.html
+examples/*.svg

@@ -4,15 +4,18 @@ Run it:
 
     python examples/r4_demo.py
 
-It writes three files next to this script:
+It writes these files next to this script:
 
     r4_player.html        — the standalone puzzle: letter grid + decoder to cut out
     r4_player_blank.html  — the "assembled during the game" variant: blank templates
     r4_gamemaster.html    — the answer key (filled grid, shaded decoder, message)
+    r4_grid.svg           — just the letter grid, as its own printable file
+    r4_decoder.svg        — just the decoder, as its own printable file
 
-Open them in a browser (and print to PDF). Cut the open squares out of the
-decoder, lay it on the letter grid with the red triangles aligned, read the open
-squares, rotate 90 degrees, and repeat four times.
+The .svg files are standalone documents: open one in a browser to "Save As" or
+print it on its own page, or hand it to a print service. Cut the open squares
+out of the decoder, lay it on the letter grid with the red triangles aligned,
+read the open squares, rotate 90 degrees, and repeat four times.
 """
 
 from __future__ import annotations
@@ -73,4 +76,11 @@ outputs = [
 for name, graph, audience in outputs:
     path = here / name
     path.write_text(render_binder(graph, audience=audience), encoding="utf-8")
+    print(f"wrote {path}")
+
+# Each piece as its own standalone .svg file (printable / save-able on its own).
+puzzle = R4DecoderPuzzle.from_message("decoder", MESSAGE, seed=SEED)
+for piece, svg in puzzle.svg_assets(Audience.PLAYER).items():
+    path = here / f"r4_{piece}.svg"
+    path.write_text(svg, encoding="utf-8")
     print(f"wrote {path}")

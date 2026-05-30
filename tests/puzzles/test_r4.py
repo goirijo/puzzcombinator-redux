@@ -91,6 +91,22 @@ def test_game_master_always_reveals_everything() -> None:
     assert "Reading order" in gm
 
 
+def test_svg_assets_are_standalone_documents() -> None:
+    puzzle = R4DecoderPuzzle.from_message("r4", "MEETATDAWN", seed=3)
+    assets = puzzle.svg_assets(Audience.PLAYER)
+    assert set(assets) == {"grid", "decoder"}
+    for svg in assets.values():
+        assert svg.startswith("<svg")
+        assert 'xmlns="http://www.w3.org/2000/svg"' in svg
+        assert svg.endswith("</svg>")
+    # Player view honours reveal flags; game master reveals everything.
+    blank = R4DecoderPuzzle.from_message(
+        "r4", "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False
+    )
+    assert "<text" not in blank.svg_assets(Audience.PLAYER)["grid"]
+    assert "<text" in blank.svg_assets(Audience.GAME_MASTER)["grid"]
+
+
 def test_payload_roundtrip() -> None:
     puzzle = R4DecoderPuzzle.from_message("r4", "MEETATDAWN", seed=4, reveal_grid=False)
     assert R4DecoderPuzzle.from_payload("r4", puzzle.to_payload()) == puzzle
