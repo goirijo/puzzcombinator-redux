@@ -27,3 +27,6 @@ env/
 
 # Local tool settings
 .claude/
+
+# Generated example output
+examples/*.html
