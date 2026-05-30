@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "puzzcombinator"
+description = "A modular library of tools for building treasure-hunt games."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "jg.goiri" }]
+keywords = ["treasure-hunt", "puzzle", "game", "graph"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Games/Entertainment :: Puzzle Games",
+]
+dynamic = ["version"]
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
+dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "pyyaml>=6"]
+
+[tool.hatch.version]
+path = "src/puzzcombinator/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/puzzcombinator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/puzzcombinator"]
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["puzzcombinator"]
