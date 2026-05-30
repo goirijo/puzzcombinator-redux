@@ -20,12 +20,15 @@ the key fits the lock). Live progress tracking is a separate, future layer.
   a fluent `GraphBuilder`, and a topological `chronological_order` with
   branch/merge gating. Stdlib only.
 - **`puzzles/`** — the `Puzzle` base + a type registry + concrete puzzles
-  (`CaesarCipherPuzzle`, `CrosswordPuzzle`). A puzzle is an authoring-time
-  template: it owns its data and knows how to render its printable artifact (for
-  players) and its solution (for the game-master answer key). It has no notion of
-  being "solved" and does no answer-checking. The crossword derives its numbering
-  and across/down slots from a solution grid, and optional `highlight` cells
-  spell an **emergent word** — the clue the designer wires onto the outgoing edge.
+  (`CaesarCipherPuzzle`, `CrosswordPuzzle`, `R4DecoderPuzzle`). A puzzle is an
+  authoring-time template: it owns its data and knows how to render its printable
+  artifact (for players) and its solution (for the game-master answer key). It has
+  no notion of being "solved" and does no answer-checking. The crossword derives
+  its numbering and across/down slots from a solution grid, and optional
+  `highlight` cells spell an **emergent word**. The R4 decoder is a turning-grille
+  cipher (inline SVG) with `reveal_grid` / `reveal_decoder` flags so the player
+  view can be the full puzzle to overlay-and-rotate, or blank templates assembled
+  from clues revealed by other puzzles.
 - **`serialization/`** — round-trip a hunt to/from JSON (stdlib) or YAML
   (optional `[yaml]` extra). The Python builder API is primary; serialization
   lets a future GUI/web/monitoring layer read and write hunts.
