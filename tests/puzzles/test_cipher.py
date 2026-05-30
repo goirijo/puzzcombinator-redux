@@ -17,24 +17,15 @@ def test_from_plaintext_generates_ciphertext() -> None:
     assert puzzle.shift == 3
 
 
-def test_correct_decode_passes_wrong_fails() -> None:
+def test_solution_is_derivable() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=5)
-    assert puzzle.is_solved("fountain")
-    assert puzzle.is_solved("FOUNTAIN")
-    assert not puzzle.is_solved("river")
+    assert puzzle.solution == "FOUNTAIN"
 
 
 def test_payload_roundtrip() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="CODE", shift=4)
-    rebuilt = CaesarCipherPuzzle.from_payload("c1", puzzle.to_payload(), puzzle.validators)
+    rebuilt = CaesarCipherPuzzle.from_payload("c1", puzzle.to_payload())
     assert rebuilt == puzzle
-
-
-def test_no_validators_never_solves() -> None:
-    puzzle = CaesarCipherPuzzle("c1", shift=1, ciphertext="X", validators=[])
-    result = puzzle.check("anything")
-    assert not result.ok
-    assert result.message == "no validators configured"
 
 
 def test_puzzle_eq_and_hash() -> None:

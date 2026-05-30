@@ -24,3 +24,6 @@ env/
 .idea/
 *.swp
 .DS_Store
+
+# Local tool settings
+.claude/

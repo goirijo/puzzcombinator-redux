@@ -1,8 +1,8 @@
-"""Topological ordering and the stateless gating helpers a runtime calls.
+"""Topological ordering and structural input/output queries.
 
-These functions are pure: they never mutate the model and never hold per-player
-state. A future runtime tracks who solved what in its own objects and progresses
-a hunt purely by calling :func:`unlocked_outputs`.
+These functions are pure design-time queries over the hunt's structure. They
+never mutate the model, hold no playthrough state, and do no answer-checking —
+that belongs to a future tracking layer if hunts are ever played digitally.
 """
 
 from __future__ import annotations
@@ -53,21 +53,10 @@ def chronological_order(graph: Graph, start: str | None = None) -> list[Node]:
 
 
 def required_inputs(graph: Graph, node_id: str) -> list[Content]:
-    """Content carried by the node's incoming edges — what a player needs here."""
+    """Content carried by the node's incoming edges — what this step consumes."""
     return [e.content for e in graph.incoming(node_id) if e.content is not None]
 
 
-def unlocked_outputs(graph: Graph, node_id: str, submission: str) -> list[Content]:
-    """The downstream clues revealed by a correct ``submission`` at ``node_id``.
-
-    Pure and stateless. Returns the node's outgoing :class:`Content` when its
-    puzzle accepts the submission (or unconditionally for a payload-less step,
-    which has nothing to solve); otherwise ``[]``.
-    """
-    node = graph.nodes[node_id]
-    outputs = [e.content for e in graph.outgoing(node_id) if e.content is not None]
-    if node.payload is None:
-        return outputs
-    if not node.payload.check(submission).ok:
-        return []
-    return outputs
+def produced_outputs(graph: Graph, node_id: str) -> list[Content]:
+    """Content carried by the node's outgoing edges — the clues this step yields."""
+    return [e.content for e in graph.outgoing(node_id) if e.content is not None]

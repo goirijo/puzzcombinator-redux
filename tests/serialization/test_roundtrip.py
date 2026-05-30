@@ -22,11 +22,13 @@ def test_json_roundtrip_cipher(cipher_hunt: Graph) -> None:
     assert restored.nodes["c1"].payload is not None
 
 
-def test_json_roundtrip_preserves_solving(cipher_hunt: Graph) -> None:
+def test_json_roundtrip_preserves_puzzle_data(cipher_hunt: Graph) -> None:
+    from puzzcombinator import CaesarCipherPuzzle
+
     restored = from_json(to_json(cipher_hunt))
     puzzle = restored.nodes["c1"].payload
-    assert puzzle is not None
-    assert puzzle.is_solved("fountain")
+    assert isinstance(puzzle, CaesarCipherPuzzle)
+    assert puzzle.solution == "FOUNTAIN"
 
 
 def test_roundtrip_with_contentless_edges() -> None:

@@ -21,8 +21,6 @@ from puzzcombinator.serialization.schema import (
     KEY_SCHEMA_VERSION,
     SCHEMA_VERSION,
 )
-from puzzcombinator.validation.base import Validator
-from puzzcombinator.validation.registry import build_validator
 
 
 def _content_to_dict(content: Content | None) -> dict[str, Any] | None:
@@ -37,30 +35,12 @@ def _content_from_dict(data: dict[str, Any] | None) -> Content | None:
     return Content(text=data.get("text"), data=data.get("data", {}))
 
 
-def _validator_to_dict(validator: Validator) -> dict[str, Any]:
-    return {"type": validator.type_name, "params": validator.to_params()}
-
-
 def _puzzle_to_dict(puzzle: Puzzle) -> dict[str, Any]:
-    return {
-        "type": puzzle.type_name,
-        "payload": puzzle.to_payload(),
-        "validators": [_validator_to_dict(v) for v in puzzle.validators],
-        "require_all": puzzle.require_all,
-    }
+    return {"type": puzzle.type_name, "payload": puzzle.to_payload()}
 
 
 def _puzzle_from_dict(node_id: str, data: dict[str, Any]) -> Puzzle:
-    validators: list[Validator] = [
-        build_validator(v["type"], v["params"]) for v in data.get("validators", [])
-    ]
-    return build_puzzle(
-        data["type"],
-        node_id,
-        data["payload"],
-        validators,
-        data.get("require_all", False),
-    )
+    return build_puzzle(data["type"], node_id, data["payload"])
 
 
 def _node_to_dict(node: Node) -> dict[str, Any]:

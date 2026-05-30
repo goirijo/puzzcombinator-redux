@@ -8,8 +8,8 @@ from puzzcombinator import (
     GraphBuilder,
     NodeKind,
     chronological_order,
+    produced_outputs,
     required_inputs,
-    unlocked_outputs,
 )
 
 
@@ -71,20 +71,18 @@ def test_required_inputs(converging_hunt: Graph) -> None:
     assert texts == {"half one", "half two"}
 
 
-def test_unlocked_outputs_gated_by_validation(cipher_hunt: Graph) -> None:
-    assert unlocked_outputs(cipher_hunt, "c1", "fountain")
-    assert unlocked_outputs(cipher_hunt, "c1", "FOUNTAIN")
-    assert unlocked_outputs(cipher_hunt, "c1", "wrong") == []
+def test_produced_outputs(converging_hunt: Graph) -> None:
+    texts = {c.text for c in produced_outputs(converging_hunt, "start")}
+    assert texts == {"path A", "path B"}
 
 
-def test_unlocked_outputs_for_payloadless_step() -> None:
+def test_produced_outputs_for_physical_step() -> None:
+    # A physical step is just a node with no payload; its output flows on the edge.
     graph = (
         GraphBuilder()
         .node("s", kind=NodeKind.START)
         .node("t", kind=NodeKind.END)
-        .connect("s", "t", content=Content(text="key"))
+        .connect("s", "t", content=Content(text="key under the mat"))
         .build()
     )
-    # No puzzle to solve -> outputs flow unconditionally.
-    out = unlocked_outputs(graph, "s", "anything")
-    assert [c.text for c in out] == ["key"]
+    assert [c.text for c in produced_outputs(graph, "s")] == ["key under the mat"]
