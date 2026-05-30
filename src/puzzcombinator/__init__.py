@@ -29,6 +29,7 @@ from puzzcombinator.errors import (
 )
 from puzzcombinator.puzzles.base import Puzzle
 from puzzcombinator.puzzles.cipher import CaesarCipherPuzzle
+from puzzcombinator.puzzles.crossword import CrosswordPuzzle
 from puzzcombinator.puzzles.registry import build_puzzle, register_puzzle
 from puzzcombinator.rendering.binder import render_binder
 from puzzcombinator.rendering.fragment import Audience, RenderFragment
@@ -37,6 +38,7 @@ __all__ = [
     "Audience",
     "CaesarCipherPuzzle",
     "Content",
+    "CrosswordPuzzle",
     "Edge",
     "Graph",
     "GraphBuilder",

@@ -36,11 +36,11 @@ def _content_from_dict(data: dict[str, Any] | None) -> Content | None:
 
 
 def _puzzle_to_dict(puzzle: Puzzle) -> dict[str, Any]:
-    return {"type": puzzle.type_name, "payload": puzzle.to_payload()}
+    return {"type": puzzle.type_name, "id": puzzle.id, "payload": puzzle.to_payload()}
 
 
-def _puzzle_from_dict(node_id: str, data: dict[str, Any]) -> Puzzle:
-    return build_puzzle(data["type"], node_id, data["payload"])
+def _puzzle_from_dict(data: dict[str, Any]) -> Puzzle:
+    return build_puzzle(data["type"], data["id"], data["payload"])
 
 
 def _node_to_dict(node: Node) -> dict[str, Any]:
@@ -55,7 +55,7 @@ def _node_to_dict(node: Node) -> dict[str, Any]:
 
 def _node_from_dict(data: dict[str, Any]) -> Node:
     puzzle_data = data.get("puzzle")
-    payload = _puzzle_from_dict(data["id"], puzzle_data) if puzzle_data else None
+    payload = _puzzle_from_dict(puzzle_data) if puzzle_data else None
     return Node(
         id=data["id"],
         payload=payload,

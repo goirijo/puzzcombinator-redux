@@ -28,6 +28,20 @@ _DOC_SHELL = """<!DOCTYPE html>
   .notes {{ font-style: italic; color: #555; }}
   .clue-out {{ color: #060; }}
   .ciphertext {{ font-size: 1.25rem; letter-spacing: 0.1em; }}
+  table.grid {{ border-collapse: collapse; }}
+  table.grid td {{
+    width: 2.2em; height: 2.2em; border: 1px solid #000;
+    text-align: center; vertical-align: middle; position: relative;
+    font-size: 1.1rem; text-transform: uppercase;
+  }}
+  table.grid td.block {{ background: #000; }}
+  table.grid td.theme {{ background: #fff3b0; }}
+  table.grid .num {{
+    position: absolute; top: 1px; left: 2px; font-size: 0.55rem; font-weight: normal;
+  }}
+  .crossword .clues {{ display: inline-block; vertical-align: top; margin-right: 2rem; }}
+  .crossword .answer {{ font-weight: bold; }}
+  .crossword .len {{ color: #888; }}
 </style>
 </head>
 <body>

@@ -23,5 +23,13 @@ class RegistryError(PuzzcombinatorError):
     """Raised when a type name or custom-function name is not registered."""
 
 
+class PuzzleError(PuzzcombinatorError):
+    """Raised when a puzzle is defined incorrectly by the designer.
+
+    A design-time aid (e.g. a non-rectangular crossword grid or a clue that
+    references no slot) — not player answer-checking, which the library does not do.
+    """
+
+
 class SerializationError(PuzzcombinatorError):
     """Raised when (de)serializing a hunt fails (e.g. unknown schema version)."""

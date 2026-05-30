@@ -19,11 +19,13 @@ the key fits the lock). Live progress tracking is a separate, future layer.
 - **`core/`** — the puzzle-agnostic graph engine (`Node` / `Edge` / `Graph`),
   a fluent `GraphBuilder`, and a topological `chronological_order` with
   branch/merge gating. Stdlib only.
-- **`puzzles/`** — the `Puzzle` base + a type registry + the first concrete
-  puzzle (`CaesarCipherPuzzle`). A puzzle is an authoring-time template: it owns
-  its data and knows how to render its printable artifact (for players) and its
-  solution (for the game-master answer key). It has no notion of being "solved"
-  and does no answer-checking.
+- **`puzzles/`** — the `Puzzle` base + a type registry + concrete puzzles
+  (`CaesarCipherPuzzle`, `CrosswordPuzzle`). A puzzle is an authoring-time
+  template: it owns its data and knows how to render its printable artifact (for
+  players) and its solution (for the game-master answer key). It has no notion of
+  being "solved" and does no answer-checking. The crossword derives its numbering
+  and across/down slots from a solution grid, and optional `highlight` cells
+  spell an **emergent word** — the clue the designer wires onto the outgoing edge.
 - **`serialization/`** — round-trip a hunt to/from JSON (stdlib) or YAML
   (optional `[yaml]` extra). The Python builder API is primary; serialization
   lets a future GUI/web/monitoring layer read and write hunts.
