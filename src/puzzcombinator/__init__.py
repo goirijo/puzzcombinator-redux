@@ -33,6 +33,7 @@ from puzzcombinator.puzzles.crossword import CrosswordPuzzle
 from puzzcombinator.puzzles.image import ImagePuzzle
 from puzzcombinator.puzzles.r4 import R4DecoderPuzzle
 from puzzcombinator.puzzles.registry import build_puzzle, register_puzzle
+from puzzcombinator.puzzles.riddle import RiddlePuzzle
 from puzzcombinator.rendering.binder import (
     game_master_binder,
     hunt_bundle,
@@ -45,6 +46,7 @@ __all__ = [
     "Artifact",
     "Audience",
     "CaesarCipherPuzzle",
+    "RiddlePuzzle",
     "Content",
     "CrosswordPuzzle",
     "Edge",
