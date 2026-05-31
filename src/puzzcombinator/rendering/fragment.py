@@ -22,16 +22,36 @@ class Audience(Enum):
 
 @dataclass(frozen=True)
 class RenderFragment:
-    """A snippet of HTML or inline-SVG markup, plus a tag for which it is."""
+    """A self-contained snippet of markup, its kind, and any CSS it needs.
+
+    ``styles`` is optional CSS the fragment depends on (keyed by its own class
+    names). A consumer such as the binder aggregates the ``styles`` of every
+    fragment it embeds into one ``<head>`` — so a puzzle carries its own styling
+    and the binder never needs puzzle-specific CSS.
+    """
 
     markup: str
     kind: Literal["html", "svg"] = "html"
+    styles: str = ""
 
     @classmethod
-    def html(cls, markup: str) -> RenderFragment:
-        return cls(markup=markup, kind="html")
+    def html(cls, markup: str, *, styles: str = "") -> RenderFragment:
+        return cls(markup=markup, kind="html", styles=styles)
 
     @classmethod
-    def svg(cls, markup: str) -> RenderFragment:
+    def svg(cls, markup: str, *, styles: str = "") -> RenderFragment:
         """An inline ``<svg>...</svg>`` fragment; embeds directly inside HTML."""
-        return cls(markup=markup, kind="svg")
+        return cls(markup=markup, kind="svg", styles=styles)
+
+
+@dataclass(frozen=True)
+class Artifact:
+    """One printable piece of a node's player-facing material.
+
+    ``slug`` is a short filename-safe name (e.g. ``"grid"``); ``fragment`` is the
+    markup. Most puzzles yield a single HTML artifact; some (e.g. the R4 decoder)
+    yield several standalone SVG pieces that print on separate sheets.
+    """
+
+    slug: str
+    fragment: RenderFragment

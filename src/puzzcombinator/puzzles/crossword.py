@@ -26,6 +26,23 @@ from puzzcombinator.rendering.fragment import Audience, RenderFragment
 #: The character marking a black (blocked) square in a solution grid.
 BLOCK = "#"
 
+_CSS = """
+  .crossword table.grid { border-collapse: collapse; }
+  .crossword table.grid td {
+    width: 2.2em; height: 2.2em; border: 1px solid #000;
+    text-align: center; vertical-align: middle; position: relative;
+    font-size: 1.1rem; text-transform: uppercase;
+  }
+  .crossword table.grid td.block { background: #000; }
+  .crossword table.grid td.theme { background: #fff3b0; }
+  .crossword table.grid .num {
+    position: absolute; top: 1px; left: 2px; font-size: 0.55rem; font-weight: normal;
+  }
+  .crossword .clues { display: inline-block; vertical-align: top; margin-right: 2rem; }
+  .crossword .answer { font-weight: bold; }
+  .crossword .len { color: #888; }
+"""
+
 
 class Slot(NamedTuple):
     """A numbered across/down entry derived from the grid."""
@@ -186,7 +203,7 @@ class CrosswordPuzzle(Puzzle):
                 f"<strong>{html.escape(self.emergent_word)}</strong></p>"
             )
         parts.append("</section>")
-        return RenderFragment.html("".join(parts))
+        return RenderFragment.html("".join(parts), styles=_CSS)
 
     def _render_grid(self, *, reveal: bool) -> str:
         numbering, _, _ = _analyze(self.solution)

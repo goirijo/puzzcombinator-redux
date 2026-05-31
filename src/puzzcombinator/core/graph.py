@@ -1,10 +1,11 @@
 """The puzzle-agnostic graph model.
 
-A hunt is a directed graph of :class:`Node`s connected by :class:`Edge`s. Each
-edge may carry :class:`Content` — the clue/data revealed downstream when its
-source node is solved. The graph layer knows nothing about puzzles: a node holds
-an *optional* puzzle payload by composition, so this module never imports
-``puzzles``.
+A hunt is a directed graph of :class:`Node`s (actions) connected by
+:class:`Edge`s. Each edge carries :class:`Content` — the information flowing from
+one action to the next: a clue/word/object, and/or a puzzle artifact the player
+works on. A node is a pure *action* (solve, find, move, …); it consumes its
+incoming edges and produces its outgoing edges. Puzzles live on edges, not nodes,
+so this module references ``Puzzle`` only for typing.
 
 The model is stateless. Identity is by string ``id`` (never object identity and
 never content), edges reference nodes by id, and per-node wiring
@@ -16,7 +17,6 @@ value-equality for serialization round-trips.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from puzzcombinator.errors import GraphError
@@ -25,39 +25,35 @@ if TYPE_CHECKING:
     from puzzcombinator.puzzles.base import Puzzle
 
 
-class NodeKind(Enum):
-    """The role a node plays in the hunt."""
-
-    START = "START"
-    PUZZLE = "PUZZLE"
-    END = "END"
-    STEP = "STEP"
-
-
 @dataclass(frozen=True)
 class Content:
-    """The clue/data that flows along an edge (revealed downstream).
+    """What flows along an edge from one action to the next.
 
-    ``text`` is human-readable; ``data`` is an optional JSON-safe structured
-    payload for machine-consumed clues.
+    ``text`` is a human-readable clue/word/object; ``data`` is an optional
+    JSON-safe structured payload; ``puzzle`` is optional richness — the artifact
+    the player works on (a crossword, cipher, decoder). There is no separate
+    "clue vs artifact" concept: a clue is text content, an artifact is a puzzle
+    attached to content, and a consumer renders whichever is present.
     """
 
     text: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
+    puzzle: Puzzle | None = None
 
 
 @dataclass
 class Node:
-    """One step in the hunt: a puzzle, a physical action, or a marker.
+    """A pure action in the hunt: an abstract bundle of inputs and outputs.
 
-    ``payload`` is the optional :class:`~puzzcombinator.puzzles.base.Puzzle`. A
-    physical/non-printable step is simply a node with ``payload=None`` whose edge
-    :class:`Content` carries the instruction-in and object-out.
+    A node consumes its incoming edges and produces its outgoing edges. ``action``
+    is a free-form label for what the action is ("solve", "find", "move", …) —
+    extensible, with no fixed set. There is no payload and no node "kind": puzzles
+    live on edges (:class:`Content`), and start/end are simply the nodes that lack
+    incoming/outgoing edges.
     """
 
     id: str
-    payload: Puzzle | None = None
-    kind: NodeKind = NodeKind.PUZZLE
+    action: str | None = None
     label: str | None = None
     notes: str | None = None
     # Recomputed from the edge list by Graph; never serialized.
@@ -161,11 +157,9 @@ class Graph:
         return [self.edges[eid] for eid in self.nodes[node_id].outgoing_edge_ids]
 
     def start_nodes(self) -> list[Node]:
-        """Nodes with no incoming edges (or explicitly marked START)."""
-        return [
-            n for n in self.nodes.values() if not n.incoming_edge_ids or n.kind is NodeKind.START
-        ]
+        """Nodes with no incoming edges (the hunt's entry points)."""
+        return [n for n in self.nodes.values() if not n.incoming_edge_ids]
 
     def end_nodes(self) -> list[Node]:
-        """Nodes with no outgoing edges (or explicitly marked END)."""
-        return [n for n in self.nodes.values() if not n.outgoing_edge_ids or n.kind is NodeKind.END]
+        """Nodes with no outgoing edges (the hunt's terminal points)."""
+        return [n for n in self.nodes.values() if not n.outgoing_edge_ids]

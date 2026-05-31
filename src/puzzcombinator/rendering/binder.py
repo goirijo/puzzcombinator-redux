@@ -1,87 +1,193 @@
-"""The master-binder seam.
+"""Render a hunt graph into game-master and player materials.
 
-The long-term vision is a printable master document compiling the whole hunt.
-This milestone ships the *seam*, not the full compiler: :func:`render_binder`
-walks the graph in solve-order and stitches each puzzle's fragment together with
-its edge clues (and, for the game master, notes, the answer key, and revealed
-outputs). Rich layout, a full player/game-master split, and asset handling are
-deferred — but the contract is fixed, so the later compiler needs no model or
-puzzle refactoring: it only ever calls :func:`chronological_order`,
-``graph.incoming`` / ``graph.outgoing``, and ``puzzle.render``.
+The output is a **bundle**: a game-master ``binder.html`` plus a ``players/``
+folder of standalone printables. Everything here is a pure, **puzzle-agnostic**
+consumer of the model — it walks nodes/edges, calls ``render`` /
+``player_artifacts`` on whatever puzzles the edges carry, and aggregates the CSS
+each fragment declares. Adding a new puzzle type needs no changes here. The only
+function that touches the filesystem is :func:`write_bundle`.
+
+Puzzles live on edges (as :class:`~puzzcombinator.core.graph.Content`), so a node
+page shows the content on its incoming *and* outgoing edges. A visual hunt map is
+intentionally deferred (it belongs with the future GUI).
 """
 
 from __future__ import annotations
 
 import html
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Literal
 
-from puzzcombinator.core.graph import Graph, Node
+from puzzcombinator.core.graph import Content, Graph, Node
 from puzzcombinator.core.ordering import chronological_order
-from puzzcombinator.rendering.fragment import Audience
+from puzzcombinator.rendering.fragment import Artifact, Audience
 
-_DOC_SHELL = """<!DOCTYPE html>
+# Generic binder layout only — never puzzle-specific. Puzzles carry their own CSS
+# via RenderFragment.styles, which the document aggregates.
+_CSS = """
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  .page { page-break-after: always; margin-bottom: 2rem; }
+  .action { font-size: 0.6em; color: #888; vertical-align: middle; text-transform: uppercase; }
+  .io { margin: 0.5rem 0; }
+  .io.out { color: #060; }
+  .io h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0.3rem 0; }
+  .notes { font-style: italic; color: #555; }
+  .checklist ul.check { list-style: none; padding-left: 0; }
+  .checklist ul.check li::before { content: "\\2610\\00a0\\00a0"; }
+  .checklist code { background: #f4f4f4; padding: 0 0.25em; }
+"""
+
+_DOC = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>{title}</title>
-<style>
-  .page {{ page-break-after: always; margin-bottom: 2rem; }}
-  .notes {{ font-style: italic; color: #555; }}
-  .clue-out {{ color: #060; }}
-  .ciphertext {{ font-size: 1.25rem; letter-spacing: 0.1em; }}
-  table.grid {{ border-collapse: collapse; }}
-  table.grid td {{
-    width: 2.2em; height: 2.2em; border: 1px solid #000;
-    text-align: center; vertical-align: middle; position: relative;
-    font-size: 1.1rem; text-transform: uppercase;
-  }}
-  table.grid td.block {{ background: #000; }}
-  table.grid td.theme {{ background: #fff3b0; }}
-  table.grid .num {{
-    position: absolute; top: 1px; left: 2px; font-size: 0.55rem; font-weight: normal;
-  }}
-  .crossword .clues {{ display: inline-block; vertical-align: top; margin-right: 2rem; }}
-  .crossword .answer {{ font-weight: bold; }}
-  .crossword .len {{ color: #888; }}
-</style>
+<style>{css}</style>
 </head>
 <body>
 {body}
 </body>
 </html>"""
 
+Direction = Literal["in", "out"]
+
 
 def _esc(text: str) -> str:
     return html.escape(text)
 
 
-def _node_section(graph: Graph, node: Node, audience: Audience) -> str:
+def _document(title: str, body: str, extra_styles: Iterable[str] = ()) -> str:
+    css = _CSS + "".join(sorted(set(extra_styles)))
+    return _DOC.format(title=_esc(title), css=css, body=body)
+
+
+def _artifact_path(puzzle_id: str, artifact: Artifact) -> str:
+    ext = "svg" if artifact.fragment.kind == "svg" else "html"
+    return f"players/{puzzle_id}-{artifact.slug}.{ext}"
+
+
+def _edge_contents(graph: Graph, node: Node, direction: Direction) -> list[Content]:
+    edges = graph.incoming(node.id) if direction == "in" else graph.outgoing(node.id)
+    return [e.content for e in edges if e.content is not None]
+
+
+# -- game-master binder ---------------------------------------------------
+
+
+def _render_content(content: Content, audience: Audience) -> tuple[str, set[str]]:
+    """Render one edge's content (text clue and/or puzzle) for the binder."""
     parts: list[str] = []
-    heading = node.label or node.id
-    parts.append(f"<h2>{_esc(heading)}</h2>")
+    styles: set[str] = set()
+    if content.text:
+        parts.append(f'<p class="clue">{_esc(content.text)}</p>')
+    if content.puzzle is not None:
+        fragment = content.puzzle.render(audience)
+        parts.append(fragment.markup)
+        if fragment.styles:
+            styles.add(fragment.styles)
+    return "".join(parts), styles
 
-    for edge in graph.incoming(node.id):
-        if edge.content is not None and edge.content.text:
-            parts.append(f'<p class="clue-in">{_esc(edge.content.text)}</p>')
 
-    if node.payload is not None:
-        parts.append(node.payload.render(audience).markup)
+def _node_page(graph: Graph, node: Node) -> tuple[str, set[str]]:
+    styles: set[str] = set()
+    action = f' <span class="action">{_esc(node.action)}</span>' if node.action else ""
+    parts = [f"<h2>{_esc(node.label or node.id)}{action}</h2>"]
+    for direction, title in (("in", "Receives"), ("out", "Produces")):
+        rendered: list[str] = []
+        for content in _edge_contents(graph, node, direction):  # type: ignore[arg-type]
+            markup, sub = _render_content(content, Audience.GAME_MASTER)
+            rendered.append(markup)
+            styles |= sub
+        if rendered:
+            parts.append(
+                f'<section class="io {direction}"><h3>{title}</h3>{"".join(rendered)}</section>'
+            )
+    if node.notes:
+        parts.append(f'<aside class="notes"><strong>Setup:</strong> {_esc(node.notes)}</aside>')
+    page = f'<article class="page node" data-id="{_esc(node.id)}">{"".join(parts)}</article>'
+    return page, styles
 
-    if audience is Audience.GAME_MASTER:
-        if node.notes:
-            parts.append(f'<aside class="notes">{_esc(node.notes)}</aside>')
+
+def _checklist(graph: Graph, order: list[Node]) -> str:
+    items: list[str] = []
+    for node in order:
         for edge in graph.outgoing(node.id):
-            if edge.content is not None and edge.content.text:
-                parts.append(f'<p class="clue-out">Reveals: {_esc(edge.content.text)}</p>')
+            if edge.content is not None and edge.content.puzzle is not None:
+                puzzle = edge.content.puzzle
+                files = ", ".join(
+                    f"<code>{_esc(_artifact_path(puzzle.id, art))}</code>"
+                    for art in puzzle.player_artifacts()
+                )
+                items.append(f"<li>Print &amp; place {files}</li>")
+        if node.notes:
+            label = _esc(node.label or node.id)
+            items.append(f"<li><strong>{label}</strong>: {_esc(node.notes)}</li>")
+    if not items:
+        return ""
+    return (
+        '<section class="page checklist"><h2>Production checklist</h2>'
+        '<ul class="check">' + "".join(items) + "</ul></section>"
+    )
 
-    return f'<article class="page" data-id="{_esc(node.id)}">{"".join(parts)}</article>'
+
+def game_master_binder(graph: Graph) -> str:
+    """The game master's document: a page per node (solve order) + a checklist."""
+    order = chronological_order(graph)
+    styles: set[str] = set()
+    pages: list[str] = []
+    for node in order:
+        markup, sub = _node_page(graph, node)
+        styles |= sub
+        pages.append(markup)
+    body = "\n".join(pages) + "\n" + _checklist(graph, order)
+    return _document("Master Binder", body, styles)
 
 
-def render_binder(graph: Graph, *, audience: Audience = Audience.PLAYER) -> str:
-    """Render the hunt to a single HTML document for the given audience.
+# -- player printables ----------------------------------------------------
 
-    Milestone-1 skeleton: linear flow, one audience at a time. See module
-    docstring for what the full compiler will add.
+
+def player_pages(graph: Graph) -> dict[str, str]:
+    """Standalone player printables, keyed by relative path (``players/...``).
+
+    One file per artifact of each puzzle carried on an edge: SVG artifacts are
+    written as standalone ``.svg`` documents; HTML artifacts are wrapped in a
+    minimal page that carries the fragment's own styles.
     """
-    body = "\n".join(_node_section(graph, node, audience) for node in chronological_order(graph))
-    title = "Master Binder" if audience is Audience.GAME_MASTER else "Treasure Hunt"
-    return _DOC_SHELL.format(title=title, body=body)
+    pages: dict[str, str] = {}
+    for edge in graph.edges.values():
+        content = edge.content
+        if content is None or content.puzzle is None:
+            continue
+        puzzle = content.puzzle
+        for artifact in puzzle.player_artifacts():
+            path = _artifact_path(puzzle.id, artifact)
+            fragment = artifact.fragment
+            if fragment.kind == "svg":
+                pages[path] = fragment.markup
+            else:
+                extra = {fragment.styles} if fragment.styles else set()
+                pages[path] = _document(puzzle.id, fragment.markup, extra)
+    return pages
+
+
+# -- bundle ---------------------------------------------------------------
+
+
+def hunt_bundle(graph: Graph) -> dict[str, str]:
+    """The whole output as relative-path -> content (pure; no filesystem access)."""
+    bundle = {"binder.html": game_master_binder(graph)}
+    bundle.update(player_pages(graph))
+    return bundle
+
+
+def write_bundle(bundle: dict[str, str], out_dir: str | Path) -> list[Path]:
+    """Write a :func:`hunt_bundle` to disk under ``out_dir``. The only IO here."""
+    base = Path(out_dir)
+    written: list[Path] = []
+    for rel, content in bundle.items():
+        path = base / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written.append(path)
+    return written

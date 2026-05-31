@@ -2,20 +2,23 @@ from __future__ import annotations
 
 import pytest
 
-from puzzcombinator import Content, GraphBuilder, NodeKind
+from puzzcombinator import GraphBuilder
 from puzzcombinator.errors import GraphError
 
 
 def test_fluent_build_returns_graph() -> None:
     graph = (
         GraphBuilder()
-        .node("a", kind=NodeKind.START)
-        .node("b", kind=NodeKind.END)
-        .connect("a", "b", content=Content(text="hi"))
+        .node("a", action="start")
+        .node("b", action="finish")
+        .connect("a", "b", text="hi")
         .build()
     )
     assert set(graph.nodes) == {"a", "b"}
     assert list(graph.edges) == ["a->b"]
+    assert graph.nodes["a"].action == "start"
+    assert graph.edges["a->b"].content is not None
+    assert graph.edges["a->b"].content.text == "hi"
 
 
 def test_auto_edge_id_disambiguates() -> None:
@@ -34,6 +37,16 @@ def test_auto_edge_id_disambiguates_three_times() -> None:
         .build()
     )
     assert set(graph.edges) == {"a->b", "a->b#2", "a->b#3"}
+
+
+def test_connect_puts_puzzle_on_edge() -> None:
+    from puzzcombinator import CaesarCipherPuzzle
+
+    cipher = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1)
+    graph = GraphBuilder().node("a").node("b").connect("a", "b", puzzle=cipher).build()
+    content = graph.edges["a->b"].content
+    assert content is not None
+    assert content.puzzle is cipher
 
 
 def test_explicit_edge_id_is_kept() -> None:

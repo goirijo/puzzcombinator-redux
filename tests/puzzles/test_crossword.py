@@ -4,10 +4,8 @@ import pytest
 
 from puzzcombinator import (
     Audience,
-    Content,
     CrosswordPuzzle,
     GraphBuilder,
-    NodeKind,
 )
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.crossword import Slot
@@ -69,11 +67,11 @@ def test_payload_roundtrip() -> None:
 def test_graph_json_roundtrip() -> None:
     graph = (
         GraphBuilder()
-        .node("start", kind=NodeKind.START)
-        .node("cw", payload=_puzzle(), label="The grid")
-        .node("end", kind=NodeKind.END)
-        .connect("start", "cw")
-        .connect("cw", "end", content=Content(text="The word is COY"))
+        .node("start")
+        .node("solve", action="solve", label="The grid")
+        .node("end")
+        .connect("start", "solve", puzzle=_puzzle())
+        .connect("solve", "end", text="The word is COY")
         .build()
     )
     assert from_json(to_json(graph)) == graph

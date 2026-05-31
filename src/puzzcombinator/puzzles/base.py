@@ -19,7 +19,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 
 class Puzzle(ABC):
@@ -43,6 +43,15 @@ class Puzzle(ABC):
     @abstractmethod
     def render(self, audience: Audience) -> RenderFragment:
         """Produce a printable fragment for the given audience."""
+
+    def player_artifacts(self) -> list[Artifact]:
+        """The player-facing printable piece(s) of this puzzle, each file-able.
+
+        Default: a single HTML artifact wrapping the player render. Puzzles whose
+        physical form is several separate sheets (e.g. the R4 decoder's grid and
+        grille) override this to return one :class:`Artifact` per sheet.
+        """
+        return [Artifact("puzzle", self.render(Audience.PLAYER))]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Puzzle) or type(self) is not type(other):

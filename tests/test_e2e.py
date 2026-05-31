@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from puzzcombinator import (
-    Audience,
     CaesarCipherPuzzle,
-    Content,
     GraphBuilder,
-    NodeKind,
     chronological_order,
+    game_master_binder,
+    player_pages,
     produced_outputs,
-    render_binder,
 )
 from puzzcombinator.serialization import from_json, to_json
 
@@ -19,11 +17,11 @@ def test_full_flow() -> None:
     cipher = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=3)
     graph = (
         GraphBuilder()
-        .node("start", kind=NodeKind.START, label="Welcome")
-        .node("c1", payload=cipher, label="Caesar gate", notes="leave on the bench")
-        .node("end", kind=NodeKind.END, label="Treasure")
-        .connect("start", "c1", content=Content(text="Decode to proceed."))
-        .connect("c1", "end", content=Content(text="Go to the fountain."))
+        .node("start", label="Welcome")
+        .node("solve", action="solve", label="Caesar gate", notes="leave on the bench")
+        .node("end", label="Treasure")
+        .connect("start", "solve", puzzle=cipher)
+        .connect("solve", "end", text="Go to the fountain.")
         .build()
     )
 
@@ -32,16 +30,17 @@ def test_full_flow() -> None:
     assert reloaded == graph
 
     # Solve order respects the chain.
-    assert [n.id for n in chronological_order(reloaded)] == ["start", "c1", "end"]
+    assert [n.id for n in chronological_order(reloaded)] == ["start", "solve", "end"]
 
-    # The cipher's output (its revealed clue) flows on its outgoing edge.
-    assert [c.text for c in produced_outputs(reloaded, "c1")] == ["Go to the fountain."]
+    # The solve action's output (the revealed clue) flows on its outgoing edge.
+    assert [c.text for c in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]
 
-    # The player binder shows the prompt; the game-master binder shows the solution.
-    player_binder = render_binder(reloaded, audience=Audience.PLAYER)
-    assert "IRXQWDLQ" in player_binder  # ciphertext
-    assert "FOUNTAIN" not in player_binder
+    # The player printable shows the prompt; the game-master binder shows the solution.
+    player_page = player_pages(reloaded)["players/c1-puzzle.html"]
+    assert "IRXQWDLQ" in player_page  # ciphertext (FOUNTAIN shifted by 3)
+    assert "FOUNTAIN" not in player_page
 
-    gm_binder = render_binder(reloaded, audience=Audience.GAME_MASTER)
+    gm_binder = game_master_binder(reloaded)
     assert "FOUNTAIN" in gm_binder  # solution (answer key)
     assert "leave on the bench" in gm_binder  # designer notes
+    assert "Production checklist" in gm_binder

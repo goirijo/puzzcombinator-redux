@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from puzzcombinator.core.builder import GraphBuilder
-from puzzcombinator.core.graph import Content, Edge, Graph, Node, NodeKind
+from puzzcombinator.core.graph import Content, Edge, Graph, Node
 from puzzcombinator.core.ordering import (
     chronological_order,
     produced_outputs,
@@ -16,7 +16,6 @@ __all__ = [
     "Graph",
     "GraphBuilder",
     "Node",
-    "NodeKind",
     "chronological_order",
     "produced_outputs",
     "required_inputs",

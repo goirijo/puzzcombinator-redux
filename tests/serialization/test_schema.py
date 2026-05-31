@@ -11,9 +11,12 @@ def test_envelope_has_version_and_keys(cipher_hunt: Graph) -> None:
     data = to_dict(cipher_hunt)
     assert data["schema_version"] == "1"
     assert set(data["graph"]) == {"nodes", "edges"}
-    node = next(n for n in data["graph"]["nodes"] if n["id"] == "c1")
-    assert node["puzzle"]["type"] == "caesar_cipher"
+    node = next(n for n in data["graph"]["nodes"] if n["id"] == "solve")
+    assert node["action"] == "solve"
     assert node["notes"] == "hide under the doormat"
+    # The puzzle lives in the edge's content.
+    edge = next(e for e in data["graph"]["edges"] if e["id"] == "start->solve")
+    assert edge["content"]["puzzle"]["type"] == "caesar_cipher"
 
 
 def test_unsupported_version_raises(cipher_hunt: Graph) -> None:
@@ -25,7 +28,7 @@ def test_unsupported_version_raises(cipher_hunt: Graph) -> None:
 
 def test_unknown_puzzle_type_raises(cipher_hunt: Graph) -> None:
     data = to_dict(cipher_hunt)
-    node = next(n for n in data["graph"]["nodes"] if n["id"] == "c1")
-    node["puzzle"]["type"] = "mystery_box"
+    edge = next(e for e in data["graph"]["edges"] if e["id"] == "start->solve")
+    edge["content"]["puzzle"]["type"] = "mystery_box"
     with pytest.raises(RegistryError, match="mystery_box"):
         from_dict(data)

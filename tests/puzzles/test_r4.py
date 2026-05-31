@@ -4,9 +4,7 @@ import pytest
 
 from puzzcombinator import (
     Audience,
-    Content,
     GraphBuilder,
-    NodeKind,
     R4DecoderPuzzle,
 )
 from puzzcombinator.errors import PuzzleError
@@ -116,11 +114,11 @@ def test_graph_json_roundtrip() -> None:
     puzzle = R4DecoderPuzzle.from_message("decoder", "FINDTHEKEY", seed=8)
     graph = (
         GraphBuilder()
-        .node("start", kind=NodeKind.START)
-        .node("r4", payload=puzzle, label="The grille")
-        .node("end", kind=NodeKind.END)
-        .connect("start", "r4")
-        .connect("r4", "end", content=Content(text="The message is FIND THE KEY"))
+        .node("start")
+        .node("solve", action="solve", label="The grille")
+        .node("end")
+        .connect("start", "solve", puzzle=puzzle)
+        .connect("solve", "end", text="The message is FIND THE KEY")
         .build()
     )
     assert from_json(to_json(graph)) == graph

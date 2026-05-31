@@ -16,6 +16,8 @@ from puzzcombinator.puzzles.base import Puzzle
 from puzzcombinator.puzzles.registry import register_puzzle
 from puzzcombinator.rendering.fragment import Audience, RenderFragment
 
+_CSS = ".cipher .ciphertext { font-size: 1.25rem; letter-spacing: 0.1em; }"
+
 
 def _caesar(text: str, shift: int) -> str:
     """Shift letters by ``shift`` (mod 26); leave non-letters untouched."""
@@ -66,11 +68,13 @@ class CaesarCipherPuzzle(Puzzle):
                 f"<h3>Cipher</h3>"
                 f"<p>Decode this message:</p>"
                 f'<pre class="ciphertext">{html.escape(self.ciphertext)}</pre>'
-                f"</section>"
+                f"</section>",
+                styles=_CSS,
             )
         return RenderFragment.html(
             f'<section class="answer cipher" data-id="{html.escape(self.id)}">'
             f"<p>Caesar shift {self.shift} &rarr; "
             f"<strong>{html.escape(self.solution)}</strong></p>"
-            f"</section>"
+            f"</section>",
+            styles=_CSS,
         )

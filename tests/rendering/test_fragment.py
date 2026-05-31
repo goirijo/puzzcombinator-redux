@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from puzzcombinator import Audience, CaesarCipherPuzzle, Graph, RenderFragment, render_binder
+from puzzcombinator import (
+    Artifact,
+    Audience,
+    CaesarCipherPuzzle,
+    Graph,
+    RenderFragment,
+    game_master_binder,
+    hunt_bundle,
+    player_pages,
+    write_bundle,
+)
 
 
 def test_player_fragment_shows_ciphertext_not_answer() -> None:
@@ -23,18 +33,73 @@ def test_svg_fragment_is_embeddable() -> None:
     assert fragment.markup.startswith("<svg")
 
 
-def test_binder_player_walks_in_order(cipher_hunt: Graph) -> None:
-    html = render_binder(cipher_hunt, audience=Audience.PLAYER)
-    assert "<!DOCTYPE html>" in html
-    assert "Treasure Hunt" in html
-    # Player binder shows the ciphertext but not the solution or designer notes.
-    assert "IRXQWDLQ" in html  # FOUNTAIN shifted by 3
-    assert "hide under the doormat" not in html
+def test_fragments_carry_their_own_styles() -> None:
+    # The cipher's styling rides on its fragment, not in the binder.
+    fragment = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1).render(
+        Audience.PLAYER
+    )
+    assert ".ciphertext" in fragment.styles
 
 
-def test_binder_game_master_includes_notes_and_answers(cipher_hunt: Graph) -> None:
-    html = render_binder(cipher_hunt, audience=Audience.GAME_MASTER)
-    assert "Master Binder" in html
-    assert "hide under the doormat" in html
-    assert "FOUNTAIN" in html
-    assert "Go to the fountain." in html  # revealed downstream clue
+def test_default_player_artifact_is_one_html_page() -> None:
+    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1)
+    artifacts = puzzle.player_artifacts()
+    assert len(artifacts) == 1
+    assert isinstance(artifacts[0], Artifact)
+    assert artifacts[0].fragment.kind == "html"
+
+
+def test_game_master_binder_walks_nodes_and_includes_answers(cipher_hunt: Graph) -> None:
+    binder = game_master_binder(cipher_hunt)
+    assert "<!DOCTYPE html>" in binder
+    assert "Master Binder" in binder
+    assert "FOUNTAIN" in binder  # solution shown to the game master
+    assert "hide under the doormat" in binder  # node notes
+    assert "Go to the fountain." in binder  # revealed downstream clue
+    assert "Production checklist" in binder
+
+
+def test_player_pages_omit_answers(cipher_hunt: Graph) -> None:
+    pages = player_pages(cipher_hunt)
+    assert "players/c1-puzzle.html" in pages
+    page = pages["players/c1-puzzle.html"]
+    assert "IRXQWDLQ" in page  # the ciphertext (FOUNTAIN shifted by 3)
+    assert "FOUNTAIN" not in page  # but not the solution
+    assert ".ciphertext" in page  # the cipher's own CSS made it into the page head
+
+
+def test_edge_puzzle_svg_player_pages() -> None:
+    from puzzcombinator import GraphBuilder, R4DecoderPuzzle
+
+    r4 = R4DecoderPuzzle.from_message("grille", "HELLO", seed=1)
+    graph = (
+        GraphBuilder()
+        .node("find", action="find")
+        .node("solve", action="solve")
+        .connect("find", "solve", puzzle=r4)
+        .build()
+    )
+    pages = player_pages(graph)
+    assert "players/grille-grid.svg" in pages
+    assert "players/grille-decoder.svg" in pages
+    assert pages["players/grille-grid.svg"].startswith("<svg")
+    # The binder renders the R4 game-master view on the solve node's incoming edge.
+    assert "R4 Decoder" in game_master_binder(graph)
+
+
+def test_binder_without_artifacts_has_no_checklist() -> None:
+    from puzzcombinator import GraphBuilder
+
+    graph = GraphBuilder().node("a").node("b").connect("a", "b", text="go").build()
+    binder = game_master_binder(graph)
+    assert "Production checklist" not in binder
+
+
+def test_hunt_bundle_and_write(cipher_hunt: Graph, tmp_path) -> None:
+    bundle = hunt_bundle(cipher_hunt)
+    assert "binder.html" in bundle
+    assert any(p.startswith("players/") for p in bundle)
+    written = write_bundle(bundle, tmp_path)
+    assert (tmp_path / "binder.html").read_text()
+    assert (tmp_path / "players" / "c1-puzzle.html").exists()
+    assert len(written) == len(bundle)

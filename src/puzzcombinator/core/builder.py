@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from puzzcombinator.core.graph import Content, Edge, Graph, Node, NodeKind
+from puzzcombinator.core.graph import Content, Edge, Graph, Node
 from puzzcombinator.errors import GraphError
 
 if TYPE_CHECKING:
@@ -26,15 +26,15 @@ class GraphBuilder:
         self,
         id: str,
         *,
-        payload: Puzzle | None = None,
-        kind: NodeKind = NodeKind.PUZZLE,
+        action: str | None = None,
         label: str | None = None,
         notes: str | None = None,
     ) -> GraphBuilder:
-        """Add a node. ``notes`` is free-form designer text printed in the binder."""
+        """Add an action node. ``action`` is a free-form label ("solve", "find", …);
+        ``notes`` is free-form designer text printed in the binder."""
         if id in self._nodes:
             raise GraphError(f"duplicate node id {id!r}")
-        self._nodes[id] = Node(id=id, payload=payload, kind=kind, label=label, notes=notes)
+        self._nodes[id] = Node(id=id, action=action, label=label, notes=notes)
         return self
 
     def connect(
@@ -42,10 +42,20 @@ class GraphBuilder:
         source: str,
         target: str,
         *,
+        text: str | None = None,
+        data: dict[str, Any] | None = None,
+        puzzle: Puzzle | None = None,
         content: Content | None = None,
         id: str | None = None,
     ) -> GraphBuilder:
-        """Add an edge carrying optional ``content`` from ``source`` to ``target``."""
+        """Add an edge from ``source`` to ``target``.
+
+        Pass ``content`` directly, or any of ``text`` / ``data`` / ``puzzle`` as a
+        shorthand to build the :class:`Content` (e.g. ``connect(a, b, puzzle=cw)``
+        or ``connect(a, b, text="go to the kitchen")``).
+        """
+        if content is None and (text is not None or data is not None or puzzle is not None):
+            content = Content(text=text, data=data or {}, puzzle=puzzle)
         edge_id = id if id is not None else self._auto_edge_id(source, target)
         if edge_id in self._edges:
             raise GraphError(f"duplicate edge id {edge_id!r}")

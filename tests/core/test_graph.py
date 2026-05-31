@@ -24,8 +24,8 @@ def test_wiring_is_deterministic(converging_hunt: Graph) -> None:
 
 
 def test_node_and_edge_accessors(cipher_hunt: Graph) -> None:
-    assert cipher_hunt.node("c1").id == "c1"
-    assert cipher_hunt.edge("start->c1").source == "start"
+    assert cipher_hunt.node("solve").id == "solve"
+    assert cipher_hunt.edge("start->solve").source == "start"
 
 
 def test_unknown_source_edge_raises() -> None:

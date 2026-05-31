@@ -26,7 +26,7 @@ from typing import Any
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.base import Puzzle
 from puzzcombinator.puzzles.registry import register_puzzle
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 OPEN = "O"
 SHADED = "#"
@@ -332,6 +332,14 @@ class R4DecoderPuzzle(Puzzle):
             "grid": _svg(dim, letters=self.grid if (gm or self.reveal_grid) else None),
             "decoder": _svg(dim, shaded=shaded if (gm or self.reveal_decoder) else None),
         }
+
+    def player_artifacts(self) -> list[Artifact]:
+        """Grid and decoder as separate printable sheets (the decoder is cut out)."""
+        assets = self.svg_assets(Audience.PLAYER)
+        return [
+            Artifact("grid", RenderFragment.svg(assets["grid"])),
+            Artifact("decoder", RenderFragment.svg(assets["decoder"])),
+        ]
 
     def render(self, audience: Audience) -> RenderFragment:
         gm = audience is Audience.GAME_MASTER

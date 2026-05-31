@@ -15,7 +15,7 @@ from __future__ import annotations
 __version__ = "0.0.1"
 
 from puzzcombinator.core.builder import GraphBuilder
-from puzzcombinator.core.graph import Content, Edge, Graph, Node, NodeKind
+from puzzcombinator.core.graph import Content, Edge, Graph, Node
 from puzzcombinator.core.ordering import (
     chronological_order,
     produced_outputs,
@@ -32,10 +32,16 @@ from puzzcombinator.puzzles.cipher import CaesarCipherPuzzle
 from puzzcombinator.puzzles.crossword import CrosswordPuzzle
 from puzzcombinator.puzzles.r4 import R4DecoderPuzzle
 from puzzcombinator.puzzles.registry import build_puzzle, register_puzzle
-from puzzcombinator.rendering.binder import render_binder
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.rendering.binder import (
+    game_master_binder,
+    hunt_bundle,
+    player_pages,
+    write_bundle,
+)
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 __all__ = [
+    "Artifact",
     "Audience",
     "CaesarCipherPuzzle",
     "Content",
@@ -45,7 +51,6 @@ __all__ = [
     "GraphBuilder",
     "GraphError",
     "Node",
-    "NodeKind",
     "Puzzle",
     "PuzzcombinatorError",
     "R4DecoderPuzzle",
@@ -55,8 +60,11 @@ __all__ = [
     "__version__",
     "build_puzzle",
     "chronological_order",
+    "game_master_binder",
+    "hunt_bundle",
+    "player_pages",
     "produced_outputs",
     "register_puzzle",
-    "render_binder",
     "required_inputs",
+    "write_bundle",
 ]

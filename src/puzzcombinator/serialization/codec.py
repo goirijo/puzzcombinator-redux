@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from puzzcombinator.core.graph import Content, Edge, Graph, Node, NodeKind
+from puzzcombinator.core.graph import Content, Edge, Graph, Node
 from puzzcombinator.errors import SerializationError
 from puzzcombinator.puzzles.base import Puzzle
 from puzzcombinator.puzzles.registry import build_puzzle
@@ -23,18 +23,6 @@ from puzzcombinator.serialization.schema import (
 )
 
 
-def _content_to_dict(content: Content | None) -> dict[str, Any] | None:
-    if content is None:
-        return None
-    return {"text": content.text, "data": content.data}
-
-
-def _content_from_dict(data: dict[str, Any] | None) -> Content | None:
-    if data is None:
-        return None
-    return Content(text=data.get("text"), data=data.get("data", {}))
-
-
 def _puzzle_to_dict(puzzle: Puzzle) -> dict[str, Any]:
     return {"type": puzzle.type_name, "id": puzzle.id, "payload": puzzle.to_payload()}
 
@@ -43,23 +31,40 @@ def _puzzle_from_dict(data: dict[str, Any]) -> Puzzle:
     return build_puzzle(data["type"], data["id"], data["payload"])
 
 
+def _content_to_dict(content: Content | None) -> dict[str, Any] | None:
+    if content is None:
+        return None
+    return {
+        "text": content.text,
+        "data": content.data,
+        "puzzle": _puzzle_to_dict(content.puzzle) if content.puzzle is not None else None,
+    }
+
+
+def _content_from_dict(data: dict[str, Any] | None) -> Content | None:
+    if data is None:
+        return None
+    puzzle_data = data.get("puzzle")
+    return Content(
+        text=data.get("text"),
+        data=data.get("data", {}),
+        puzzle=_puzzle_from_dict(puzzle_data) if puzzle_data else None,
+    )
+
+
 def _node_to_dict(node: Node) -> dict[str, Any]:
     return {
         "id": node.id,
-        "kind": node.kind.value,
+        "action": node.action,
         "label": node.label,
         "notes": node.notes,
-        "puzzle": _puzzle_to_dict(node.payload) if node.payload is not None else None,
     }
 
 
 def _node_from_dict(data: dict[str, Any]) -> Node:
-    puzzle_data = data.get("puzzle")
-    payload = _puzzle_from_dict(puzzle_data) if puzzle_data else None
     return Node(
         id=data["id"],
-        payload=payload,
-        kind=NodeKind(data["kind"]),
+        action=data.get("action"),
         label=data.get("label"),
         notes=data.get("notes"),
     )

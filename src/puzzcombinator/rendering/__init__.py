@@ -1,12 +1,21 @@
-"""Rendering: format-neutral fragments and the master-binder seam."""
+"""Rendering: format-neutral fragments and the hunt-materials binder."""
 
 from __future__ import annotations
 
-from puzzcombinator.rendering.binder import render_binder
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.rendering.binder import (
+    game_master_binder,
+    hunt_bundle,
+    player_pages,
+    write_bundle,
+)
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 __all__ = [
+    "Artifact",
     "Audience",
     "RenderFragment",
-    "render_binder",
+    "game_master_binder",
+    "hunt_bundle",
+    "player_pages",
+    "write_bundle",
 ]
