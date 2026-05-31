@@ -97,9 +97,9 @@ trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 
 ## Current status & likely next steps
 
-Working, fully tested. Three puzzle types (cipher, crossword, R4). Full bundle
-output (binder + players/). `examples/mock_hunt.py` is the end-to-end reference
-(cipher + crossword + R4, a converging branch, a physical step).
+Working, fully tested. Five puzzle types (cipher, crossword, R4, riddle, image).
+Full bundle output (binder + players/). `examples/mock_hunt.py` is the end-to-end
+reference (all five puzzle types, a three-way converging branch, a physical step).
 
 Not yet built (defer unless asked): more puzzle types; the visual hunt-map view
 (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
