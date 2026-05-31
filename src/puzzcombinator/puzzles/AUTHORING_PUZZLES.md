@@ -183,6 +183,45 @@ from the same data, selected by `audience`:
 - `Audience.PLAYER` — what the player works on (the puzzle, *without* the answer).
 - `Audience.GAME_MASTER` — your answer key (the solution shown).
 
+### The easy path: presets (reach for this first)
+
+Most puzzles render something simple — a word, a code, a pair of coordinates, an
+image. For those, **don't hand-write markup or a `_CSS` block at all**: call a
+helper from `puzzcombinator.rendering.presets`. You pass the raw value and get
+back a fragment that already carries its styling (every preset shares one CSS
+constant, so it aggregates to a single copy in the binder). A complete `render`
+can be two lines:
+
+```python
+from puzzcombinator.rendering import presets
+
+def render(self, audience: Audience) -> RenderFragment:
+    if audience is Audience.PLAYER:
+        return presets.text(self.ciphertext, title="Cipher", id=self.id, monospace=True)
+    return presets.text(self.solution, title="Answer", id=self.id)
+```
+
+The three helpers, in increasing order of control:
+
+- **`presets.text(value, *, title=None, id=None, monospace=False)`** — a plain
+  string, escaped. `monospace=True` renders a `<pre>` (codes, coordinates, grids).
+- **`presets.image(data_uri, *, alt="", caption=None, title=None, id=None)`** — an
+  inline image with an optional caption. Pass a data URI to keep the hunt
+  self-contained.
+- **`presets.card(body, *, title=None, id=None)`** — your own inner HTML with the
+  default styling. `body` is inserted verbatim, so escape untrusted text yourself.
+  Use it to combine pieces — e.g. an image *and* a GM answer line (see `image.py`,
+  which builds its `GAME_MASTER` body then wraps it with `presets.card`).
+
+For many puzzles you are **done at this point** — skip to step 5. Read on only if
+your puzzle wants custom CSS or precise SVG geometry.
+
+### Full control: building a `RenderFragment` by hand
+
+When the presets aren't enough, build the fragment yourself with
+`RenderFragment.html(...)` / `RenderFragment.svg(...)` and your own `styles=` — as
+the Caesar cipher does (it styles its ciphertext) and R4 does (inline SVG grids).
+
 > **The `solution` property below is not part of the contract.** It is just a
 > convenience Caesar defines *for itself* to compute its answer once and render
 > it. There is no required "solution" method, and nothing constrains its type or
@@ -217,7 +256,7 @@ from the same data, selected by `audience`:
         )
 ```
 
-Key points about the rendering contract:
+Key points when building a fragment by hand:
 
 - **The fragment carries its own CSS.** Pass `styles=` with CSS scoped to your
   own class names (Caesar's `_CSS = ".cipher .ciphertext { ... }"`). The binder
@@ -233,44 +272,6 @@ Key points about the rendering contract:
   output easy to style and debug.
 - Derive the solution (don't store it). Caesar exposes a `solution` property and
   only renders it in the `GAME_MASTER` branch.
-
-### Skip the CSS: presets for the common cases
-
-Hand-writing the wrapper markup and a `_CSS` block for every puzzle gets tedious
-when the puzzle is something simple — a word, a code, a pair of coordinates, an
-image. `puzzcombinator.rendering.presets` gives you ready-made fragments that
-**already carry their styling**, so you pass the raw value and the CSS is done for
-you (and because every preset shares one CSS constant, it aggregates to a single
-copy in the binder):
-
-```python
-from puzzcombinator.rendering import presets
-
-# a plain string — escaped and wrapped for you:
-return presets.text(self.word, title="Unscramble", id=self.id)
-
-# a code / coordinates / ASCII art — monospace, spacing preserved:
-return presets.text(self.ciphertext, title="Cipher", id=self.id, monospace=True)
-
-# an image (pass a data URI to keep the hunt self-contained):
-return presets.image(self.data_uri, caption=self.prompt, title="Photo", id=self.id)
-```
-
-Three helpers, in increasing order of control:
-
-- **`presets.text(value, *, title=None, id=None, monospace=False)`** — a plain
-  string, escaped. `monospace=True` renders a `<pre>` (codes, coordinates, grids).
-- **`presets.image(data_uri, *, alt="", caption=None, title=None, id=None)`** — an
-  inline image with an optional caption.
-- **`presets.card(body, *, title=None, id=None)`** — the escape hatch one level
-  down: your own inner HTML, default styling. `body` is inserted verbatim, so
-  escape any untrusted text yourself. Use it when you need to combine pieces — e.g.
-  an image *and* an answer line for the GM view (see how `image.py` builds its
-  `GAME_MASTER` body, then wraps it with `presets.card`).
-
-Reach for `RenderFragment.html(...)` / `RenderFragment.svg(...)` with your own
-`styles=` (as Caesar and R4 do) only when you genuinely want custom CSS or precise
-SVG geometry. The presets are a convenience, never a requirement.
 
 ---
 
