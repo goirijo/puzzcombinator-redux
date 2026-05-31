@@ -63,12 +63,13 @@ storing it would be redundant and could drift. Prefer deriving over storing.
 ## Step 1 — Create the file and the class skeleton
 
 New puzzles live in `src/puzzcombinator/puzzles/`. Create one file per puzzle
-type. Subclass `Puzzle`, set `type_name`, and apply `@register_puzzle`:
+type. Subclass `Puzzle`, set `type_name`, and apply `@register_puzzle`. Here is
+the **generic skeleton to copy** — replace `MyPuzzle`, the `type_name`, and *all*
+of the fields with your own:
 
 ```python
 from __future__ import annotations
 
-import html
 from typing import Any
 
 from puzzcombinator.puzzles.base import Puzzle
@@ -77,13 +78,34 @@ from puzzcombinator.rendering.fragment import Audience, RenderFragment
 
 
 @register_puzzle
+class MyPuzzle(Puzzle):
+    """One-line description of the puzzle."""
+
+    type_name = "my_puzzle"          # unique, stable registry key
+
+    def __init__(self, id: str, *, field_a: ..., field_b: ...) -> None:
+        super().__init__(id)         # <-- stores self.id; do not skip
+        self.field_a = field_a       # your canonical state (step 0), not Caesar's
+        self.field_b = field_b
+```
+
+> **Adapting from a real puzzle?** It's tempting to copy `cipher.py` wholesale,
+> but then swap the *signature* without swapping the *body* — leaving a stray
+> `self.shift = shift % 26` that references a parameter you renamed. Replace every
+> field in one pass: the params, the `self.` assignments, the payload, and the
+> render all refer to the **same** set of fields you chose in step 0.
+
+Filled in, that skeleton is exactly the Caesar cipher:
+
+```python
+@register_puzzle
 class CaesarCipherPuzzle(Puzzle):
     """A Caesar-shifted message for players to decode."""
 
     type_name = "caesar_cipher"
 
     def __init__(self, id: str, *, shift: int, ciphertext: str) -> None:
-        super().__init__(id)         # <-- stores self.id; do not skip
+        super().__init__(id)
         self.shift = shift % 26
         self.ciphertext = ciphertext
 ```
@@ -155,15 +177,24 @@ Rules:
 ## Step 4 — Implement `render(audience)`
 
 `render` returns a `RenderFragment` — a self-contained markup snippet plus the
-CSS it needs. You produce **two views** from the same data, selected by
-`audience`:
+CSS it needs. It is the **only** required output method. You produce **two views**
+from the same data, selected by `audience`:
 
 - `Audience.PLAYER` — what the player works on (the puzzle, *without* the answer).
 - `Audience.GAME_MASTER` — your answer key (the solution shown).
 
+> **The `solution` property below is not part of the contract.** It is just a
+> convenience Caesar defines *for itself* to compute its answer once and render
+> it. There is no required "solution" method, and nothing constrains its type or
+> name — R4 calls its answer `message: str`, crossword exposes both
+> `emergent_word: str` *and* structured `slots()`. Return whatever type fits your
+> answer key (string, list of cells, dict…), or skip the accessor and compute it
+> inline in the `GAME_MASTER` branch. The **only** value that must be a string is
+> the `RenderFragment` markup your `render` ultimately returns.
+
 ```python
     @property
-    def solution(self) -> str:
+    def solution(self) -> str:           # Caesar's own helper — optional, type is its choice
         """The decoded message — shown in the game-master answer key."""
         return _caesar(self.ciphertext, -self.shift)
 
@@ -202,6 +233,44 @@ Key points about the rendering contract:
   output easy to style and debug.
 - Derive the solution (don't store it). Caesar exposes a `solution` property and
   only renders it in the `GAME_MASTER` branch.
+
+### Skip the CSS: presets for the common cases
+
+Hand-writing the wrapper markup and a `_CSS` block for every puzzle gets tedious
+when the puzzle is something simple — a word, a code, a pair of coordinates, an
+image. `puzzcombinator.rendering.presets` gives you ready-made fragments that
+**already carry their styling**, so you pass the raw value and the CSS is done for
+you (and because every preset shares one CSS constant, it aggregates to a single
+copy in the binder):
+
+```python
+from puzzcombinator.rendering import presets
+
+# a plain string — escaped and wrapped for you:
+return presets.text(self.word, title="Unscramble", id=self.id)
+
+# a code / coordinates / ASCII art — monospace, spacing preserved:
+return presets.text(self.ciphertext, title="Cipher", id=self.id, monospace=True)
+
+# an image (pass a data URI to keep the hunt self-contained):
+return presets.image(self.data_uri, caption=self.prompt, title="Photo", id=self.id)
+```
+
+Three helpers, in increasing order of control:
+
+- **`presets.text(value, *, title=None, id=None, monospace=False)`** — a plain
+  string, escaped. `monospace=True` renders a `<pre>` (codes, coordinates, grids).
+- **`presets.image(data_uri, *, alt="", caption=None, title=None, id=None)`** — an
+  inline image with an optional caption.
+- **`presets.card(body, *, title=None, id=None)`** — the escape hatch one level
+  down: your own inner HTML, default styling. `body` is inserted verbatim, so
+  escape any untrusted text yourself. Use it when you need to combine pieces — e.g.
+  an image *and* an answer line for the GM view (see how `image.py` builds its
+  `GAME_MASTER` body, then wraps it with `presets.card`).
+
+Reach for `RenderFragment.html(...)` / `RenderFragment.svg(...)` with your own
+`styles=` (as Caesar and R4 do) only when you genuinely want custom CSS or precise
+SVG geometry. The presets are a convenience, never a requirement.
 
 ---
 
@@ -305,6 +374,63 @@ reference output and eyeball it:
 ```bash
 python examples/mock_hunt.py    # writes examples/mock_hunt_out/
 ```
+
+---
+
+## Handling media (images and other binary assets)
+
+Sooner or later a puzzle *is* a picture — a photo clue, a rebus, a scrambled
+image. This seems to collide with "the payload must be JSON-safe", but it
+doesn't: the rule that actually matters is that a serialized hunt is
+**self-contained** (copy the JSON and you have copied the whole hunt). The way to
+honour both is the same trick the R4 puzzle already uses for its SVG — **embed
+the media inline**. For raster bytes that means a **data URI**:
+`data:image/png;base64,<...>`. It is just a (longer) string, so:
+
+- `to_payload()` stays JSON-safe and `from_json(to_json(g)) == g` holds
+  **byte-exact** — the bytes are *part of* the compared value, so equality can
+  never silently drift from what renders;
+- `render()` stays pure — it emits `<img src="data:...">`, no file reads, no
+  network;
+- the output bundle stays `dict[str, str]` and `write_bundle` is unchanged — the
+  player page and the binder embed the image with zero asset-copying machinery;
+- the hunt stays portable — hand the JSON (or the printed page) to anyone and the
+  image travels with it.
+
+`ImagePuzzle` (`image.py`) is the worked example. Its canonical state is the data
+URI plus a player `prompt` and an optional game-master `answer`:
+
+```python
+@classmethod
+def from_bytes(cls, id, data: bytes, *, mime: str, ...) -> ImagePuzzle:
+    return cls(id, data_uri=_data_uri(data, mime), ...)   # _data_uri = base64-encode
+
+def render(self, audience):
+    parts = [f'<img src="{html.escape(self.data_uri)}" alt="{html.escape(self.alt)}"/>', ...]
+    if audience is Audience.GAME_MASTER and self.answer is not None:
+        parts.append(f'<p class="answer">Answer: {html.escape(self.answer)}</p>')
+    return RenderFragment.html("".join(parts), styles=_CSS)
+```
+
+Guidance when your puzzle carries media:
+
+- **Author from bytes, store the data URI.** Provide a `from_bytes(id, data, *,
+  mime=...)` constructor (and optionally a `from_file` convenience). Keep
+  filesystem reads confined to such authoring constructors — `render`,
+  `to_payload`, and `from_payload` must never touch disk.
+- **Vector art is free.** If the media is line art / a grid / a board, emit inline
+  SVG via `RenderFragment.svg(...)` (text, tiny, prints sharply) — no base64
+  needed. Reach for a data URI only for genuine raster images.
+- **Bloat is acceptable at hunt scale.** A handful of images base64-inlined is
+  fine. There is intentionally no size limit.
+
+**The escape hatch (don't build it until you need it).** If a future puzzle needs
+*large* or *shared* media where inlining hurts, the deliberate upgrade is an
+**asset store**: the payload holds a stable reference (e.g. a content hash), the
+bytes travel beside the JSON in an `assets/` directory, and the bundle is widened
+to carry `bytes`. That is strictly more machinery and gives up nothing the data
+URI already gives you for small media — so treat it as a documented, discussed
+change, not a default.
 
 ---
 
