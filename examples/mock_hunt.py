@@ -81,14 +81,26 @@ riddle = RiddlePuzzle(
     ],
     answer="SUNDIAL",
 )
-photo = ImagePuzzle.from_bytes(
-    "photo",
-    _demo_png(48, 32, (90, 140, 90)),
-    mime="image/png",
-    prompt="Which flagstone in this patio is loose?",
-    answer="the cracked stone right beside the sundial",
-    alt="the garden patio by the sundial",
-)
+# Uses examples/assets/patio.<ext> if present, else a generated placeholder PNG.
+_assets = Path(__file__).parent / "assets"
+_photo_file = next(_assets.glob("patio.*"), None) if _assets.is_dir() else None
+if _photo_file is not None:
+    photo = ImagePuzzle.from_file(
+        "photo",
+        _photo_file,
+        prompt="Which flagstone in this patio is loose?",
+        answer="the cracked stone right beside the sundial",
+        alt="the garden patio by the sundial",
+    )
+else:
+    photo = ImagePuzzle.from_bytes(
+        "photo",
+        _demo_png(48, 32, (90, 140, 90)),
+        mime="image/png",
+        prompt="Which flagstone in this patio is loose?",
+        answer="the cracked stone right beside the sundial",
+        alt="the garden patio by the sundial",
+    )
 
 hunt = (
     GraphBuilder()
