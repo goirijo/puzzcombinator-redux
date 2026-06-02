@@ -42,7 +42,7 @@ class ImagePuzzle(Puzzle):
 
     def __init__(
         self,
-        id: str,
+        id: str | None = None,
         *,
         data_uri: str,
         prompt: str = "",
@@ -62,13 +62,13 @@ class ImagePuzzle(Puzzle):
     @classmethod
     def from_bytes(
         cls,
-        id: str,
         data: bytes,
         *,
         mime: str,
         prompt: str = "",
         answer: str | None = None,
         alt: str = "",
+        id: str | None = None,
     ) -> ImagePuzzle:
         """Author a puzzle from raw image bytes plus its MIME type."""
         return cls(id, data_uri=_data_uri(data, mime), prompt=prompt, answer=answer, alt=alt)
@@ -76,12 +76,12 @@ class ImagePuzzle(Puzzle):
     @classmethod
     def from_file(
         cls,
-        id: str,
         path: str | Path,
         *,
         prompt: str = "",
         answer: str | None = None,
         alt: str = "",
+        id: str | None = None,
     ) -> ImagePuzzle:
         """Author a puzzle by reading an image file (MIME guessed from suffix).
 
@@ -93,7 +93,9 @@ class ImagePuzzle(Puzzle):
         mime, _ = mimetypes.guess_type(p.name)
         if mime is None:
             raise PuzzleError(f"could not guess MIME type for {p.name!r}; use from_bytes")
-        return cls.from_bytes(id, p.read_bytes(), mime=mime, prompt=prompt, answer=answer, alt=alt)
+        return cls.from_bytes(
+            p.read_bytes(), mime=mime, prompt=prompt, answer=answer, alt=alt, id=id
+        )
 
     def _validate(self) -> None:
         if not self.data_uri.startswith("data:"):

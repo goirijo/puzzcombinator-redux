@@ -39,13 +39,15 @@ class CaesarCipherPuzzle(Puzzle):
 
     type_name = "caesar_cipher"
 
-    def __init__(self, id: str, *, shift: int, ciphertext: str) -> None:
+    def __init__(self, id: str | None = None, *, shift: int, ciphertext: str) -> None:
         super().__init__(id)
         self.shift = shift % 26
         self.ciphertext = ciphertext
 
     @classmethod
-    def from_plaintext(cls, id: str, plaintext: str, shift: int) -> CaesarCipherPuzzle:
+    def from_plaintext(
+        cls, plaintext: str, shift: int, *, id: str | None = None
+    ) -> CaesarCipherPuzzle:
         """Author a puzzle from plaintext by encoding the prompt the player sees."""
         return cls(id, shift=shift % 26, ciphertext=_caesar(plaintext, shift))
 

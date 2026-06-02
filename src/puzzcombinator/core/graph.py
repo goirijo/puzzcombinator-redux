@@ -116,13 +116,32 @@ class Graph:
             node.outgoing_edge_ids = tuple(outgoing[node_id])
 
     def validate_structure(self) -> None:
-        """Raise :class:`GraphError` on dangling edges or cycles."""
+        """Raise :class:`GraphError` on dangling edges, duplicate puzzle ids, or cycles."""
         for edge in self.edges.values():
             if edge.source not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown source node {edge.source!r}")
             if edge.target not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown target node {edge.target!r}")
+        self._check_unique_puzzle_ids()
         self._check_acyclic()
+
+    def _check_unique_puzzle_ids(self) -> None:
+        """Reject two puzzles sharing an id.
+
+        Puzzle ids must be unique within a hunt: they name the puzzle's output
+        files, so a collision would silently overwrite one printable with
+        another. (This stays puzzle-agnostic — it only reads the ``Puzzle`` ABC's
+        ``id``.) Edges are visited in sorted-id order for a deterministic message.
+        """
+        seen: set[str] = set()
+        for edge_id in sorted(self.edges):
+            content = self.edges[edge_id].content
+            if content is None or content.puzzle is None:
+                continue
+            puzzle_id = content.puzzle.id
+            if puzzle_id in seen:
+                raise GraphError(f"duplicate puzzle id {puzzle_id!r}")
+            seen.add(puzzle_id)
 
     def _check_acyclic(self) -> None:
         indegree: dict[str, int] = dict.fromkeys(self.nodes, 0)

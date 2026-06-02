@@ -170,7 +170,7 @@ class R4DecoderPuzzle(Puzzle):
 
     def __init__(
         self,
-        id: str,
+        id: str | None = None,
         *,
         grid: Iterable[str],
         grille: Iterable[str],
@@ -191,13 +191,13 @@ class R4DecoderPuzzle(Puzzle):
     @classmethod
     def from_message(
         cls,
-        id: str,
         message: str,
         *,
         size: int | None = None,
         seed: int | None = None,
         reveal_grid: bool = True,
         reveal_decoder: bool = True,
+        id: str | None = None,
     ) -> R4DecoderPuzzle:
         """Author a puzzle by encoding ``message`` (letters only; spacing dropped)."""
         cleaned = "".join(ch for ch in message.upper() if "A" <= ch <= "Z")

@@ -1,7 +1,7 @@
 # CLAUDE.md — puzzcombinator
 
 Orientation for a fresh session. Read this, skim `README.md` and
-`examples/mock_hunt.py`, and you're caught up — you do **not** need any prior
+`examples/mock_hunt/hunt.py`, and you're caught up — you do **not** need any prior
 chat transcript. Deeper rationale lives in the auto-loaded memory files
 (`design-principles`, `roadmap`) and in `git log` (commit messages are detailed).
 
@@ -26,6 +26,13 @@ A hunt is a **directed graph of actions**:
   derived from topology (no incoming / no outgoing edges).
 - A single puzzle may span several nodes (find → solve). The model is
   **stateless** — no player state, ever.
+- **Ids are internal, not author-supplied.** `GraphBuilder.node(...)` returns a
+  **handle** (the node id) you pass to `connect` — no fluent `.node().node()`
+  chaining (connect still returns self). Omitted node ids auto-generate (`n1`, `n2`,
+  …); omitted puzzle ids auto-generate `{type_name}-{uuid}`. A puzzle id is *not* a
+  cross-reference key (nothing looks a puzzle up by it) — it only names output
+  files, so it's optional; pass an explicit one only for readable `players/`
+  filenames. `Graph.assemble` rejects duplicate puzzle ids.
 
 Example: `start → [cipher] → solve → "go to the kitchen" → find → [crossword] → solve → "ROAD" → …`
 (the bracketed puzzles ride the edges *into* the action that solves them).
@@ -70,7 +77,10 @@ The binder holds **no puzzle-specific CSS** — each `RenderFragment` carries it
 - **Pure-stdlib core, no pydantic** — dataclasses; format knowledge only in
   `serialization/`; heavy deps (if ever) only inside the puzzle that needs them.
 - **String ids, no object cycles** — edges reference nodes by id; node wiring is
-  recomputed on load (gives clean value-equality for round-trip tests).
+  recomputed on load (gives clean value-equality for round-trip tests). Ids are
+  auto-generated, not author-invented (see the core-model note above). Puzzle
+  `__eq__`/`__hash__` is still id-based; switching it to value-based (`type` +
+  `payload`, drop id) is a noted, deferred follow-up.
 - **GUI = producer, binder = consumer, model+serialization = the seam.** A visual
   hunt map is deferred (GUI-adjacent).
 
@@ -78,10 +88,13 @@ The binder holds **no puzzle-specific CSS** — each `RenderFragment` carries it
 
 New file in `puzzles/`, subclass `Puzzle`, decorate `@register_puzzle`, set
 `type_name`, implement `to_payload` / `from_payload(id, payload)` /
-`render(audience) -> RenderFragment`. Override `player_artifacts()` only if the
-puzzle prints as several separate sheets (see `r4.py`). Export it in
-`puzzles/__init__.py` and the package `__init__.py`. **No edits to `core/`,
-`serialization/`, or `rendering/`.** Add a test file mirroring the others.
+`render(audience) -> RenderFragment`. `__init__` takes `id: str | None = None`
+first and passes it to `super().__init__(id)` (the base auto-generates when None);
+convenience constructors put `id` last as an optional keyword. Override
+`player_artifacts()` only if the puzzle prints as several separate sheets (see
+`r4.py`). Export it in `puzzles/__init__.py` and the package `__init__.py`. **No
+edits to `core/`, `serialization/`, or `rendering/`.** Add a test file mirroring
+the others.
 
 ## Commands / the "done" bar
 
@@ -89,7 +102,7 @@ puzzle prints as several separate sheets (see `r4.py`). Export it in
 pip install -e ".[dev]"
 pytest --cov=puzzcombinator            # 100% coverage on core/ is required
 ruff check . && ruff format --check . && mypy src/puzzcombinator   # must be clean
-python examples/mock_hunt.py           # regenerates examples/mock_hunt_out/
+python examples/mock_hunt/hunt.py      # regenerates examples/mock_hunt/out/
 ```
 Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics
 used), free-form `action` strings, commit messages end with the Co-Authored-By
@@ -98,7 +111,7 @@ trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 ## Current status & likely next steps
 
 Working, fully tested. Five puzzle types (cipher, crossword, R4, riddle, image).
-Full bundle output (binder + players/). `examples/mock_hunt.py` is the end-to-end
+Full bundle output (binder + players/). `examples/mock_hunt/hunt.py` is the end-to-end
 reference (all five puzzle types, a three-way converging branch, a physical step).
 
 Not yet built (defer unless asked): more puzzle types; the visual hunt-map view

@@ -65,13 +65,13 @@ def test_payload_roundtrip() -> None:
 
 
 def test_graph_json_roundtrip() -> None:
+    builder = GraphBuilder()
+    start = builder.node("start")
+    solve = builder.node("solve", action="solve", label="The grid")
+    end = builder.node("end")
     graph = (
-        GraphBuilder()
-        .node("start")
-        .node("solve", action="solve", label="The grid")
-        .node("end")
-        .connect("start", "solve", puzzle=_puzzle())
-        .connect("solve", "end", text="The word is COY")
+        builder.connect(start, solve, puzzle=_puzzle())
+        .connect(solve, end, text="The word is COY")
         .build()
     )
     assert from_json(to_json(graph)) == graph

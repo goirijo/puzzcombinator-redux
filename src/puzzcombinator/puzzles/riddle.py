@@ -20,7 +20,7 @@ class RiddlePuzzle(Puzzle):
     type_name = "riddle"  # unique, stable registry key
 
     # TODO: make it accept just a string if it's not split into segments
-    def __init__(self, id: str, *, riddle: list[str], answer: str) -> None:
+    def __init__(self, id: str | None = None, *, riddle: list[str], answer: str) -> None:
         super().__init__(id)  # <-- stores self.id; do not skip
         self.parts = riddle
         self.answer = answer

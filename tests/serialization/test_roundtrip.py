@@ -37,7 +37,10 @@ def test_json_roundtrip_preserves_puzzle_data(cipher_hunt: Graph) -> None:
 def test_roundtrip_with_contentless_edges() -> None:
     from puzzcombinator import GraphBuilder
 
-    graph = GraphBuilder().node("s").node("e").connect("s", "e").build()
+    builder = GraphBuilder()
+    s = builder.node("s")
+    e = builder.node("e")
+    graph = builder.connect(s, e).build()
     assert from_dict(to_dict(graph)) == graph
 
 

@@ -79,8 +79,8 @@ assert restored == graph
 write_bundle(hunt_bundle(graph), "hunt_out")
 ```
 
-See `examples/mock_hunt.py` for a full non-linear hunt (all three puzzle types,
-a converging branch, and a physical step).
+See `examples/mock_hunt/hunt.py` for a full non-linear hunt (all five puzzle
+types, a converging branch, and a physical step).
 
 ## Development
 

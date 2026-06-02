@@ -32,7 +32,7 @@ provide:
 |---|---|---|
 | `type_name` | a stable string key for the registry | `"riddle"` |
 | `@register_puzzle` | decorator that registers the class for deserialization | on `RiddlePuzzle` |
-| `__init__(self, id, ...)` | stores the puzzle's data; **must** call `super().__init__(id)` | stores `parts`, `answer` |
+| `__init__(self, id=None, ...)` | stores the puzzle's data; **must** call `super().__init__(id)` | stores `parts`, `answer` |
 | `to_payload()` | returns the puzzle's JSON-safe, type-specific fields | `{"parts": [...], "answer": "..."}` |
 | `from_payload(cls, id, payload)` | rebuilds an instance from `to_payload()` output | reconstructs from the dict |
 | `render(audience)` | returns a `RenderFragment` for `PLAYER` or `GAME_MASTER` | riddle text vs. the answer |
@@ -93,8 +93,8 @@ class MyPuzzle(Puzzle):
 
     type_name = "my_puzzle"          # unique, stable registry key
 
-    def __init__(self, id: str, *, field_a: ..., field_b: ...) -> None:
-        super().__init__(id)         # <-- stores self.id; do not skip
+    def __init__(self, id: str | None = None, *, field_a: ..., field_b: ...) -> None:
+        super().__init__(id)         # <-- stores self.id (auto-generated if None)
         self.field_a = field_a       # your canonical state from step 0
         self.field_b = field_b
 ```
@@ -116,7 +116,7 @@ class RiddlePuzzle(Puzzle):
 
     type_name = "riddle"
 
-    def __init__(self, id: str, *, riddle: list[str], answer: str) -> None:
+    def __init__(self, id: str | None = None, *, riddle: list[str], answer: str) -> None:
         super().__init__(id)
         self.parts = riddle
         self.answer = answer
@@ -126,8 +126,12 @@ Notes:
 
 - **`type_name` must be unique and stable.** It is the key written to disk and
   looked up on load. Renaming it later breaks every saved hunt that used it.
-- **`id`** is the puzzle's identifier within a hunt (e.g. `"r1"`). The base
-  `__init__` stores it; always call `super().__init__(id)` first.
+- **`id`** is **optional and auto-generated.** It only needs to be unique within a
+  hunt because it names the puzzle's output files; nothing ever looks a puzzle up
+  by it. Take it as the first parameter defaulting to `None` and pass it straight
+  to `super().__init__(id)` — the base class fills in a unique `{type_name}-{uuid}`
+  when it's `None`. Accept an explicit id only as a convenience for readable
+  printable filenames; never require the author to invent one.
 - Take the rest of your data as **keyword-only** arguments (`*,`) so call sites
   read clearly and you can reorder fields freely.
 - A keyword and the attribute it feeds need not share a name — here the `riddle=`
@@ -148,7 +152,7 @@ stores a *list* of parts, but sometimes you just have one unsplit string:
 
 ```python
     @classmethod
-    def from_text(cls, id: str, text: str, *, answer: str) -> RiddlePuzzle:
+    def from_text(cls, text: str, *, answer: str, id: str | None = None) -> RiddlePuzzle:
         """Author from a single unsplit string (one part)."""
         return cls(id, riddle=[text], answer=answer)
 ```
@@ -157,6 +161,14 @@ These constructors are purely ergonomic — the library never calls them, it onl
 ever uses `__init__` (directly and via `from_payload`). If a constructor needs
 real transformation logic, keep that logic in a module-level function so it's easy
 to unit-test on its own.
+
+> **Where to put `id` in a convenience constructor.** Lead with the puzzle's real
+> input (here `text`) and make `id` an optional trailing keyword, mirroring the
+> built-ins (`from_plaintext(plaintext, shift, *, id=None)`). The author calls
+> `RiddlePuzzle.from_text("…", answer="…")` and never thinks about ids; they add
+> `id="r1"` only if they want a readable filename. (`from_payload` is the
+> exception — the codec always passes the saved id, so it keeps `id` required and
+> first.)
 
 ---
 
@@ -400,7 +412,7 @@ All must be clean, and your new puzzle should be fully covered. If your puzzle
 touches the end-to-end flow, regenerate the reference output and eyeball it:
 
 ```bash
-python examples/mock_hunt.py    # writes examples/mock_hunt_out/
+python examples/mock_hunt/hunt.py    # writes examples/mock_hunt/out/
 ```
 
 ---
@@ -479,4 +491,4 @@ before breaking that boundary.
 ---
 
 *Next: composing puzzles into a hunt — building the graph, and what nodes and
-edges mean.*
+edges mean. See [`../core/AUTHORING_GRAPHS.md`](../core/AUTHORING_GRAPHS.md).*

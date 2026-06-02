@@ -35,6 +35,23 @@ def test_unknown_source_edge_raises() -> None:
         Graph.assemble([Node(id="b")], [Edge(id="x", source="ghost", target="b")])
 
 
+def test_duplicate_puzzle_id_is_rejected() -> None:
+    # Two distinct puzzles sharing an id would collide on their output filenames
+    # (silently overwriting one printable with the other), so build() rejects it.
+    from puzzcombinator import CaesarCipherPuzzle, GraphBuilder
+
+    p1 = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="dup")
+    p2 = CaesarCipherPuzzle.from_plaintext(plaintext="BYE", shift=2, id="dup")
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    c = builder.node("c")
+    builder.connect(a, b, puzzle=p1)
+    builder.connect(b, c, puzzle=p2)
+    with pytest.raises(GraphError, match="duplicate puzzle id"):
+        builder.build()
+
+
 def test_cycle_is_rejected() -> None:
     nodes = [n for n in _two_node_cycle()[0]]
     edges = _two_node_cycle()[1]

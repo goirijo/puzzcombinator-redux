@@ -109,7 +109,7 @@ class CrosswordPuzzle(Puzzle):
 
     def __init__(
         self,
-        id: str,
+        id: str | None = None,
         *,
         solution: Iterable[str],
         across: Mapping[int, str],

@@ -16,6 +16,7 @@ tracking layer, not by the puzzle template.
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
@@ -28,8 +29,12 @@ class Puzzle(ABC):
     #: Stable registry key, e.g. ``"caesar_cipher"``.
     type_name: ClassVar[str]
 
-    def __init__(self, id: str) -> None:
-        self.id = id
+    def __init__(self, id: str | None = None) -> None:
+        #: Internal identity. Auto-generated as ``{type_name}-{uuid}`` when not
+        #: supplied — it only needs to be unique within a hunt (it names the
+        #: puzzle's output files); nothing ever looks a puzzle up by it. Pass an
+        #: explicit id only when you want stable, readable printable filenames.
+        self.id = id if id is not None else f"{type(self).type_name}-{uuid.uuid4().hex}"
 
     @abstractmethod
     def to_payload(self) -> dict[str, Any]:

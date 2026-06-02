@@ -29,21 +29,26 @@ def test_merge_gated_after_both_paths(converging_hunt: Graph) -> None:
 
 @pytest.mark.parametrize("flip", [False, True])
 def test_order_is_insertion_independent(flip: bool) -> None:
-    builder = GraphBuilder().node("start")
-    builder.node("A").node("B").node("merge")
+    builder = GraphBuilder()
+    start = builder.node("start")
+    a = builder.node("A")
+    b = builder.node("B")
+    merge = builder.node("merge")
     if flip:
-        builder.connect("start", "B").connect("start", "A")
-        builder.connect("B", "merge").connect("A", "merge")
+        builder.connect(start, b).connect(start, a)
+        builder.connect(b, merge).connect(a, merge)
     else:
-        builder.connect("start", "A").connect("start", "B")
-        builder.connect("A", "merge").connect("B", "merge")
+        builder.connect(start, a).connect(start, b)
+        builder.connect(a, merge).connect(b, merge)
     order = [n.id for n in chronological_order(builder.build())]
     assert order == ["start", "A", "B", "merge"]
 
 
 def test_start_argument_is_preferred_seed() -> None:
     # Two independent roots; passing start= biases which is emitted first.
-    builder = GraphBuilder().node("x").node("y")
+    builder = GraphBuilder()
+    builder.node("x")
+    builder.node("y")
     graph = builder.build()
     assert [n.id for n in chronological_order(graph, start="y")][0] == "y"
     assert [n.id for n in chronological_order(graph, start="x")][0] == "x"
@@ -76,5 +81,8 @@ def test_produced_outputs(converging_hunt: Graph) -> None:
 
 def test_produced_outputs_for_physical_step() -> None:
     # A pure action node carries no puzzle; its output flows on the edge.
-    graph = GraphBuilder().node("s").node("t").connect("s", "t", text="key under the mat").build()
+    builder = GraphBuilder()
+    s = builder.node("s")
+    t = builder.node("t")
+    graph = builder.connect(s, t, text="key under the mat").build()
     assert [c.text for c in produced_outputs(graph, "s")] == ["key under the mat"]

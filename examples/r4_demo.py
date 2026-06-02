@@ -31,21 +31,22 @@ from puzzcombinator import (
     write_bundle,
 )
 
-puzzle = R4DecoderPuzzle.from_message("decoder", "THE KEY IS UNDER THE THIRD FLOWERPOT", seed=1234)
+puzzle = R4DecoderPuzzle.from_message(
+    "THE KEY IS UNDER THE THIRD FLOWERPOT", seed=1234, id="decoder"
+)
 
 # The grille rides the edge into the "solve" action.
+builder = GraphBuilder()
+start = builder.node(label="Welcome")
+solve = builder.node(
+    action="solve",
+    label="The Grille",
+    notes="Print the decoder on card stock; players cut out the open squares.",
+)
+end = builder.node(label="The Cache")
 hunt = (
-    GraphBuilder()
-    .node("start", label="Welcome")
-    .node(
-        "solve",
-        action="solve",
-        label="The Grille",
-        notes="Print the decoder on card stock; players cut out the open squares.",
-    )
-    .node("end", label="The Cache")
-    .connect("start", "solve", puzzle=puzzle)
-    .connect("solve", "end", text="Go to the third flowerpot.")
+    builder.connect(start, solve, puzzle=puzzle)
+    .connect(solve, end, text="Go to the third flowerpot.")
     .build()
 )
 

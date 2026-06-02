@@ -14,7 +14,7 @@ from puzzcombinator import (
 
 
 def test_player_fragment_shows_ciphertext_not_answer() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=3)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
     fragment = puzzle.render(Audience.PLAYER)
     assert fragment.kind == "html"
     assert puzzle.ciphertext in fragment.markup
@@ -22,7 +22,7 @@ def test_player_fragment_shows_ciphertext_not_answer() -> None:
 
 
 def test_game_master_fragment_shows_solution() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=3)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
     fragment = puzzle.render(Audience.GAME_MASTER)
     assert "FOUNTAIN" in fragment.markup
 
@@ -35,14 +35,14 @@ def test_svg_fragment_is_embeddable() -> None:
 
 def test_fragments_carry_their_own_styles() -> None:
     # The cipher's styling rides on its fragment, not in the binder.
-    fragment = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1).render(
+    fragment = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1").render(
         Audience.PLAYER
     )
     assert ".ciphertext" in fragment.styles
 
 
 def test_default_player_artifact_is_one_html_page() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
     artifacts = puzzle.player_artifacts()
     assert len(artifacts) == 1
     assert isinstance(artifacts[0], Artifact)
@@ -71,14 +71,11 @@ def test_player_pages_omit_answers(cipher_hunt: Graph) -> None:
 def test_edge_puzzle_svg_player_pages() -> None:
     from puzzcombinator import GraphBuilder, R4DecoderPuzzle
 
-    r4 = R4DecoderPuzzle.from_message("grille", "HELLO", seed=1)
-    graph = (
-        GraphBuilder()
-        .node("find", action="find")
-        .node("solve", action="solve")
-        .connect("find", "solve", puzzle=r4)
-        .build()
-    )
+    r4 = R4DecoderPuzzle.from_message("HELLO", seed=1, id="grille")
+    builder = GraphBuilder()
+    find = builder.node("find", action="find")
+    solve = builder.node("solve", action="solve")
+    graph = builder.connect(find, solve, puzzle=r4).build()
     pages = player_pages(graph)
     assert "players/grille-grid.svg" in pages
     assert "players/grille-decoder.svg" in pages
@@ -90,7 +87,10 @@ def test_edge_puzzle_svg_player_pages() -> None:
 def test_binder_without_artifacts_has_no_checklist() -> None:
     from puzzcombinator import GraphBuilder
 
-    graph = GraphBuilder().node("a").node("b").connect("a", "b", text="go").build()
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(a, b, text="go").build()
     binder = game_master_binder(graph)
     assert "Production checklist" not in binder
 

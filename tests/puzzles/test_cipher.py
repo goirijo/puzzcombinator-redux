@@ -12,25 +12,33 @@ def test_caesar_encode_decode_roundtrip() -> None:
 
 
 def test_from_plaintext_generates_ciphertext() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HELLO", shift=3)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HELLO", shift=3, id="c1")
     assert puzzle.ciphertext == "KHOOR"
     assert puzzle.shift == 3
 
 
 def test_solution_is_derivable() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=5)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=5, id="c1")
     assert puzzle.solution == "FOUNTAIN"
 
 
 def test_payload_roundtrip() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext("c1", plaintext="CODE", shift=4)
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="CODE", shift=4, id="c1")
     rebuilt = CaesarCipherPuzzle.from_payload("c1", puzzle.to_payload())
     assert rebuilt == puzzle
 
 
+def test_omitted_id_is_auto_generated_and_distinct() -> None:
+    # No id supplied: the base class auto-generates one as "{type_name}-{uuid}".
+    a = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1)
+    b = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1)
+    assert a.id.startswith("caesar_cipher-")
+    assert a.id != b.id  # unique even for identical content
+
+
 def test_puzzle_eq_and_hash() -> None:
-    a = CaesarCipherPuzzle.from_plaintext("c1", plaintext="CODE", shift=4)
-    b = CaesarCipherPuzzle.from_plaintext("c1", plaintext="CODE", shift=4)
+    a = CaesarCipherPuzzle.from_plaintext(plaintext="CODE", shift=4, id="c1")
+    b = CaesarCipherPuzzle.from_plaintext(plaintext="CODE", shift=4, id="c1")
     assert a == b
     assert a != "not a puzzle"
     assert len({a, b}) == 1

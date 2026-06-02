@@ -13,19 +13,23 @@ from puzzcombinator import (
 
 @pytest.fixture
 def converging_hunt() -> Graph:
-    """A two-path hunt that merges:  start -> A -> merge ; start -> B -> merge -> end."""
+    """A two-path hunt that merges:  start -> A -> merge ; start -> B -> merge -> end.
+
+    Uses explicit ids because the tests reference these nodes by id, but still
+    threads the handles ``node()`` returns into ``connect`` (never re-typing them).
+    """
+    builder = GraphBuilder()
+    start = builder.node("start")
+    a = builder.node("A", action="find")
+    b = builder.node("B", action="find")
+    merge = builder.node("merge", action="combine")
+    end = builder.node("end")
     return (
-        GraphBuilder()
-        .node("start")
-        .node("A", action="find")
-        .node("B", action="find")
-        .node("merge", action="combine")
-        .node("end")
-        .connect("start", "A", text="path A")
-        .connect("start", "B", text="path B")
-        .connect("A", "merge", text="half one")
-        .connect("B", "merge", text="half two")
-        .connect("merge", "end", text="the treasure")
+        builder.connect(start, a, text="path A")
+        .connect(start, b, text="path B")
+        .connect(a, merge, text="half one")
+        .connect(b, merge, text="half two")
+        .connect(merge, end, text="the treasure")
         .build()
     )
 
@@ -33,13 +37,15 @@ def converging_hunt() -> Graph:
 @pytest.fixture
 def cipher_hunt() -> Graph:
     """A linear hunt: start -> solve -> end, with a Caesar puzzle on the first edge."""
-    cipher = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=3)
+    cipher = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
+    builder = GraphBuilder()
+    start = builder.node("start", label="Welcome")
+    solve = builder.node(
+        "solve", action="solve", label="Caesar gate", notes="hide under the doormat"
+    )
+    end = builder.node("end", label="Treasure")
     return (
-        GraphBuilder()
-        .node("start", label="Welcome")
-        .node("solve", action="solve", label="Caesar gate", notes="hide under the doormat")
-        .node("end", label="Treasure")
-        .connect("start", "solve", puzzle=cipher)
-        .connect("solve", "end", text="Go to the fountain.")
+        builder.connect(start, solve, puzzle=cipher)
+        .connect(solve, end, text="Go to the fountain.")
         .build()
     )

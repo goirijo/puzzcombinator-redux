@@ -2,9 +2,9 @@
 
 Run it:
 
-    python examples/mock_hunt.py
+    python examples/mock_hunt/hunt.py
 
-Writes a full bundle into examples/mock_hunt_out/:
+Writes a full bundle into examples/mock_hunt/out/:
 
     binder.html   — the game master's document: a page per action (in solve order)
                     showing what it receives and produces, plus a production
@@ -63,111 +63,111 @@ def _demo_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
     )
 
 
-gate = CaesarCipherPuzzle.from_plaintext("gate", plaintext="LIBRARY ATTIC AND GARDEN", shift=4)
+# Puzzle ids are optional and only name the printable output files; we pass
+# explicit, readable ones here so the players/ filenames stay legible.
+gate = CaesarCipherPuzzle.from_plaintext(plaintext="LIBRARY ATTIC AND GARDEN", shift=4, id="gate")
 crossword = CrosswordPuzzle(
-    "crossword",
     solution=["STAR", "H##A", "O##I", "PLOD"],
     across={1: "Celestial body", 3: "Walk heavily"},
     down={1: "Place to buy things", 2: "Sudden attack"},
     highlight=[(0, 3), (2, 0), (0, 2), (3, 3)],  # R, O, A, D -> "ROAD"
+    id="crossword",
 )
-grille = R4DecoderPuzzle.from_message("grille", "FIFTH STEP", seed=7)
+grille = R4DecoderPuzzle.from_message("FIFTH STEP", seed=7, id="grille")
 riddle = RiddlePuzzle(
-    "riddle",
     riddle=[
         "I have a face but never a frown,",
         "I mark the hours but hold no gears,",
         "and I speak only while the sun is up.",
     ],
     answer="SUNDIAL",
+    id="riddle",
 )
-# Uses examples/assets/patio.<ext> if present, else a generated placeholder PNG.
+# Uses this hunt's assets/patio.<ext> if present, else a generated placeholder PNG.
 _assets = Path(__file__).parent / "assets"
 _photo_file = next(_assets.glob("patio.*"), None) if _assets.is_dir() else None
 if _photo_file is not None:
     photo = ImagePuzzle.from_file(
-        "photo",
         _photo_file,
         prompt="Which flagstone in this patio is loose?",
         answer="the cracked stone right beside the sundial",
         alt="the garden patio by the sundial",
+        id="photo",
     )
 else:
     photo = ImagePuzzle.from_bytes(
-        "photo",
         _demo_png(48, 32, (90, 140, 90)),
         mime="image/png",
         prompt="Which flagstone in this patio is loose?",
         answer="the cracked stone right beside the sundial",
         alt="the garden patio by the sundial",
+        id="photo",
     )
 
+# Nodes are pure actions; node() hands back a handle we wire with (no ids to
+# invent). The bracketed puzzles ride the edge *into* the action that solves them.
+builder = GraphBuilder()
+start = builder.node(label="Kickoff")
+solve_gate = builder.node(action="solve", label="Opening cipher")
+find_library = builder.node(
+    action="find",
+    label="The library",
+    notes="Tape the crossword inside the red book in the 800s.",
+)
+find_attic = builder.node(
+    action="find",
+    label="The attic",
+    notes="Hide the grille pieces in the steamer trunk.",
+)
+find_garden = builder.node(
+    action="find",
+    label="The garden",
+    notes="Scatter the three riddle slips: shed, planter, birdbath.",
+)
+solve_cw = builder.node(action="solve", label="Library crossword")
+solve_grille = builder.node(action="solve", label="Attic grille")
+solve_riddle = builder.node(action="solve", label="Garden riddle")
+combine = builder.node(action="combine", label="Put it together")
+examine = builder.node(
+    action="examine",
+    label="The patio photo",
+    notes="Clip the printed photo to the garden gate.",
+)
+vault = builder.node(
+    action="unlock",
+    label="The cabinet",
+    notes="Tape the cabinet key under the loose flagstone.",
+)
+end = builder.node(label="Treasure")
+
 hunt = (
-    GraphBuilder()
-    .node("start", label="Kickoff")
-    .node("solve_gate", action="solve", label="Opening cipher")
-    .node(
-        "find_library",
-        action="find",
-        label="The library",
-        notes="Tape the crossword inside the red book in the 800s.",
-    )
-    .node(
-        "find_attic",
-        action="find",
-        label="The attic",
-        notes="Hide the grille pieces in the steamer trunk.",
-    )
-    .node(
-        "find_garden",
-        action="find",
-        label="The garden",
-        notes="Scatter the three riddle slips: shed, planter, birdbath.",
-    )
-    .node("solve_cw", action="solve", label="Library crossword")
-    .node("solve_grille", action="solve", label="Attic grille")
-    .node("solve_riddle", action="solve", label="Garden riddle")
-    .node("combine", action="combine", label="Put it together")
-    .node(
-        "examine",
-        action="examine",
-        label="The patio photo",
-        notes="Clip the printed photo to the garden gate.",
-    )
-    .node(
-        "vault",
-        action="unlock",
-        label="The cabinet",
-        notes="Tape the cabinet key under the loose flagstone.",
-    )
-    .node("end", label="Treasure")
     # opening cipher
-    .connect("start", "solve_gate", puzzle=gate)
+    builder.connect(start, solve_gate, puzzle=gate)
     # it sends them three places (branch)
-    .connect("solve_gate", "find_library", text="Search the LIBRARY.")
-    .connect("solve_gate", "find_attic", text="Search the ATTIC.")
-    .connect("solve_gate", "find_garden", text="Search the GARDEN.")
+    .connect(solve_gate, find_library, text="Search the LIBRARY.")
+    .connect(solve_gate, find_attic, text="Search the ATTIC.")
+    .connect(solve_gate, find_garden, text="Search the GARDEN.")
     # each location yields a puzzle, carried on the edge into its solve action
-    .connect("find_library", "solve_cw", puzzle=crossword)
-    .connect("find_attic", "solve_grille", puzzle=grille)
-    .connect("find_garden", "solve_riddle", puzzle=riddle)
+    .connect(find_library, solve_cw, puzzle=crossword)
+    .connect(find_attic, solve_grille, puzzle=grille)
+    .connect(find_garden, solve_riddle, puzzle=riddle)
     # the three solutions converge (merge)
-    .connect("solve_cw", "combine", text="ROAD")
-    .connect("solve_grille", "combine", text="FIFTH STEP")
-    .connect("solve_riddle", "combine", text="SUNDIAL")
+    .connect(solve_cw, combine, text="ROAD")
+    .connect(solve_grille, combine, text="FIFTH STEP")
+    .connect(solve_riddle, combine, text="SUNDIAL")
     # combined, they point to the patio; a photo pins the exact spot
     .connect(
-        "combine",
-        "examine",
+        combine,
+        examine,
         text="By the SUNDIAL, pace the ROAD to its FIFTH STEP. Study the photo.",
         puzzle=photo,
     )
     # examine -> a physical step -> the prize
-    .connect("examine", "vault", text="Lift the loose flagstone for the cabinet key.")
-    .connect("vault", "end", text="Open the cabinet — you found the treasure!")
+    .connect(examine, vault, text="Lift the loose flagstone for the cabinet key.")
+    .connect(vault, end, text="Open the cabinet — you found the treasure!")
     .build()
 )
 
-out_dir = Path(__file__).parent / "mock_hunt_out"
+out_dir = Path(__file__).parent / "out"
 for path in write_bundle(hunt_bundle(hunt), out_dir):
     print(f"wrote {path}")

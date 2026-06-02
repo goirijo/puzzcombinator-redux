@@ -14,28 +14,46 @@ if TYPE_CHECKING:
 class GraphBuilder:
     """Collects nodes and edges, then materializes an immutable :class:`Graph`.
 
-    Every method returns ``self`` for chaining. :meth:`build` is the single
-    place that wires and validates the graph.
+    Author by capturing node handles and connecting them as you go::
+
+        b = GraphBuilder()
+        start = b.node(label="Kickoff")
+        solve = b.node(action="solve", label="Opening cipher")
+        b.connect(start, solve, puzzle=cipher)
+        hunt = b.build()
+
+    :meth:`node` returns the new node's id (the handle for :meth:`connect`);
+    :meth:`connect` returns ``self`` so edges can still be chained. :meth:`build`
+    is the single place that wires and validates the graph.
     """
 
     def __init__(self) -> None:
         self._nodes: dict[str, Node] = {}
         self._edges: dict[str, Edge] = {}
+        self._node_seq = 0
 
     def node(
         self,
-        id: str,
+        id: str | None = None,
         *,
         action: str | None = None,
         label: str | None = None,
         notes: str | None = None,
-    ) -> GraphBuilder:
-        """Add an action node. ``action`` is a free-form label ("solve", "find", …);
-        ``notes`` is free-form designer text printed in the binder."""
+    ) -> str:
+        """Add an action node and return its **id** — the handle you pass to
+        :meth:`connect`.
+
+        ``id`` is optional: omit it and the builder assigns a unique internal id,
+        so you never have to invent one. Pass an explicit id only when you want a
+        stable, readable handle. ``action`` is a free-form label ("solve",
+        "find", …); ``notes`` is free-form designer text printed in the binder.
+        """
+        if id is None:
+            id = self._auto_node_id()
         if id in self._nodes:
             raise GraphError(f"duplicate node id {id!r}")
         self._nodes[id] = Node(id=id, action=action, label=label, notes=notes)
-        return self
+        return id
 
     def connect(
         self,
@@ -65,6 +83,14 @@ class GraphBuilder:
     def build(self) -> Graph:
         """Assemble, wire, and structurally validate the graph."""
         return Graph.assemble(list(self._nodes.values()), list(self._edges.values()))
+
+    def _auto_node_id(self) -> str:
+        """A unique ``n1``/``n2``/… id, skipping any explicitly-taken id."""
+        while True:
+            self._node_seq += 1
+            candidate = f"n{self._node_seq}"
+            if candidate not in self._nodes:
+                return candidate
 
     def _auto_edge_id(self, source: str, target: str) -> str:
         base = f"{source}->{target}"

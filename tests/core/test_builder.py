@@ -6,14 +6,11 @@ from puzzcombinator import GraphBuilder
 from puzzcombinator.errors import GraphError
 
 
-def test_fluent_build_returns_graph() -> None:
-    graph = (
-        GraphBuilder()
-        .node("a", action="start")
-        .node("b", action="finish")
-        .connect("a", "b", text="hi")
-        .build()
-    )
+def test_build_returns_graph() -> None:
+    builder = GraphBuilder()
+    a = builder.node("a", action="start")
+    b = builder.node("b", action="finish")
+    graph = builder.connect(a, b, text="hi").build()
     assert set(graph.nodes) == {"a", "b"}
     assert list(graph.edges) == ["a->b"]
     assert graph.nodes["a"].action == "start"
@@ -21,52 +18,104 @@ def test_fluent_build_returns_graph() -> None:
     assert graph.edges["a->b"].content.text == "hi"
 
 
+def test_node_returns_its_id_as_a_handle() -> None:
+    builder = GraphBuilder()
+    a = builder.node("a")
+    # The returned handle *is* the node id — explicit here, so it equals "a".
+    assert a == "a"
+    b = builder.node("b")
+    graph = builder.connect(a, b, text="hi").build()
+    assert graph.edges["a->b"].content is not None
+
+
+def test_omitted_node_id_is_auto_generated_and_unique() -> None:
+    builder = GraphBuilder()
+    a = builder.node(label="first")
+    b = builder.node(label="second")
+    # No ids invented by the caller; the builder hands back distinct ones.
+    assert a != b
+    graph = builder.connect(a, b).build()
+    assert set(graph.nodes) == {a, b}
+
+
+def test_auto_node_id_skips_an_explicitly_taken_id() -> None:
+    builder = GraphBuilder()
+    taken = builder.node("n1")  # squat on the first counter value
+    auto = builder.node()  # must not collide with it
+    assert taken == "n1"
+    assert auto != "n1"
+
+
+def test_unstored_auto_handle_cannot_be_guessed() -> None:
+    # The mistake: omit the id (so it is auto-generated), DON'T capture the
+    # returned handle, then reference the node by a literal you assume (its
+    # label, say). The real id was never stored, so the edge dangles and build()
+    # fails. (With an explicit id the literal would happen to match — which is why
+    # bypassing the handle silently "works" there and hides the bug.)
+    builder = GraphBuilder()
+    builder.node(label="The library")  # handle deliberately not captured
+    builder.node(label="Solve it")
+    builder.connect("The library", "Solve it")  # labels are not ids
+    with pytest.raises(GraphError, match="unknown source node"):
+        builder.build()
+
+
 def test_auto_edge_id_disambiguates() -> None:
-    graph = GraphBuilder().node("a").node("b").connect("a", "b").connect("a", "b").build()
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(a, b).connect(a, b).build()
     assert set(graph.edges) == {"a->b", "a->b#2"}
 
 
 def test_auto_edge_id_disambiguates_three_times() -> None:
-    graph = (
-        GraphBuilder()
-        .node("a")
-        .node("b")
-        .connect("a", "b")
-        .connect("a", "b")
-        .connect("a", "b")
-        .build()
-    )
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(a, b).connect(a, b).connect(a, b).build()
     assert set(graph.edges) == {"a->b", "a->b#2", "a->b#3"}
 
 
 def test_connect_puts_puzzle_on_edge() -> None:
     from puzzcombinator import CaesarCipherPuzzle
 
-    cipher = CaesarCipherPuzzle.from_plaintext("c1", plaintext="HI", shift=1)
-    graph = GraphBuilder().node("a").node("b").connect("a", "b", puzzle=cipher).build()
+    cipher = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(a, b, puzzle=cipher).build()
     content = graph.edges["a->b"].content
     assert content is not None
     assert content.puzzle is cipher
 
 
 def test_explicit_edge_id_is_kept() -> None:
-    graph = GraphBuilder().node("a").node("b").connect("a", "b", id="link").build()
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(a, b, id="link").build()
     assert "link" in graph.edges
 
 
 def test_duplicate_node_id_raises() -> None:
-    builder = GraphBuilder().node("a")
+    builder = GraphBuilder()
+    builder.node("a")
     with pytest.raises(GraphError, match="duplicate node id"):
         builder.node("a")
 
 
 def test_duplicate_edge_id_raises() -> None:
-    builder = GraphBuilder().node("a").node("b").connect("a", "b", id="x")
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    builder.connect(a, b, id="x")
     with pytest.raises(GraphError, match="duplicate edge id"):
-        builder.connect("a", "b", id="x")
+        builder.connect(a, b, id="x")
 
 
 def test_dangling_edge_raises_on_build() -> None:
-    builder = GraphBuilder().node("a").connect("a", "ghost")
+    builder = GraphBuilder()
+    a = builder.node("a")
+    builder.connect(a, "ghost")
     with pytest.raises(GraphError, match="unknown target node"):
         builder.build()

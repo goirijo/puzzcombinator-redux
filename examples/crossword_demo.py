@@ -31,26 +31,25 @@ from puzzcombinator import (
 # Across: 1 STAR, 3 PLOD.  Down: 1 SHOP, 2 RAID.
 # Shaded cells spell the emergent clue: ROAD.
 crossword = CrosswordPuzzle(
-    "grid",
     solution=["STAR", "H##A", "O##I", "PLOD"],
     across={1: "Celestial body", 3: "Walk heavily"},
     down={1: "Place to buy things", 2: "Sudden attack"},
     highlight=[(0, 3), (2, 0), (0, 2), (3, 3)],  # R, O, A, D -> "ROAD"
+    id="grid",  # optional; just keeps the printable filename readable
 )
 
 # The crossword rides the edge into the "solve" action; solving yields "ROAD".
+builder = GraphBuilder()
+start = builder.node(label="Welcome")
+solve = builder.node(
+    action="solve",
+    label="The Grid",
+    notes="Tape the crossword inside the front cover of the red library book.",
+)
+end = builder.node(label="The Cache")
 hunt = (
-    GraphBuilder()
-    .node("start", label="Welcome")
-    .node(
-        "solve",
-        action="solve",
-        label="The Grid",
-        notes="Tape the crossword inside the front cover of the red library book.",
-    )
-    .node("end", label="The Cache")
-    .connect("start", "solve", puzzle=crossword)
-    .connect("solve", "end", text="Follow the ROAD to the old oak at its end.")
+    builder.connect(start, solve, puzzle=crossword)
+    .connect(solve, end, text="Follow the ROAD to the old oak at its end.")
     .build()
 )
 

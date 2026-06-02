@@ -14,14 +14,14 @@ from puzzcombinator.serialization import from_json, to_json
 
 
 def test_full_flow() -> None:
-    cipher = CaesarCipherPuzzle.from_plaintext("c1", plaintext="FOUNTAIN", shift=3)
+    cipher = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
+    builder = GraphBuilder()
+    start = builder.node("start", label="Welcome")
+    solve = builder.node("solve", action="solve", label="Caesar gate", notes="leave on the bench")
+    end = builder.node("end", label="Treasure")
     graph = (
-        GraphBuilder()
-        .node("start", label="Welcome")
-        .node("solve", action="solve", label="Caesar gate", notes="leave on the bench")
-        .node("end", label="Treasure")
-        .connect("start", "solve", puzzle=cipher)
-        .connect("solve", "end", text="Go to the fountain.")
+        builder.connect(start, solve, puzzle=cipher)
+        .connect(solve, end, text="Go to the fountain.")
         .build()
     )
 
