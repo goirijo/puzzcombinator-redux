@@ -35,21 +35,48 @@ def test_unknown_source_edge_raises() -> None:
         Graph.assemble([Node(id="b")], [Edge(id="x", source="ghost", target="b")])
 
 
-def test_duplicate_puzzle_id_is_rejected() -> None:
-    # Two distinct puzzles sharing an id would collide on their output filenames
+def test_duplicate_artifact_id_is_rejected() -> None:
+    # Two player artifacts sharing an id would collide on their output filenames
     # (silently overwriting one printable with the other), so build() rejects it.
-    from puzzcombinator import CaesarCipherPuzzle, GraphBuilder
+    from puzzcombinator import GraphBuilder, TextArtifact
 
-    p1 = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="dup")
-    p2 = CaesarCipherPuzzle.from_plaintext(plaintext="BYE", shift=2, id="dup")
     builder = GraphBuilder()
     a = builder.node("a")
     b = builder.node("b")
     c = builder.node("c")
-    builder.connect(a, b, puzzle=p1)
-    builder.connect(b, c, puzzle=p2)
-    with pytest.raises(GraphError, match="duplicate puzzle id"):
+    builder.connect(a, b, TextArtifact("one", id="dup"))
+    builder.connect(b, c, TextArtifact("two", id="dup"))
+    with pytest.raises(GraphError, match="duplicate artifact id"):
         builder.build()
+
+
+def test_duplicate_artifact_id_within_one_edge_is_rejected() -> None:
+    from puzzcombinator import GraphBuilder, TextArtifact
+
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    builder.connect(a, b, TextArtifact("one", id="dup"), TextArtifact("two", id="dup"))
+    with pytest.raises(GraphError, match="duplicate artifact id"):
+        builder.build()
+
+
+def test_game_master_artifacts_are_exempt_from_id_check() -> None:
+    # A player and a game-master artifact may share an id: only the player one
+    # names an output file, so there's no collision.
+    from puzzcombinator import Audience, GraphBuilder, TextArtifact
+
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    builder.connect(
+        a,
+        b,
+        TextArtifact("clue", id="same"),
+        TextArtifact("answer", id="same", audience=Audience.GAME_MASTER),
+    )
+    graph = builder.build()  # does not raise
+    assert len(graph.edges["a->b"].content) == 2
 
 
 def test_cycle_is_rejected() -> None:

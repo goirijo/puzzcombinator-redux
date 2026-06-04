@@ -7,7 +7,8 @@ usual crossword terms ("1 Across", "2 Down").
 
 A treasure-hunt crossword usually *reveals* something: pass ``highlight`` cells
 and the letters at those cells, read in order, form the **emergent word** — the
-clue the designer then wires onto this node's outgoing edge. The puzzle only
+clue the designer then wires onto this node's outgoing edge. The
+:class:`CrosswordPuzzle` generator emits a :class:`CrosswordArtifact` that only
 *represents* itself (a numbered blank grid + clues for players; the filled grid,
 answers, and emergent word for the game master). It does no answer-checking.
 """
@@ -18,10 +19,10 @@ import html
 from collections.abc import Iterable, Mapping
 from typing import Any, NamedTuple
 
+from puzzcombinator.artifacts.registry import register_artifact
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.registry import register_puzzle
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 #: The character marking a black (blocked) square in a solution grid.
 BLOCK = "#"
@@ -101,9 +102,113 @@ def _analyze(
     return numbering, across, down
 
 
-@register_puzzle
+@register_artifact
+class CrosswordArtifact(Artifact):
+    """A crossword grid + clues. ``reveal`` switches between the blank player sheet
+    and the game master's filled grid, answers, and emergent word."""
+
+    type_name = "crossword"
+
+    def __init__(
+        self,
+        *,
+        solution: list[str],
+        across: dict[int, str],
+        down: dict[int, str],
+        highlight: list[tuple[int, int]],
+        reveal: bool,
+        name: str = "crossword",
+        audience: Audience = Audience.PLAYER,
+        id: str | None = None,
+    ) -> None:
+        super().__init__(name=name, audience=audience, id=id)
+        self.solution = solution
+        self.across = across
+        self.down = down
+        self.highlight = highlight
+        self.reveal = reveal
+
+    @property
+    def emergent_word(self) -> str:
+        """Letters at the highlighted cells, in order — the revealed clue."""
+        return "".join(self.solution[r][c] for r, c in self.highlight)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "solution": list(self.solution),
+            "across": dict(self.across),
+            "down": dict(self.down),
+            "highlight": [[r, c] for r, c in self.highlight],
+            "reveal": self.reveal,
+        }
+
+    @classmethod
+    def from_payload(
+        cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]
+    ) -> CrosswordArtifact:
+        return cls(
+            solution=payload["solution"],
+            across={int(k): v for k, v in payload.get("across", {}).items()},
+            down={int(k): v for k, v in payload.get("down", {}).items()},
+            highlight=[(int(r), int(c)) for r, c in payload.get("highlight", [])],
+            reveal=payload["reveal"],
+            name=name,
+            audience=audience,
+            id=id,
+        )
+
+    def render(self) -> RenderFragment:
+        parts = [
+            f'<section class="puzzle crossword" data-id="{html.escape(self.id)}">',
+            "<h3>Crossword</h3>",
+            self._render_grid(),
+            self._render_clues(),
+        ]
+        if self.reveal and self.highlight:
+            parts.append(
+                f'<p class="emergent">Hidden word: '
+                f"<strong>{html.escape(self.emergent_word)}</strong></p>"
+            )
+        parts.append("</section>")
+        return RenderFragment.html("".join(parts), styles=_CSS)
+
+    def _render_grid(self) -> str:
+        numbering, _, _ = _analyze(self.solution)
+        highlight = set(self.highlight)
+        rows: list[str] = []
+        for r, row in enumerate(self.solution):
+            cells: list[str] = []
+            for c, ch in enumerate(row):
+                if ch == BLOCK:
+                    cells.append('<td class="block"></td>')
+                    continue
+                css = "cell theme" if (r, c) in highlight else "cell"
+                number = numbering.get((r, c))
+                num_html = f'<span class="num">{number}</span>' if number else ""
+                letter = html.escape(ch) if self.reveal else ""
+                cells.append(f'<td class="{css}">{num_html}{letter}</td>')
+            rows.append("<tr>" + "".join(cells) + "</tr>")
+        return f'<table class="grid">{"".join(rows)}</table>'
+
+    def _render_clues(self) -> str:
+        _, across, down = _analyze(self.solution)
+
+        def section(title: str, slots: list[Slot], clues: dict[int, str]) -> str:
+            items: list[str] = []
+            for slot in slots:
+                clue = html.escape(clues.get(slot.number, ""))
+                if self.reveal:
+                    extra = f' <span class="answer">{html.escape(slot.answer)}</span>'
+                else:
+                    extra = f' <span class="len">({len(slot.answer)})</span>'
+                items.append(f'<li value="{slot.number}">{clue}{extra}</li>')
+            return f'<div class="clues"><h4>{title}</h4><ol>{"".join(items)}</ol></div>'
+
+        return section("Across", across, self.across) + section("Down", down, self.down)
+
+
 class CrosswordPuzzle(Puzzle):
-    """A crossword defined by its solution grid and clues."""
+    """Generates a crossword from its solution grid and clues."""
 
     type_name = "crossword"
 
@@ -122,8 +227,6 @@ class CrosswordPuzzle(Puzzle):
         self.down: dict[int, str] = dict(down)
         self.highlight: list[tuple[int, int]] = [(int(r), int(c)) for r, c in (highlight or [])]
         self._validate()
-
-    # -- derived structure -------------------------------------------------
 
     @property
     def size(self) -> tuple[int, int]:
@@ -167,74 +270,16 @@ class CrosswordPuzzle(Puzzle):
             if grid[r][c] == BLOCK:
                 raise PuzzleError(f"highlight cell {(r, c)} is a block")
 
-    # -- serialization -----------------------------------------------------
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "solution": list(self.solution),
-            "across": dict(self.across),
-            "down": dict(self.down),
-            "highlight": [[r, c] for r, c in self.highlight],
-        }
-
-    @classmethod
-    def from_payload(cls, id: str, payload: dict[str, Any]) -> CrosswordPuzzle:
-        return cls(
-            id,
-            solution=payload["solution"],
-            across={int(k): v for k, v in payload.get("across", {}).items()},
-            down={int(k): v for k, v in payload.get("down", {}).items()},
-            highlight=payload.get("highlight"),
-        )
-
-    # -- rendering ---------------------------------------------------------
-
-    def render(self, audience: Audience) -> RenderFragment:
-        reveal = audience is Audience.GAME_MASTER
-        parts = [
-            f'<section class="puzzle crossword" data-id="{html.escape(self.id)}">',
-            "<h3>Crossword</h3>",
-            self._render_grid(reveal=reveal),
-            self._render_clues(reveal=reveal),
-        ]
-        if reveal and self.highlight:
-            parts.append(
-                f'<p class="emergent">Hidden word: '
-                f"<strong>{html.escape(self.emergent_word)}</strong></p>"
+    def _artifacts(self, audience: Audience) -> list[Artifact]:
+        return [
+            CrosswordArtifact(
+                solution=list(self.solution),
+                across=dict(self.across),
+                down=dict(self.down),
+                highlight=list(self.highlight),
+                reveal=audience is Audience.GAME_MASTER,
+                name="crossword",
+                audience=audience,
+                id=self.artifact_id("crossword"),
             )
-        parts.append("</section>")
-        return RenderFragment.html("".join(parts), styles=_CSS)
-
-    def _render_grid(self, *, reveal: bool) -> str:
-        numbering, _, _ = _analyze(self.solution)
-        highlight = set(self.highlight)
-        rows: list[str] = []
-        for r, row in enumerate(self.solution):
-            cells: list[str] = []
-            for c, ch in enumerate(row):
-                if ch == BLOCK:
-                    cells.append('<td class="block"></td>')
-                    continue
-                css = "cell theme" if (r, c) in highlight else "cell"
-                number = numbering.get((r, c))
-                num_html = f'<span class="num">{number}</span>' if number else ""
-                letter = html.escape(ch) if reveal else ""
-                cells.append(f'<td class="{css}">{num_html}{letter}</td>')
-            rows.append("<tr>" + "".join(cells) + "</tr>")
-        return f'<table class="grid">{"".join(rows)}</table>'
-
-    def _render_clues(self, *, reveal: bool) -> str:
-        across, down = self.slots()
-
-        def section(title: str, slots: list[Slot], clues: dict[int, str]) -> str:
-            items: list[str] = []
-            for slot in slots:
-                clue = html.escape(clues.get(slot.number, ""))
-                if reveal:
-                    extra = f' <span class="answer">{html.escape(slot.answer)}</span>'
-                else:
-                    extra = f' <span class="len">({len(slot.answer)})</span>'
-                items.append(f'<li value="{slot.number}">{clue}{extra}</li>')
-            return f'<div class="clues"><h4>{title}</h4><ol>{"".join(items)}</ol></div>'
-
-        return section("Across", across, self.across) + section("Down", down, self.down)
+        ]

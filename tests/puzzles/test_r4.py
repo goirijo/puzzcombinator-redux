@@ -6,10 +6,17 @@ from puzzcombinator import (
     Audience,
     GraphBuilder,
     R4DecoderPuzzle,
+    R4PieceArtifact,
+    TextArtifact,
 )
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.r4 import _grid_dim
 from puzzcombinator.serialization import from_json, to_json
+
+
+def _markup(puzzle: R4DecoderPuzzle, audience: Audience = Audience.PLAYER) -> str:
+    """All of the puzzle's artifacts for an audience, rendered and concatenated."""
+    return "".join(a.render().markup for a in puzzle.artifacts(audience=audience).values())
 
 
 @pytest.mark.parametrize(
@@ -40,8 +47,8 @@ def test_determinism() -> None:
     a = R4DecoderPuzzle.from_message("MEETATDAWN", seed=5, id="r4")
     b = R4DecoderPuzzle.from_message("MEETATDAWN", seed=5, id="r4")
     c = R4DecoderPuzzle.from_message("MEETATDAWN", seed=6, id="r4")
-    assert a == b
-    assert a != c
+    assert (a.grid, a.grille) == (b.grid, b.grille)
+    assert (a.grid, a.grille) != (c.grid, c.grille)
 
 
 def test_generated_grille_is_valid_turning_grille() -> None:
@@ -60,18 +67,17 @@ def test_reveal_flags_control_player_view() -> None:
     puzzle = R4DecoderPuzzle.from_message(
         "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
     )
-    player = puzzle.render(Audience.PLAYER).markup
+    player = _markup(puzzle, Audience.PLAYER)
     assert "<svg" in player
     assert "polygon" in player  # orientation marker present
     assert "<text" not in player  # no letters revealed
     assert 'fill="black"' not in player  # no shading revealed
 
-    revealed = (
+    revealed = _markup(
         R4DecoderPuzzle.from_message(
             "MEETATDAWN", seed=3, reveal_grid=True, reveal_decoder=True, id="r4"
-        )
-        .render(Audience.PLAYER)
-        .markup
+        ),
+        Audience.PLAYER,
     )
     assert "<text" in revealed
     assert 'fill="black"' in revealed
@@ -82,18 +88,19 @@ def test_game_master_always_reveals_everything() -> None:
     puzzle = R4DecoderPuzzle.from_message(
         "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
     )
-    gm = puzzle.render(Audience.GAME_MASTER).markup
+    gm = _markup(puzzle, Audience.GAME_MASTER)
     assert "<text" in gm
     assert 'fill="black"' in gm
     assert "MEETATDAWN" in gm
     assert "Reading order" in gm
 
 
-def test_svg_assets_are_standalone_documents() -> None:
+def test_piece_artifacts_are_standalone_svg_documents() -> None:
     puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, id="r4")
-    assets = puzzle.svg_assets(Audience.PLAYER)
-    assert set(assets) == {"grid", "decoder"}
-    for svg in assets.values():
+    pieces = puzzle.artifacts()
+    assert set(pieces) == {"grid", "grille"}
+    for piece in pieces.values():
+        svg = piece.render().markup
         assert svg.startswith("<svg")
         assert 'xmlns="http://www.w3.org/2000/svg"' in svg
         assert svg.endswith("</svg>")
@@ -101,13 +108,17 @@ def test_svg_assets_are_standalone_documents() -> None:
     blank = R4DecoderPuzzle.from_message(
         "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
     )
-    assert "<text" not in blank.svg_assets(Audience.PLAYER)["grid"]
-    assert "<text" in blank.svg_assets(Audience.GAME_MASTER)["grid"]
+    assert "<text" not in blank.artifacts("grid").render().markup
+    assert "<text" in blank.artifacts("grid", audience=Audience.GAME_MASTER).render().markup
 
 
-def test_payload_roundtrip() -> None:
+def test_piece_artifact_payload_roundtrip() -> None:
     puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=4, reveal_grid=False, id="r4")
-    assert R4DecoderPuzzle.from_payload("r4", puzzle.to_payload()) == puzzle
+    art = puzzle.artifacts("grid")
+    rebuilt = R4PieceArtifact.from_payload(
+        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
+    )
+    assert rebuilt == art
 
 
 def test_graph_json_roundtrip() -> None:
@@ -117,8 +128,13 @@ def test_graph_json_roundtrip() -> None:
     solve = builder.node("solve", action="solve", label="The grille")
     end = builder.node("end")
     graph = (
-        builder.connect(start, solve, puzzle=puzzle)
-        .connect(solve, end, text="The message is FIND THE KEY")
+        builder.connect(
+            start,
+            solve,
+            *puzzle.artifacts().values(),
+            *puzzle.artifacts(audience=Audience.GAME_MASTER).values(),
+        )
+        .connect(solve, end, TextArtifact("The message is FIND THE KEY"))
         .build()
     )
     assert from_json(to_json(graph)) == graph

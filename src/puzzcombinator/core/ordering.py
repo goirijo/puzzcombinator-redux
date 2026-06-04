@@ -8,9 +8,13 @@ that belongs to a future tracking layer if hunts are ever played digitally.
 from __future__ import annotations
 
 from collections import deque
+from typing import TYPE_CHECKING
 
-from puzzcombinator.core.graph import Content, Graph, Node
+from puzzcombinator.core.graph import Graph, Node
 from puzzcombinator.errors import GraphError
+
+if TYPE_CHECKING:
+    from puzzcombinator.rendering.fragment import Artifact
 
 
 def chronological_order(graph: Graph, start: str | None = None) -> list[Node]:
@@ -52,11 +56,11 @@ def chronological_order(graph: Graph, start: str | None = None) -> list[Node]:
     return order
 
 
-def required_inputs(graph: Graph, node_id: str) -> list[Content]:
-    """Content carried by the node's incoming edges — what this step consumes."""
-    return [e.content for e in graph.incoming(node_id) if e.content is not None]
+def required_inputs(graph: Graph, node_id: str) -> list[Artifact]:
+    """Artifacts carried by the node's incoming edges — what this step consumes."""
+    return [a for e in graph.incoming(node_id) for a in e.content]
 
 
-def produced_outputs(graph: Graph, node_id: str) -> list[Content]:
-    """Content carried by the node's outgoing edges — the clues this step yields."""
-    return [e.content for e in graph.outgoing(node_id) if e.content is not None]
+def produced_outputs(graph: Graph, node_id: str) -> list[Artifact]:
+    """Artifacts carried by the node's outgoing edges — what this step yields."""
+    return [a for e in graph.outgoing(node_id) for a in e.content]

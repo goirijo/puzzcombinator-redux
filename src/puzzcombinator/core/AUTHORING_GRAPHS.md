@@ -10,10 +10,10 @@ hunt, [`examples/hunts/mock_hunt/hunt.py`](../../../examples/hunts/mock_hunt/hun
 this with that file open.
 
 > **Scope.** A hunt is a **directed graph of actions**. Everything here is the
-> *graph layer* — it is deliberately **puzzle-agnostic**: it never names a
-> concrete puzzle type, only the `Puzzle` interface. That is why adding a puzzle
-> never forces a graph-layer edit, and why authoring a graph never cares which
-> puzzle is on an edge.
+> *graph layer* — it is deliberately **artifact-agnostic**: it never names a
+> concrete artifact type, only the `Artifact` interface. That is why adding an
+> artifact type never forces a graph-layer edit, and why authoring a graph never
+> cares which artifacts are on an edge.
 >
 > Like the puzzle layer, the graph layer is **authoring-only and stateless**.
 > There is no player state, no "current position", no answer-checking, and no
@@ -29,16 +29,20 @@ Three types carry the whole model (`core/graph.py`):
 | Type | What it is | In the hunt |
 |---|---|---|
 | **`Node`** | a **pure action** with a free-form `action` string (`"solve"`, `"find"`, `"move"`, …) | a step the players *do* |
-| **`Edge`** | a directed connection from one node to another, carrying `Content` | the information that flows between steps |
-| **`Content`** | `text` (a clue/word/object) + `data` (JSON-safe dict) + an optional **`puzzle`** | what one step hands to the next |
+| **`Edge`** | a directed connection from one node to another, carrying a tuple of `Artifact`s | the information that flows between steps |
+| **`Artifact`** | a serializable, single-audience **thing that renders** (a clue, a cipher, a grid) | one piece of what a step hands to the next |
+
+A **`Puzzle`** is an authoring-time *generator* of artifacts (see
+[`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)); it is not part of the
+graph — you place the artifacts it emits.
 
 The shape of the whole thing follows from a few rules:
 
-- **Puzzles live on edges, not nodes.** A puzzle is *optional richness* on the
-  content flowing into an action. There is **no "clue vs artifact" distinction**:
-  a clue is `text`, an artifact is a `puzzle`, and a consumer renders whichever is
-  present. The idiom to internalise: **a puzzle rides the edge _into_ the action
-  that solves it.**
+- **Artifacts live on edges, not nodes.** An edge carries a flat list of artifacts —
+  the information flowing into an action. There is **no "clue vs puzzle"
+  distinction**: a clue is a `TextArtifact`, a cipher is a `CipherArtifact`, and the
+  binder renders whichever are present. The idiom to internalise: **a puzzle's
+  artifacts ride the edge _into_ the action that consumes them.**
 - **Nodes are pure actions — no payload, no "kind".** A node consumes its incoming
   edges and produces its outgoing ones. The `action` string is free-form and
   open-ended; there is no fixed enum to pick from.
@@ -65,8 +69,8 @@ start
                                                 -"Open the cabinet!"-> end
 ```
 
-Read the bracketed `[...]` as a puzzle riding *that edge into* the next action,
-and the `"..."` as plain clue text the designer wrote on the edge.
+Read the bracketed `[...]` as a puzzle's artifacts riding *that edge into* the next
+action, and the `"..."` as a `TextArtifact` clue the designer placed on the edge.
 
 ---
 
@@ -87,7 +91,7 @@ find_library = builder.node(
     label="The library",
     notes="Tape the crossword inside the red book in the 800s.",
 )
-# …then connect the handles (step 2) and finally builder.build().
+# …then wire each edge right after you make its target (step 2), and builder.build().
 ```
 
 The signature is `node(id=None, *, action=None, label=None, notes=None) -> str`,
@@ -121,34 +125,52 @@ and it **returns the new node's id** — the handle you pass to `connect`:
 
 ## Step 2 — Connect them, carrying content (`connect`)
 
-`connect(source, target, ...)` takes the **handles** from step 1, adds a directed
-edge, and builds its `Content` for you. It returns the builder, so edges chain:
+`connect(source, target, *artifacts, id=None)` takes the **handles** from step 1
+and the artifacts that flow along the edge. Because `node()` hands back its handle
+the moment you call it, the clearest way to author is to **interleave**: create a
+node, then immediately wire the edge that feeds it. Each step reads as a unit — the
+action next to the artifacts that flow into it — instead of one giant chain you have
+to cross-reference against the node list:
 
 ```python
-hunt = (
-    # a puzzle rides the edge *into* the action that solves it
-    builder.connect(start, solve_gate, puzzle=gate)
-    .connect(find_library, solve_cw, puzzle=crossword)
-    # plain clue text the players read to reach the next step
-    .connect(solve_gate, find_library, text="Search the LIBRARY.")
-    # a puzzle solution, written by you onto the outgoing edge (see step 3)
-    .connect(solve_cw, combine, text="ROAD")
-    .build()
-)
+from puzzcombinator import Audience, TextArtifact
+
+builder = GraphBuilder()
+
+start        = builder.node(label="Kickoff")
+solve_gate   = builder.node(action="solve", label="Opening cipher")
+# a puzzle's artifacts ride the edge *into* the action that solves it: the player
+# sheet, plus the game-master answer so the binder's answer key has it.
+builder.connect(start, solve_gate,
+                gate.artifacts("cipher"),
+                gate.artifacts("cipher", audience=Audience.GAME_MASTER))
+
+find_library = builder.node(action="find", label="The library")
+builder.connect(solve_gate, find_library, TextArtifact("Search the LIBRARY."))  # the clue to reach it
+
+solve_cw     = builder.node(action="solve", label="Crossword")
+builder.connect(find_library, solve_cw, *crossword.artifacts().values())
+
+combine      = builder.node(action="combine")
+builder.connect(solve_cw, combine, TextArtifact("ROAD"))  # the solution you place on the outgoing edge (step 3)
+
+hunt = builder.build()
 ```
 
-The signature is
-`connect(source, target, *, text=None, data=None, puzzle=None, content=None, id=None)`,
-where `source`/`target` are node handles:
+You can only wire **backward** — `connect` needs handles that already exist, so
+create a node before the edge that points at it. `connect` does return the builder,
+so a short linear run *can* be chained
+(`builder.connect(a, b, …).connect(b, c, …).build()`); but one `connect` per line
+stays readable once the graph branches and merges (step 4), so prefer it.
 
-- **`text` / `data` / `puzzle`** are a shorthand: pass any of them and `connect`
-  bundles them into a `Content(text=…, data=…, puzzle=…)` for you. `data` is an
-  optional JSON-safe dict for structured side-channel info; it defaults to empty.
-- **`content`** lets you pass a pre-built `Content` instead of the shorthand. (If
-  you pass `content`, the shorthand fields are ignored.)
-- An edge may carry **nothing** (omit all four) — a pure structural link with no
-  clue. It may carry **only text**, **only a puzzle**, or **both** (e.g. a clue
-  *and* the puzzle that clue introduces).
+The signature is `connect(source, target, *artifacts, id=None)`, where
+`source`/`target` are node handles:
+
+- **`*artifacts`** are the artifact instances flowing along the edge, in order. Pass
+  a `TextArtifact` for a clue, a single artifact you got from `puzzle.artifacts(name)`,
+  or spread a whole set with `*puzzle.artifacts().values()`. To put a puzzle's player
+  *and* game-master pieces on the edge, spread both sets.
+- An edge may carry **nothing** (pass no artifacts) — a pure structural link.
 - **`id`** is optional. By default the edge id is `"{source}->{target}"`, with
   `#2`, `#3`, … appended if you connect the same pair more than once. Pass `id=`
   only when you want a stable, meaningful handle. A duplicate edge id raises
@@ -161,23 +183,23 @@ where `source`/`target` are node handles:
 This is the single most important convention in the whole layer, so it gets its
 own step.
 
-**A puzzle hangs on the edge that flows _into_ the node where it gets solved.**
-The node is the `solve` action; the edge before it carries the puzzle the players
-work on; the edge *after* it carries the puzzle's answer as plain `text`, which
-becomes the next step's input. In the reference hunt:
+**A puzzle's artifacts hang on the edge that flows _into_ the node where it gets
+solved.** The node is the `solve` action; the edge before it carries the puzzle's
+pieces the players work on; the edge *after* it carries the puzzle's answer as a
+plain `TextArtifact`, which becomes the next step's input. In the reference hunt:
 
 ```python
-    .connect(find_library, solve_cw, puzzle=crossword)  # in:  the crossword
-    .connect(solve_cw, combine, text="ROAD")            # out: its solution
+    .connect(find_library, solve_cw, *crossword.artifacts().values())  # in:  the crossword
+    .connect(solve_cw, combine, TextArtifact("ROAD"))                  # out: its solution
 ```
 
 Crucially, **the library does _not_ auto-link a puzzle's solution to its outgoing
-clue.** You write `text="ROAD"` by hand. This loose coupling is deliberate:
+clue.** You write `TextArtifact("ROAD")` by hand. This loose coupling is deliberate:
 
-- A puzzle is self-contained and has no idea which edge carries it or what comes
-  next (see the puzzle guide's scope note). Forcing the graph to reach into a
-  puzzle for "the answer" would break that isolation and require every puzzle to
-  expose a machine-readable solution — which several puzzle types can't cleanly do.
+- An artifact is self-contained and has no idea which edge carries it or what comes
+  next (see the puzzle guide's scope note). Forcing the graph to reach into a puzzle
+  for "the answer" would break that isolation and require every puzzle to expose a
+  machine-readable solution — which several puzzle types can't cleanly do.
 - The clue a player reads next is usually *not* verbatim the puzzle's answer — it's
   a sentence you phrase ("By the SUNDIAL, pace the ROAD…"). Authoring that by hand
   is a feature, not a gap.
@@ -194,11 +216,12 @@ in `core/ordering.py`:
 ```python
 from puzzcombinator import required_inputs, produced_outputs
 
-required_inputs(hunt, solve_cw)    # [Content(puzzle=<crossword>)]  — what it consumes
-produced_outputs(hunt, solve_cw)   # [Content(text="ROAD")]         — the clue it yields
+required_inputs(hunt, solve_cw)    # [CrosswordArtifact(...)]  — the artifacts it consumes
+produced_outputs(hunt, solve_cw)   # [TextArtifact("ROAD")]    — the artifact it yields
 ```
 
-(The queries take a node id; pass the same handle `node()` returned.)
+(The queries take a node id; pass the same handle `node()` returned. Both return a
+flat `list[Artifact]` across the node's edges.)
 
 ---
 
@@ -210,19 +233,25 @@ Non-linear hunts fall out of plain topology — no special construct:
   `solve_gate` sends players to three places at once:
 
   ```python
-      .connect(solve_gate, find_library, text="Search the LIBRARY.")
-      .connect(solve_gate, find_attic, text="Search the ATTIC.")
-      .connect(solve_gate, find_garden, text="Search the GARDEN.")
+      .connect(solve_gate, find_library, TextArtifact("Search the LIBRARY."))
+      .connect(solve_gate, find_attic, TextArtifact("Search the ATTIC."))
+      .connect(solve_gate, find_garden, TextArtifact("Search the GARDEN."))
   ```
 
 - **A merge is just a node with several incoming edges.** The three threads
   converge on `combine`:
 
   ```python
-      .connect(solve_cw, combine, text="ROAD")
-      .connect(solve_grille, combine, text="FIFTH STEP")
-      .connect(solve_riddle, combine, text="SUNDIAL")
+      .connect(solve_cw, combine, TextArtifact("ROAD"))
+      .connect(solve_grille, combine, TextArtifact("FIFTH STEP"))
+      .connect(solve_riddle, combine, TextArtifact("SUNDIAL"))
   ```
+
+  Scattering one puzzle's pieces is the same shape: place each artifact from a
+  single generator on a *different* edge that feeds the solve. The reference hunt
+  scatters the riddle's three lines this way —
+  `connect(find_shed, solve_riddle, riddle.artifacts("line0"))`, and so on — so the
+  gated merge means "you need all three lines to read the riddle."
 
 The ordering query understands the difference: a merge node is **gated** — it is
 not reached until **every** thread feeding it has been emitted (step 5). So
@@ -263,9 +292,10 @@ On build the graph:
    - a **dangling edge** — `source` or `target` names a node that doesn't exist
      (usually a handle you didn't capture, or a `connect` before the matching
      `node`);
-   - a **duplicate puzzle id** — two puzzles sharing an id would collide on their
-     output filenames; ids auto-generate uniquely, so this only fires if you pass
-     two explicit ones that clash;
+   - a **duplicate artifact id** — two *player* artifacts sharing an id would
+     collide on their output filenames; ids auto-generate uniquely (and a puzzle
+     prefixes its pieces with its own id), so this only fires if you pass two
+     explicit ones that clash. Game-master artifacts name no file and are exempt;
    - a **cycle** — a hunt must flow forward; a loop back to an earlier action is
      rejected with the offending node ids.
 
@@ -319,16 +349,17 @@ write_bundle(hunt_bundle(hunt), "hunt_out")
 ```
 
 - **`hunt_bundle(graph)`** is pure: it returns a `dict` of `{path: contents}` — a
-  game-master `binder.html` (one page per action in solve order, showing each
-  step's incoming and outgoing content, with puzzles rendered answers-shown, plus a
-  production checklist) and a `players/` printable per edge-puzzle.
+  game-master `binder.html` (one page per action in solve order, rendering each
+  step's incoming and outgoing artifacts, including the game-master ones that reveal
+  answers, plus a production checklist) and a `players/` printable per `PLAYER`
+  artifact.
 - **`write_bundle(bundle, dir)`** is the only filesystem I/O — it writes that dict
   to disk and returns the paths written.
 - If you want the pieces separately, `game_master_binder(graph) -> str` and
   `player_pages(graph) -> dict` are exported too.
 
-The binder holds **no puzzle-specific styling** — each puzzle's `RenderFragment`
-carries its own CSS — so a hunt using a brand-new puzzle type needs zero binder
+The binder holds **no artifact-specific styling** — each artifact's `RenderFragment`
+carries its own CSS — so a hunt using a brand-new artifact type needs zero binder
 changes. See the reference hunt's tail for the canonical invocation.
 
 ---
@@ -348,10 +379,11 @@ assert restored == hunt            # the keystone invariant
 
 `from_json(to_json(g)) == g` is the invariant the whole serialization layer is
 built to preserve — which is why wiring is recomputed on load and ids (not object
-references) tie everything together. Puzzles round-trip through their registry as
-`{type, id, payload}` inside each edge's content, so a loaded hunt rebuilds every
-puzzle by `type_name`. `to_yaml` / `from_yaml` are available too (lazy, optional
-dependency). Malformed input raises `SerializationError`.
+references) tie everything together. Each edge's artifacts round-trip through their
+registry as `{type, id, name, audience, payload}`, so a loaded hunt rebuilds every
+artifact by `type_name`. (Puzzle generators are authoring-time only and are not
+serialized — the artifacts they produced are.) `to_yaml` / `from_yaml` are available
+too (lazy, optional dependency). Malformed input raises `SerializationError`.
 
 ---
 
@@ -361,11 +393,14 @@ dependency). Malformed input raises `SerializationError`.
 2. `handle = builder.node(action=…, label=…, notes=…)` for each step — capture the
    returned handle; ids auto-generate (no inventing). Start/end are just the
    un-wired ends, not a property.
-3. `builder.connect(src, tgt, puzzle=…)` (using the handles) to hang a puzzle on the
-   edge **into** its solve action; `connect(src, tgt, text=…)` for the clue it yields.
+3. `builder.connect(src, tgt, *puzzle.artifacts().values())` (using the handles) to
+   hang a puzzle's pieces on the edge **into** its solve action; add
+   `*puzzle.artifacts(audience=GM).values()` for the answer key;
+   `connect(src, tgt, TextArtifact(…))` for the clue it yields.
 4. Write each puzzle's outgoing clue **by hand** — solutions are not auto-linked.
 5. Branch = a node with several outgoing edges; merge = a node with several
-   incoming edges (gated in solve order).
+   incoming edges (gated in solve order). Scatter one puzzle's pieces by placing
+   each `puzzle.artifacts(name)` on a different edge into the merge.
 6. `.build()` — wires and validates (dangling edges, cycles → `GraphError`).
 7. `chronological_order` / `start_nodes` / `end_nodes` / `incoming` / `outgoing`
    / `required_inputs` / `produced_outputs` to inspect.
@@ -373,12 +408,12 @@ dependency). Malformed input raises `SerializationError`.
    to persist.
 
 **You never edit `puzzles/` or `rendering/` to author a hunt, and the graph layer
-never names a concrete puzzle type.** If you reach for either, stop — the layers
+never names a concrete artifact type.** If you reach for either, stop — the layers
 are decoupled on purpose.
 
 ---
 
 *See [`examples/hunts/mock_hunt/hunt.py`](../../../examples/hunts/mock_hunt/hunt.py) for all of
-the above assembled into one working hunt — five puzzle types, a three-way branch
-and merge, and a physical step — and [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)
+the above assembled into one working hunt — four puzzle types, the image artifact, a
+three-way branch and merge, and a physical step — and [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)
 for building the puzzles that ride the edges.*

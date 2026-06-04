@@ -1,11 +1,11 @@
-"""The puzzle-agnostic graph model.
+"""The artifact-agnostic graph model.
 
 A hunt is a directed graph of :class:`Node`s (actions) connected by
-:class:`Edge`s. Each edge carries :class:`Content` — the information flowing from
-one action to the next: a clue/word/object, and/or a puzzle artifact the player
-works on. A node is a pure *action* (solve, find, move, …); it consumes its
-incoming edges and produces its outgoing edges. Puzzles live on edges, not nodes,
-so this module references ``Puzzle`` only for typing.
+:class:`Edge`s. Each edge carries a tuple of :class:`Artifact`\\ s — the
+information flowing from one action to the next (a clue, a cipher, a grid, a pair
+of coordinates). A node is a pure *action* (solve, find, move, …); it consumes its
+incoming edges and produces its outgoing edges. Artifacts live on edges, not
+nodes, so this module references the ``Artifact`` ABC only for typing.
 
 The model is stateless. Identity is by string ``id`` (never object identity and
 never content), edges reference nodes by id, and per-node wiring
@@ -16,29 +16,13 @@ value-equality for serialization round-trips.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from puzzcombinator.errors import GraphError
 
 if TYPE_CHECKING:
-    from puzzcombinator.puzzles.base import Puzzle
-
-
-@dataclass(frozen=True)
-class Content:
-    """What flows along an edge from one action to the next.
-
-    ``text`` is a human-readable clue/word/object; ``data`` is an optional
-    JSON-safe structured payload; ``puzzle`` is optional richness — the artifact
-    the player works on (a crossword, cipher, decoder). There is no separate
-    "clue vs artifact" concept: a clue is text content, an artifact is a puzzle
-    attached to content, and a consumer renders whichever is present.
-    """
-
-    text: str | None = None
-    data: dict[str, Any] = field(default_factory=dict)
-    puzzle: Puzzle | None = None
+    from puzzcombinator.rendering.fragment import Artifact
 
 
 @dataclass
@@ -47,9 +31,9 @@ class Node:
 
     A node consumes its incoming edges and produces its outgoing edges. ``action``
     is a free-form label for what the action is ("solve", "find", "move", …) —
-    extensible, with no fixed set. There is no payload and no node "kind": puzzles
-    live on edges (:class:`Content`), and start/end are simply the nodes that lack
-    incoming/outgoing edges.
+    extensible, with no fixed set. There is no payload and no node "kind": artifacts
+    live on edges, and start/end are simply the nodes that lack incoming/outgoing
+    edges.
     """
 
     id: str
@@ -72,7 +56,7 @@ class Edge:
     id: str
     source: str
     target: str
-    content: Content | None = None
+    content: tuple[Artifact, ...] = ()
 
 
 @dataclass
@@ -116,32 +100,35 @@ class Graph:
             node.outgoing_edge_ids = tuple(outgoing[node_id])
 
     def validate_structure(self) -> None:
-        """Raise :class:`GraphError` on dangling edges, duplicate puzzle ids, or cycles."""
+        """Raise :class:`GraphError` on dangling edges, duplicate artifact ids, or cycles."""
         for edge in self.edges.values():
             if edge.source not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown source node {edge.source!r}")
             if edge.target not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown target node {edge.target!r}")
-        self._check_unique_puzzle_ids()
+        self._check_unique_artifact_ids()
         self._check_acyclic()
 
-    def _check_unique_puzzle_ids(self) -> None:
-        """Reject two puzzles sharing an id.
+    def _check_unique_artifact_ids(self) -> None:
+        """Reject two player artifacts sharing an id.
 
-        Puzzle ids must be unique within a hunt: they name the puzzle's output
-        files, so a collision would silently overwrite one printable with
-        another. (This stays puzzle-agnostic — it only reads the ``Puzzle`` ABC's
-        ``id``.) Edges are visited in sorted-id order for a deterministic message.
+        A player artifact's id names its printable output file, so a collision
+        would silently overwrite one printable with another. (This stays
+        artifact-agnostic — it only reads the ``Artifact`` ABC's ``id`` and
+        ``audience``. Game-master artifacts render inline in the binder and name no
+        file, so they're exempt.) Edges and their content are visited in order for
+        a deterministic message.
         """
+        from puzzcombinator.rendering.fragment import Audience
+
         seen: set[str] = set()
         for edge_id in sorted(self.edges):
-            content = self.edges[edge_id].content
-            if content is None or content.puzzle is None:
-                continue
-            puzzle_id = content.puzzle.id
-            if puzzle_id in seen:
-                raise GraphError(f"duplicate puzzle id {puzzle_id!r}")
-            seen.add(puzzle_id)
+            for artifact in self.edges[edge_id].content:
+                if artifact.audience is not Audience.PLAYER:
+                    continue
+                if artifact.id in seen:
+                    raise GraphError(f"duplicate artifact id {artifact.id!r}")
+                seen.add(artifact.id)
 
     def _check_acyclic(self) -> None:
         indegree: dict[str, int] = dict.fromkeys(self.nodes, 0)

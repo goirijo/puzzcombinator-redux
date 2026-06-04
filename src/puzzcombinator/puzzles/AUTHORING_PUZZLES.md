@@ -1,118 +1,248 @@
 # Authoring a new puzzle type
 
-This guide walks you, the game master, through writing a brand-new puzzle class
-and making it fully usable across the library — authored in code, rendered for
-both players and yourself, saved to disk, and reloaded. We build one example all
-the way through: a **riddle** whose text is split into ordered parts, each printed
-on its own sheet, so the answer can't be guessed until the parts are reassembled.
-It is small but exercises every part of the contract, including the optional
-multi-sheet output.
+This guide walks you, the game master, through adding a brand-new puzzle and making
+it fully usable across the library — authored in code, rendered for both players and
+yourself, saved to disk, and reloaded. We build one example all the way through: a
+**riddle** whose text is split into ordered lines, each printed on its own sheet, so
+the lines can be scattered across the hunt and the answer can't be guessed until
+they're reassembled.
 
-> **Scope.** A puzzle is a *self-contained authoring template*. It knows its own
-> data, how to draw itself, and how to serialize itself — **and nothing else**.
-> It has no idea which hunt it belongs to, what edge or node carries it, or what
-> comes before or after it. That isolation is deliberate: the graph layer stays
-> puzzle-agnostic, so adding a puzzle never forces an edit to `core/`,
-> `serialization/`, or `rendering/`. Composing puzzles into a hunt graph is a
-> separate concern, covered in its own guide.
+A "puzzle type" is really **two small things**:
+
+- an **`Artifact`** — the serializable *thing that renders* (here, one riddle line).
+  Artifacts are what live on graph edges and what get saved, reloaded, and printed.
+- a **`Puzzle`** — an authoring-time *generator* that owns the puzzle's data and
+  emits its artifacts: a player set, and a game-master set with the answer revealed.
+
+> **Scope.** An artifact knows its own data and how to draw itself — **and nothing
+> else**. A puzzle knows how to author and split that data into artifacts. Neither
+> has any idea which hunt it belongs to or what edge carries it. That isolation is
+> deliberate: the graph layer stays **artifact-agnostic**, so adding a type never
+> forces an edit to `core/`, `serialization/`, or `rendering/`. Composing artifacts
+> into a hunt graph is a separate concern, covered in its own guide.
 >
 > A puzzle also **never grades anything**. There is no `is_solved`, no answer
-> checking, no "correct/incorrect". In a physical hunt, correctness is implicit:
-> the player solves the puzzle and uses its output as the input to the next step.
-> The most you ever expose is a *solution view* for your own answer key (step 4).
+> checking, no "correct/incorrect". In a physical hunt, correctness is implicit: the
+> player solves the puzzle and uses its output as the input to the next step. The
+> most you ever expose is a *game-master artifact* for your own answer key.
 
 ---
 
 ## The contract at a glance
 
-Every puzzle is a subclass of `Puzzle` (`base.py`). To be complete it must
-provide:
+An **artifact** subclasses `Artifact` (`rendering/fragment.py`). To be complete it
+must provide:
+
+| Requirement | What it is | Riddle-line example |
+|---|---|---|
+| `type_name` | a stable string key for the registry | `"riddle_line"` |
+| `@register_artifact` | decorator that registers the class for deserialization | on `RiddleLineArtifact` |
+| `__init__(self, ..., *, name, audience, id=None)` | stores the data; **must** call `super().__init__(...)` | stores `text`, `index`, `total` |
+| `to_payload()` | returns the artifact's JSON-safe, type-specific fields | `{"text": ..., "index": ..., "total": ...}` |
+| `from_payload(cls, *, name, audience, id, payload)` | rebuilds an instance from its envelope + `to_payload()` | reconstructs from the dict |
+| `render()` | returns a `RenderFragment` — a **pure function of the payload**, no audience arg | the line, as a card |
+
+A **puzzle generator** subclasses `Puzzle` (`base.py`) and provides one method:
 
 | Requirement | What it is | Riddle example |
 |---|---|---|
-| `type_name` | a stable string key for the registry | `"riddle"` |
-| `@register_puzzle` | decorator that registers the class for deserialization | on `RiddlePuzzle` |
-| `__init__(self, id=None, ...)` | stores the puzzle's data; **must** call `super().__init__(id)` | stores `parts`, `answer` |
-| `to_payload()` | returns the puzzle's JSON-safe, type-specific fields | `{"parts": [...], "answer": "..."}` |
-| `from_payload(cls, id, payload)` | rebuilds an instance from `to_payload()` output | reconstructs from the dict |
-| `render(audience)` | returns a `RenderFragment` for `PLAYER` or `GAME_MASTER` | riddle text vs. the answer |
+| `type_name` | a readable id prefix for the artifacts it emits | `"riddle"` |
+| `_artifacts(self, audience)` | builds the list of artifacts for one audience | line per part; + answer for GM |
 
-Two things are optional:
+The base `Puzzle` gives you `artifacts(name=None, *, audience=...)` (the map/by-name
+dispatch) and `artifact_id(name)` (`{puzzle.id}-{name}`). The base `Artifact` gives
+you value-based `__eq__` / `__hash__` (type + id + name + audience + `to_payload()`),
+which is what makes the serialization round-trip `==` invariant hold.
 
-- a **convenience constructor** that lets you author from friendlier input than
-  the raw canonical fields;
-- an override of **`player_artifacts()`**, needed when the puzzle prints as
-  several separate sheets — which the riddle does (one sheet per part, step 5).
-
-The base class already gives you `__eq__` / `__hash__` (value equality by
-`id` + `to_payload()`) and a default single-sheet `player_artifacts()`.
+A standalone artifact that carries no puzzle is an *orphan* — it lives in the
+`artifacts/` package, not here, and you construct it directly with no generator. See
+the shipped `TextArtifact` (`artifacts/text.py`) and `ImageArtifact`
+(`artifacts/image.py`, with `from_bytes` / `from_file` classmethods).
 
 ---
 
-## Step 0 — Decide what data the puzzle *is*
+## Step 0 — Decide what data the artifact *is*
 
-Before writing code, pin down the **minimal canonical state** that fully
-describes the puzzle, such that everything else (the player view, your answer
-key, the printables) can be *derived* from it. Keep it JSON-safe (strings,
-numbers, bools, lists, dicts) because it will be serialized verbatim.
+Pin down the **minimal canonical state** that fully describes a piece, such that its
+rendering can be *derived* from it. Keep it JSON-safe (strings, numbers, bools,
+lists, dicts) because it is serialized verbatim.
 
-For the riddle, that's two fields:
+A riddle line is three fields: `text` (the line), and `index` / `total` (so the
+sheet can show "Line 2/3"). The puzzle generator holds the higher-level state —
+`parts: list[str]` and `answer: str` — and slices it into per-line artifacts.
 
-- `parts: list[str]` — the riddle text, split into the ordered pieces the player
-  collects;
-- `answer: str` — the solution.
-
-A useful question here is *"can I derive the answer from the rest?"* When you can,
-don't store it — keep only what's needed and compute the answer on demand, so the
-two can't drift apart. A riddle's answer **cannot** be computed from its text, so
-here the answer is genuinely part of the canonical state and we store it. Store
-what you must, derive what you can.
+A useful question: *"is this the player view or the answer view?"* The two are
+**separate artifact instances** — the generator bakes the right data into each
+(blank for players, revealed for the GM), so `render()` never has to branch on who's
+asking. Store what differs per audience as different instances, not as a flag the
+renderer inspects.
 
 ---
 
-## Step 1 — Create the file and the class skeleton
+## Step 1 — Create the file and the artifact skeleton
 
-New puzzles live in `src/puzzcombinator/puzzles/`. Create one file per puzzle
-type. Subclass `Puzzle`, set `type_name`, and apply `@register_puzzle`. Here is
-the **generic skeleton to copy** — replace `MyPuzzle`, the `type_name`, and *all*
-of the fields with your own:
+Puzzle-bound types live in `src/puzzcombinator/puzzles/`, one file per type (an
+orphan artifact with no generator goes in `src/puzzcombinator/artifacts/` instead).
+Subclass `Artifact`, set `type_name`, apply `@register_artifact`. The **generic
+skeleton to copy**:
 
 ```python
 from __future__ import annotations
 
 from typing import Any
 
-from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.registry import register_puzzle
-from puzzcombinator.rendering.fragment import Audience, RenderFragment
+from puzzcombinator.artifacts.registry import register_artifact
+from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 
-@register_puzzle
-class MyPuzzle(Puzzle):
-    """One-line description of the puzzle."""
+@register_artifact
+class MyArtifact(Artifact):
+    """One-line description of the renderable piece."""
 
-    type_name = "my_puzzle"          # unique, stable registry key
+    type_name = "my_artifact"          # unique, stable registry key
 
-    def __init__(self, id: str | None = None, *, field_a: ..., field_b: ...) -> None:
-        super().__init__(id)         # <-- stores self.id (auto-generated if None)
-        self.field_a = field_a       # your canonical state from step 0
-        self.field_b = field_b
+    def __init__(
+        self,
+        field_a: ...,                  # your canonical state from step 0
+        *,
+        name: str = "my_artifact",
+        audience: Audience = Audience.PLAYER,
+        id: str | None = None,
+    ) -> None:
+        super().__init__(name=name, audience=audience, id=id)
+        self.field_a = field_a
 ```
 
-> **Adapting by copy-paste?** If you start from another puzzle's file, swap the
-> *signature* and the *body* together in one pass — the params, the `self.`
-> assignments, the payload, and the render must all refer to the **same** set of
-> fields you chose in step 0. The classic mistake is renaming a parameter but
-> leaving an assignment that still references the old name (`self.x = old_name`),
-> which blows up only when something runs that line.
+`name` / `audience` / `id` are the **envelope** every artifact carries; take them as
+keyword-only with sensible defaults and pass them straight to `super().__init__`. The
+base auto-generates `id` as `{type_name}-{uuid}` when it's `None`.
 
-Filled in for the riddle:
+Filled in for the riddle line:
 
 ```python
-@register_puzzle
+@register_artifact
+class RiddleLineArtifact(Artifact):
+    """One line of a riddle, labelled with its position so players can order them."""
+
+    type_name = "riddle_line"
+
+    def __init__(
+        self, text: str, *, index: int, total: int,
+        name: str | None = None, audience: Audience = Audience.PLAYER, id: str | None = None,
+    ) -> None:
+        super().__init__(name=name or f"line{index}", audience=audience, id=id)
+        self.text = text
+        self.index = index
+        self.total = total
+```
+
+Notes:
+
+- **`type_name` must be unique and stable.** It is the key written to disk and looked
+  up on load. Renaming it later breaks every saved hunt that used it.
+- **`id`** is auto-generated and only needs to be unique within a hunt (it names a
+  player artifact's output file). The generator sets it to `{puzzle.id}-{name}` so
+  filenames stay readable; nothing ever looks an artifact up by it.
+- Validate structural rules in the `__init__` (raise `PuzzleError` from a
+  `_validate()` helper). `PuzzleError` is a design-time aid ("you built this wrong"),
+  never player grading.
+
+---
+
+## Step 2 — Implement serialization (`to_payload` / `from_payload`)
+
+These are the round-trip seam. The codec wraps your payload as
+`{"type": type_name, "id": ..., "name": ..., "audience": ..., "payload": to_payload()}`
+on save; on load it calls `build_artifact(type, name=, audience=, id=, payload=)` →
+your `from_payload`. You only handle the *type-specific fields*.
+
+```python
+    def to_payload(self) -> dict[str, Any]:
+        return {"text": self.text, "index": self.index, "total": self.total}
+
+    @classmethod
+    def from_payload(cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]):
+        return cls(payload["text"], index=payload["index"], total=payload["total"],
+                   name=name, audience=audience, id=id)
+```
+
+Rules:
+
+- **`to_payload` output must be JSON-safe** and hold exactly enough to rebuild the
+  piece — no more.
+- **`from_payload(... to_payload())` must reconstruct a value-equal artifact.** This
+  is the keystone invariant the serialization layer relies on; the base `__eq__`
+  compares the envelope + `to_payload()`, so storing and restoring the same fields
+  makes equality hold for free.
+- Read new fields defensively (`payload.get("hint")`) so older saved hunts still load.
+
+---
+
+## Step 3 — Implement `render()`
+
+`render` returns a `RenderFragment` — a self-contained markup snippet plus the CSS it
+needs — and is a **pure function of the artifact's payload**. There is no audience
+argument: a player line and a game-master line are *different instances* (step 4), so
+`render` just draws whatever data it holds.
+
+### The easy path: presets (reach for this first)
+
+Most pieces render something simple — a word, a code, coordinates, an image. Don't
+hand-write markup or a `_CSS` block: call a helper from
+`puzzcombinator.rendering.presets`. You pass the raw value and get back a fragment
+that already carries its styling (every preset shares one CSS constant, so it
+aggregates to a single copy in the binder). The riddle line's whole render is one
+line:
+
+```python
+from puzzcombinator.rendering import presets
+
+    def render(self) -> RenderFragment:
+        return presets.text(
+            self.text, title=f"Line {self.index + 1}/{self.total}", id=self.id, monospace=True
+        )
+```
+
+The three helpers, in increasing order of control:
+
+- **`presets.text(value, *, title=None, id=None, monospace=False)`** — a plain
+  string, escaped for you. `monospace=True` renders a `<pre>` preserving spacing.
+- **`presets.image(data_uri, *, alt="", caption=None, title=None, id=None)`** — an
+  inline image (see "Handling media" below).
+- **`presets.card(body, *, title=None, id=None)`** — your own inner HTML wrapped in
+  the default styling. `body` is inserted verbatim, so escape untrusted text yourself.
+
+For many types you are **done at this point**. Read on only for custom CSS or SVG.
+
+### Full control: building a `RenderFragment` by hand
+
+When presets aren't enough, build the fragment with `RenderFragment.html(...)` /
+`RenderFragment.svg(...)` and your own `styles=`:
+
+- **The fragment carries its own CSS.** Pass `styles=` scoped to your own class
+  names; the binder aggregates every fragment's `styles` into one `<head>`, so **you
+  never edit the binder to add styling** (identical strings are de-duplicated).
+- **HTML or SVG.** Use `RenderFragment.svg(...)` for an inline `<svg>...</svg>` when
+  you need precise geometry (a grid, a board); it embeds in the HTML binder and
+  prints sharply. See `r4.py`'s `R4PieceArtifact`.
+- **Escape everything you interpolate** with `html.escape(...)`.
+- Put a `data-id` on your root element; it makes output easy to style and debug.
+
+Whichever artifact renders the answer simply *includes* the answer in its payload and
+markup — there is no required "solution" method. The GM artifact for a cipher carries
+the decoded text; for the riddle, the answer is a separate `TextArtifact` (step 4).
+
+---
+
+## Step 4 — Write the puzzle generator
+
+The generator owns the puzzle's data and emits artifacts. Subclass `Puzzle`, set
+`type_name` (the id prefix), and implement `_artifacts(audience)` — the base supplies
+the public `artifacts(name=None, *, audience=...)` map/by-name dispatch.
+
+```python
 class RiddlePuzzle(Puzzle):
-    """A riddle with a unique answer, split into parts so it can't be guessed
-    until they're all assembled."""
+    """Generates a riddle's ordered line artifacts (player) plus its answer (GM)."""
 
     type_name = "riddle"
 
@@ -120,285 +250,86 @@ class RiddlePuzzle(Puzzle):
         super().__init__(id)
         self.parts = riddle
         self.answer = answer
-```
 
-Notes:
-
-- **`type_name` must be unique and stable.** It is the key written to disk and
-  looked up on load. Renaming it later breaks every saved hunt that used it.
-- **`id`** is **optional and auto-generated.** It only needs to be unique within a
-  hunt because it names the puzzle's output files; nothing ever looks a puzzle up
-  by it. Take it as the first parameter defaulting to `None` and pass it straight
-  to `super().__init__(id)` — the base class fills in a unique `{type_name}-{uuid}`
-  when it's `None`. Accept an explicit id only as a convenience for readable
-  printable filenames; never require the author to invent one.
-- Take the rest of your data as **keyword-only** arguments (`*,`) so call sites
-  read clearly and you can reorder fields freely.
-- A keyword and the attribute it feeds need not share a name — here the `riddle=`
-  argument is stored as `self.parts`. Pick whichever reads best on each side.
-- The `__init__` should accept the *canonical* state. If the fields have
-  structural rules (e.g. "must be non-empty"), validate them here and raise
-  `PuzzleError` from a `_validate()` helper called at the end of `__init__`.
-  `PuzzleError` is a design-time aid ("you built this puzzle wrong"), never
-  player grading.
-
----
-
-## Step 2 — (Optional) Add an authoring constructor
-
-`__init__` takes the canonical state, but you often want to author from something
-friendlier. Add a classmethod that builds the canonical fields for you. The riddle
-stores a *list* of parts, but sometimes you just have one unsplit string:
-
-```python
-    @classmethod
-    def from_text(cls, text: str, *, answer: str, id: str | None = None) -> RiddlePuzzle:
-        """Author from a single unsplit string (one part)."""
-        return cls(id, riddle=[text], answer=answer)
-```
-
-These constructors are purely ergonomic — the library never calls them, it only
-ever uses `__init__` (directly and via `from_payload`). If a constructor needs
-real transformation logic, keep that logic in a module-level function so it's easy
-to unit-test on its own.
-
-> **Where to put `id` in a convenience constructor.** Lead with the puzzle's real
-> input (here `text`) and make `id` an optional trailing keyword, mirroring the
-> built-ins (`from_plaintext(plaintext, shift, *, id=None)`). The author calls
-> `RiddlePuzzle.from_text("…", answer="…")` and never thinks about ids; they add
-> `id="r1"` only if they want a readable filename. (`from_payload` is the
-> exception — the codec always passes the saved id, so it keeps `id` required and
-> first.)
-
----
-
-## Step 3 — Implement serialization (`to_payload` / `from_payload`)
-
-These two methods are the round-trip seam. The codec wraps your payload as
-`{"type": type_name, "id": id, "payload": to_payload()}` on save, and on load
-calls `build_puzzle(type, id, payload)` → your `from_payload`. You only handle the
-*type-specific fields* — `type` and `id` are taken care of.
-
-```python
-    def to_payload(self) -> dict[str, Any]:
-        return {"parts": self.parts, "answer": self.answer}
-
-    @classmethod
-    def from_payload(cls, id: str, payload: dict[str, Any]) -> RiddlePuzzle:
-        return cls(id, riddle=payload["parts"], answer=payload["answer"])
-```
-
-Rules:
-
-- **`to_payload` output must be JSON-safe** and hold exactly enough to rebuild the
-  puzzle — no more. If a field is derivable (step 0), don't store it.
-- **`from_payload(to_payload())` must reconstruct a value-equal puzzle.** This is
-  the keystone invariant the whole serialization layer relies on; the base
-  `__eq__` compares `id` + `to_payload()`, so as long as you store and restore the
-  same fields, equality holds for free.
-- If you add a field in a later version, read it defensively so hunts saved by the
-  older version still load — e.g. `payload.get("hint", None)` rather than
-  `payload["hint"]`.
-
----
-
-## Step 4 — Implement `render(audience)`
-
-`render` returns a `RenderFragment` — a self-contained markup snippet plus the
-CSS it needs. It is the **only** required output method. You produce **two views**
-from the same data, selected by `audience`:
-
-- `Audience.PLAYER` — what the player works on (the puzzle, *without* the answer).
-- `Audience.GAME_MASTER` — your answer key (the solution shown).
-
-### The easy path: presets (reach for this first)
-
-Most puzzles render something simple — a word, a code, a pair of coordinates, an
-image. For those, **don't hand-write markup or a `_CSS` block at all**: call a
-helper from `puzzcombinator.rendering.presets`. You pass the raw value and get
-back a fragment that already carries its styling (every preset shares one CSS
-constant, so it aggregates to a single copy in the binder). The riddle's whole
-`render` is two lines:
-
-```python
-from puzzcombinator.rendering import presets
-
-def render(self, audience: Audience) -> RenderFragment:
-    if audience is Audience.PLAYER:
-        return presets.text("\n".join(self.parts), title="Riddle", id=self.id, monospace=True)
-    return presets.text(self.answer, title="Answer", id=self.id)
-```
-
-The three helpers, in increasing order of control:
-
-- **`presets.text(value, *, title=None, id=None, monospace=False)`** — a plain
-  string, escaped for you. `monospace=True` renders a `<pre>` that preserves
-  spacing (codes, coordinates, line-by-line text).
-- **`presets.image(data_uri, *, alt="", caption=None, title=None, id=None)`** — an
-  inline image with an optional caption. Pass a data URI to keep the hunt
-  self-contained (see "Handling media" below).
-- **`presets.card(body, *, title=None, id=None)`** — your own inner HTML wrapped
-  in the default styling. `body` is inserted verbatim, so escape any untrusted
-  text yourself. Use it when you need to combine several pieces into one fragment.
-
-For many puzzles you are **done at this point** — skip to step 5. Read on only if
-your puzzle wants custom CSS or precise SVG geometry.
-
-### Full control: building a `RenderFragment` by hand
-
-When the presets aren't enough, build the fragment yourself with
-`RenderFragment.html(...)` / `RenderFragment.svg(...)` and your own `styles=`. Here
-is the same riddle render done by hand, so you can see what the presets were doing
-for you (note the extra `import html` for escaping):
-
-```python
-import html
-
-_CSS = ".riddle pre { font-size: 1.2rem; letter-spacing: 0.03em; }"
-
-    def render(self, audience: Audience) -> RenderFragment:
-        if audience is Audience.PLAYER:
-            lines = html.escape("\n".join(self.parts))
-            return RenderFragment.html(
-                f'<section class="puzzle riddle" data-id="{html.escape(self.id)}">'
-                f"<h3>Riddle</h3><pre>{lines}</pre></section>",
-                styles=_CSS,
-            )
-        return RenderFragment.html(
-            f'<section class="puzzle riddle" data-id="{html.escape(self.id)}">'
-            f"<h3>Answer</h3><p><strong>{html.escape(self.answer)}</strong></p>"
-            f"</section>",
-            styles=_CSS,
-        )
-```
-
-> **There is no required "answer" or "solution" method**, and nothing constrains
-> how you hold your answer key. Here it's a stored string; for another puzzle it
-> might be a value you compute on the fly, or a structured object (a list of
-> cells, a dict). The GM view simply has to render *something* for the answer. The
-> **only** hard requirement is that `render` returns a `RenderFragment` whose
-> `markup` is a string.
-
-Key points when building a fragment by hand:
-
-- **The fragment carries its own CSS.** Pass `styles=` with CSS scoped to your own
-  class names. The binder aggregates every fragment's `styles` into one `<head>`,
-  so **you never edit the binder to add styling** — this is exactly why the binder
-  stays puzzle-agnostic. (Identical `styles` strings are de-duplicated, so a
-  shared constant costs nothing.)
-- **HTML or SVG.** Use `RenderFragment.html(...)` for markup, or
-  `RenderFragment.svg(...)` for an inline `<svg>...</svg>` when you need precise
-  geometry (a grid, a board, a diagram). SVG embeds directly in the HTML binder
-  and prints sharply.
-- **Escape everything you interpolate** with `html.escape(...)` so player- or
-  designer-supplied text can't break the markup.
-- Put a `data-id` on your root element; it makes the output easy to style and
-  debug.
-
----
-
-## Step 5 — (Optional) Override `player_artifacts()` for multi-sheet puzzles
-
-`player_artifacts()` returns the printable player-facing piece(s). The default,
-from the base class, wraps a single `render(PLAYER)` into one artifact — fine for
-most puzzles:
-
-```python
-    # default, provided by the base class — no need to write this:
-    def player_artifacts(self) -> list[Artifact]:
-        return [Artifact("puzzle", self.render(Audience.PLAYER))]
-```
-
-Override it when the physical puzzle is **several separate sheets**. The riddle is
-exactly this: each part is hidden in a different place, so each gets its own
-printable, and the answer only emerges once a player has collected and ordered
-them all:
-
-```python
-    def player_artifacts(self) -> list[Artifact]:
-        """Each part is found separately; the answer emerges when combined."""
+    def _artifacts(self, audience: Audience) -> list[Artifact]:
         total = len(self.parts)
-        return [
-            Artifact(
-                f"line{ix}",
-                presets.text(part, title=f"Line {ix + 1}/{total}", id=self.id, monospace=True),
-            )
+        out: list[Artifact] = [
+            RiddleLineArtifact(part, index=ix, total=total, name=f"line{ix}",
+                               audience=audience, id=self.artifact_id(f"line{ix}"))
             for ix, part in enumerate(self.parts)
         ]
+        if audience is Audience.GAME_MASTER:
+            out.append(TextArtifact(self.answer, title="Answer", name="answer",
+                                    audience=audience, id=self.artifact_id("answer")))
+        return out
 ```
 
-(Add `Artifact` to your import from `puzzcombinator.rendering.fragment`.) Each
-`Artifact` pairs a short **filename-safe `slug`** (`"line0"`, `"line1"`, …) with a
-`fragment`. The slug is never shown to anyone — the binder uses it to name the
-file, one per artifact, keyed `players/<puzzle.id>-<slug>.{html,svg}`. Don't
-confuse the `slug` with a preset's `title`, which *is* the heading shown on the
-sheet.
+This is where the **audience decision lives**: the player set is the blank pieces;
+the game-master set adds the answer (a reused `TextArtifact`). Single-piece puzzles
+return a one-element list (see `cipher.py`: a player `CipherArtifact` with no
+solution, and a game-master one carrying the decoded text). The author then places
+these — together with `*puzzle.artifacts().values()`, or one at a time with
+`puzzle.artifacts("line0")` to **scatter** the pieces across the graph.
+
+> **`id` in a convenience constructor.** Lead with the puzzle's real input and make
+> `id` an optional trailing keyword, mirroring `from_plaintext(plaintext, shift, *,
+> id=None)`. The author rarely thinks about ids; they pass one only for readable
+> filenames.
 
 ---
 
-## Step 6 — Export the class
+## Step 5 — Export the classes
 
-Make the class importable and ensure it self-registers. Add it in **two** places:
-
-1. `src/puzzcombinator/puzzles/__init__.py`:
-
-   ```python
-   from puzzcombinator.puzzles.riddle import RiddlePuzzle
-   # ...
-   __all__ = ["RiddlePuzzle", ...]
-   ```
-
-2. the package `src/puzzcombinator/__init__.py` (so users can do
-   `from puzzcombinator import RiddlePuzzle`):
-
-   ```python
-   from puzzcombinator.puzzles.riddle import RiddlePuzzle
-   # ...
-   __all__ = ["RiddlePuzzle", ...]
-   ```
-
-> **Why this matters for loading.** `@register_puzzle` only runs when the module
-> is imported. The package `__init__` imports every built-in puzzle on import,
-> which is what populates the registry so `from_json` can rebuild puzzles by
-> `type_name`. If you skip the export, your puzzle authors fine but **fails to
-> deserialize** with a `RegistryError: unknown puzzle type`.
-
----
-
-## Step 7 — Add a test file
-
-Mirror the existing tests in `tests/puzzles/` (one file per puzzle, e.g.
-`tests/puzzles/test_riddle.py`). At minimum cover:
-
-- **construction** — the canonical fields land where you expect;
-- **payload round-trip** — `from_payload(to_payload()) == original`;
-- **equality / hash** — value equality, hashable in a set;
-- **both render audiences** — the answer is *absent* from `PLAYER` and *present*
-  in `GAME_MASTER`;
-- **`player_artifacts()`** if you overrode it — the right number of sheets,
-  sensible slugs, and the answer never on a player sheet.
+Make them importable and ensure the artifact self-registers. Add them in **two**
+places — the package `__init__.py` for the layer the type lives in
+(`src/puzzcombinator/puzzles/__init__.py`, or `artifacts/__init__.py` for an orphan)
+and the top-level `src/puzzcombinator/__init__.py`:
 
 ```python
-def test_payload_roundtrip() -> None:
-    puzzle = RiddlePuzzle("r1", riddle=parts, answer="coffin")
-    assert RiddlePuzzle.from_payload("r1", puzzle.to_payload()) == puzzle
-
-
-def test_render_hides_answer_from_player_shows_to_gm() -> None:
-    puzzle = RiddlePuzzle("r1", riddle=parts, answer="coffin")
-    assert "coffin" not in puzzle.render(Audience.PLAYER).markup
-    assert "coffin" in puzzle.render(Audience.GAME_MASTER).markup
+from puzzcombinator.puzzles.riddle import RiddleLineArtifact, RiddlePuzzle
+# ... and add both names to __all__
 ```
 
-> **Test the output methods, not just the data.** Construction, payload, and
-> equality can all pass while `render` or `player_artifacts` is broken — because
-> nothing in those tests calls them. A puzzle whose `player_artifacts` raises will
-> pass its unit tests and then crash when the binder builds a hunt that uses it.
-> The render-and-artifact tests above are what catch that.
+> **Why this matters for loading.** `@register_artifact` only runs when the module is
+> imported. The package `__init__` imports every built-in type on import, which
+> populates the registry so `from_json` can rebuild artifacts by `type_name`. Skip
+> the export and your type authors fine but **fails to deserialize** with a
+> `RegistryError: unknown artifact type`.
 
 ---
 
-## Step 8 — Verify against the "done" bar
+## Step 6 — Add a test file
+
+Mirror `tests/puzzles/` (or `tests/artifacts/` for an orphan), one file per type. At
+minimum cover:
+
+- **artifact payload round-trip** — `from_payload(... to_payload()) == original`;
+- **artifact equality / hash** — value equality, hashable in a set;
+- **artifact render** — what it should show is in the markup;
+- **generator `artifacts()`** — the right names per audience, and the answer is
+  *absent* from the player set, *present* in the game-master set.
+
+```python
+def test_player_artifacts_one_per_part_for_scattering() -> None:
+    puzzle = RiddlePuzzle("r1", riddle=parts, answer="coffin")
+    artifacts = puzzle.artifacts()
+    assert list(artifacts) == [f"line{i}" for i in range(len(parts))]
+    assert all("coffin" not in a.render().markup for a in artifacts.values())
+
+
+def test_game_master_set_adds_the_answer() -> None:
+    gm = RiddlePuzzle("r1", riddle=parts, answer="coffin").artifacts(audience=Audience.GAME_MASTER)
+    assert "coffin" in gm["answer"].render().markup
+```
+
+> **Test the output methods, not just the data.** Construction and payload can pass
+> while `render` or `_artifacts` is broken — because nothing calls them. The
+> render-and-artifacts tests are what catch a type that crashes when the binder
+> builds a hunt that uses it.
+
+---
+
+## Step 7 — Verify against the "done" bar
 
 From the repo root:
 
@@ -406,89 +337,72 @@ From the repo root:
 pip install -e ".[dev]"
 pytest --cov=puzzcombinator
 ruff check . && ruff format --check . && mypy src/puzzcombinator
-```
-
-All must be clean, and your new puzzle should be fully covered. If your puzzle
-touches the end-to-end flow, regenerate the reference output and eyeball it:
-
-```bash
 python examples/hunts/mock_hunt/hunt.py    # writes examples/hunts/mock_hunt/out/
 ```
+
+All must be clean, and your new type should be fully covered.
 
 ---
 
 ## Handling media (images and other binary assets)
 
-Sooner or later a puzzle *is* a picture — a photo clue, a rebus, a scrambled
+Sooner or later an artifact *is* a picture — a photo clue, a rebus, a scrambled
 image. This seems to collide with "the payload must be JSON-safe", but it doesn't:
-the rule that actually matters is that a serialized hunt is **self-contained**
-(copy the JSON and you have copied the whole hunt). Honour both by **embedding the
-media inline** as a **data URI**: `data:image/png;base64,<...>`. It is just a
-(longer) string, so:
+the rule that actually matters is that a serialized hunt is **self-contained** (copy
+the JSON and you have copied the whole hunt). Honour both by **embedding the media
+inline** as a **data URI**: `data:image/png;base64,<...>`. It is just a (longer)
+string, so:
 
-- `to_payload()` stays JSON-safe and the round-trip stays **byte-exact** — the
-  bytes are *part of* the compared value, so equality can never silently drift
-  from what renders;
-- `render()` stays pure — it emits `<img src="data:...">`, with no file reads and
-  no network;
-- the output bundle stays text-only and unchanged — the player page and the binder
-  embed the image with zero asset-copying machinery;
-- the hunt stays portable — hand the JSON (or the printed page) to anyone and the
-  image travels with it.
+- `to_payload()` stays JSON-safe and the round-trip stays **byte-exact**;
+- `render()` stays pure — it emits `<img src="data:...">`, with no file reads;
+- the output bundle stays text-only — the page embeds the image with zero
+  asset-copying machinery;
+- the hunt stays portable — hand someone the JSON and the image travels with it.
 
-The pattern: take the bytes in an authoring constructor, store the data URI as
-canonical state, then render it (or hand the URI straight to `presets.image`):
+The pattern: take the bytes in an authoring classmethod on the artifact, store the
+data URI as its canonical state, then render it (or hand the URI to `presets.image`).
+An image has no puzzle behind it, so this lives on the artifact itself — see
+`artifacts/image.py` for the worked version (`ImageArtifact.from_file` / `from_bytes`).
 
-```python
-import base64
+- **Author from bytes, store the data URI.** Keep filesystem reads confined to
+  authoring constructors — `render`, `to_payload`, `from_payload` must never touch disk.
+- **Vector art is free.** Line art / a grid / a board: emit inline SVG via
+  `RenderFragment.svg(...)`. Reach for a data URI only for genuine raster images.
+- **Bloat is acceptable at hunt scale.** A handful of inlined images is fine; there
+  is intentionally no size limit.
 
-    @classmethod
-    def from_bytes(cls, id: str, data: bytes, *, mime: str) -> MyImagePuzzle:
-        b64 = base64.b64encode(data).decode("ascii")
-        return cls(id, data_uri=f"data:{mime};base64,{b64}")
-```
-
-Guidance when your puzzle carries media:
-
-- **Author from bytes, store the data URI.** Keep any filesystem reads confined to
-  authoring constructors — `render`, `to_payload`, and `from_payload` must never
-  touch disk.
-- **Vector art is free.** If the media is line art / a grid / a board, emit inline
-  SVG via `RenderFragment.svg(...)` (text, tiny, prints sharply) — no base64
-  needed. Reach for a data URI only for genuine raster images.
-- **Bloat is acceptable at hunt scale.** A handful of images base64-inlined is
-  fine; there is intentionally no size limit.
-
-**The escape hatch (don't build it until you need it).** If a future puzzle needs
-*large* or *shared* media where inlining hurts, the deliberate upgrade is an
-**asset store**: the payload holds a stable reference (e.g. a content hash), the
-bytes travel beside the JSON in an `assets/` directory, and the bundle is widened
-to carry binary. That is strictly more machinery and gives up nothing the data URI
-offers for small media — so treat it as a documented, discussed change, not a
-default.
+**The escape hatch (don't build it until you need it).** If a future type needs
+*large* or *shared* media where inlining hurts, the deliberate upgrade is an **asset
+store**: the payload holds a stable reference (a content hash), the bytes travel
+beside the JSON in an `assets/` directory, and the bundle is widened to carry binary.
+That is strictly more machinery — treat it as a documented, discussed change.
 
 ---
 
 ## The whole recipe, condensed
 
-1. New file in `puzzles/`; `class MyPuzzle(Puzzle)`, `@register_puzzle`.
-2. Set a unique, stable `type_name`.
-3. `__init__(self, id, *, ...)` storing canonical state; call `super().__init__(id)`.
-4. (Optional) a convenience constructor for friendlier authoring input.
-5. `to_payload()` / `from_payload()` — JSON-safe, round-trip exact.
-6. `render(audience)` — player view vs. GM answer key; presets first, hand-rolled
-   only if needed.
-7. (Optional) `player_artifacts()` if it prints as multiple sheets.
-8. Export in `puzzles/__init__.py` **and** the package `__init__.py`.
-9. Add `tests/puzzles/test_mypuzzle.py` — including the render/artifact tests.
-10. `pytest`, `ruff`, `mypy` clean.
+1. New file in `puzzles/` (or `artifacts/` if it's an orphan with no generator);
+   `class MyArtifact(Artifact)`, `@register_artifact`, unique `type_name`.
+2. `__init__(self, ..., *, name, audience, id=None)` storing canonical state; call
+   `super().__init__(...)`.
+3. `to_payload()` / `from_payload(*, name, audience, id, payload)` — JSON-safe,
+   round-trip exact.
+4. `render()` — a pure function of the payload; presets first, hand-rolled only if needed.
+5. `class MyPuzzle(Puzzle)` with `_artifacts(audience)` that bakes the player-vs-GM
+   decision into separate artifact instances (skip the generator entirely for a pure
+   standalone artifact like a clue).
+6. Export the artifact **and** the generator in `puzzles/__init__.py` **and** the
+   package `__init__.py`.
+7. Add `tests/puzzles/test_mytype.py` — payload round-trip, render, and the generator's
+   per-audience `artifacts()`.
+8. `pytest`, `ruff`, `mypy` clean.
 
-**You never edit `core/`, `serialization/`, or `rendering/`.** If you find
-yourself needing to, stop — the design intends the puzzle to be fully
-self-describing through the `Puzzle` ABC and the registry. Reach for a discussion
-before breaking that boundary.
+**You never edit `core/`, `serialization/`, or `rendering/`.** If you find yourself
+needing to, stop — the design intends the artifact to be fully self-describing
+through the `Artifact` ABC and the registry. Reach for a discussion before breaking
+that boundary.
 
 ---
 
-*Next: composing puzzles into a hunt — building the graph, and what nodes and
-edges mean. See [`../core/AUTHORING_GRAPHS.md`](../core/AUTHORING_GRAPHS.md).*
+*Next: composing artifacts into a hunt — building the graph, and what nodes and edges
+mean. See [`../core/AUTHORING_GRAPHS.md`](../core/AUTHORING_GRAPHS.md).*

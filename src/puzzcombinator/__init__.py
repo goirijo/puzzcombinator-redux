@@ -1,21 +1,24 @@
 """puzzcombinator — a modular library for *authoring* treasure-hunt games.
 
-The library is a design-time tool: it helps a designer create puzzles, compose
-them into a hunt graph, and produce printable artifacts. It does not play or
-grade a hunt — correctness is verified implicitly when a player uses one
-puzzle's output as the next puzzle's input (or, physically, the key fits the
-lock). Live progress tracking is a separate, future layer.
+The library is a design-time tool: it helps a designer create puzzles, compose the
+artifacts they emit into a hunt graph, and produce printable materials. It does not
+play or grade a hunt — correctness is verified implicitly when a player uses one
+artifact's output as the next step's input (or, physically, the key fits the lock).
+Live progress tracking is a separate, future layer.
 
-Importing this package also imports the built-in puzzles so they self-register
-in the puzzle-type registry (needed for deserialization).
+Importing this package also imports the built-in artifact types so they
+self-register in the artifact-type registry (needed for deserialization).
 """
 
 from __future__ import annotations
 
 __version__ = "0.0.1"
 
+from puzzcombinator.artifacts.image import ImageArtifact
+from puzzcombinator.artifacts.registry import build_artifact, register_artifact
+from puzzcombinator.artifacts.text import TextArtifact
 from puzzcombinator.core.builder import GraphBuilder
-from puzzcombinator.core.graph import Content, Edge, Graph, Node
+from puzzcombinator.core.graph import Edge, Graph, Node
 from puzzcombinator.core.ordering import (
     chronological_order,
     produced_outputs,
@@ -28,12 +31,10 @@ from puzzcombinator.errors import (
     SerializationError,
 )
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.cipher import CaesarCipherPuzzle
-from puzzcombinator.puzzles.crossword import CrosswordPuzzle
-from puzzcombinator.puzzles.image import ImagePuzzle
-from puzzcombinator.puzzles.r4 import R4DecoderPuzzle
-from puzzcombinator.puzzles.registry import build_puzzle, register_puzzle
-from puzzcombinator.puzzles.riddle import RiddlePuzzle
+from puzzcombinator.puzzles.cipher import CaesarCipherPuzzle, CipherArtifact
+from puzzcombinator.puzzles.crossword import CrosswordArtifact, CrosswordPuzzle
+from puzzcombinator.puzzles.r4 import R4DecoderPuzzle, R4PieceArtifact
+from puzzcombinator.puzzles.riddle import RiddleLineArtifact, RiddlePuzzle
 from puzzcombinator.rendering.binder import (
     game_master_binder,
     hunt_bundle,
@@ -46,29 +47,33 @@ __all__ = [
     "Artifact",
     "Audience",
     "CaesarCipherPuzzle",
-    "RiddlePuzzle",
-    "Content",
+    "CipherArtifact",
+    "CrosswordArtifact",
     "CrosswordPuzzle",
     "Edge",
     "Graph",
     "GraphBuilder",
     "GraphError",
-    "ImagePuzzle",
+    "ImageArtifact",
     "Node",
     "Puzzle",
     "PuzzcombinatorError",
     "R4DecoderPuzzle",
+    "R4PieceArtifact",
     "RegistryError",
     "RenderFragment",
+    "RiddleLineArtifact",
+    "RiddlePuzzle",
     "SerializationError",
+    "TextArtifact",
     "__version__",
-    "build_puzzle",
+    "build_artifact",
     "chronological_order",
     "game_master_binder",
     "hunt_bundle",
     "player_pages",
     "produced_outputs",
-    "register_puzzle",
+    "register_artifact",
     "required_inputs",
     "write_bundle",
 ]

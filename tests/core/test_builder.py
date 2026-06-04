@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from puzzcombinator import GraphBuilder
+from puzzcombinator import GraphBuilder, TextArtifact
 from puzzcombinator.errors import GraphError
 
 
@@ -10,12 +10,13 @@ def test_build_returns_graph() -> None:
     builder = GraphBuilder()
     a = builder.node("a", action="start")
     b = builder.node("b", action="finish")
-    graph = builder.connect(a, b, text="hi").build()
+    graph = builder.connect(a, b, TextArtifact("hi")).build()
     assert set(graph.nodes) == {"a", "b"}
     assert list(graph.edges) == ["a->b"]
     assert graph.nodes["a"].action == "start"
-    assert graph.edges["a->b"].content is not None
-    assert graph.edges["a->b"].content.text == "hi"
+    content = graph.edges["a->b"].content
+    assert len(content) == 1
+    assert content[0].text == "hi"
 
 
 def test_node_returns_its_id_as_a_handle() -> None:
@@ -24,8 +25,8 @@ def test_node_returns_its_id_as_a_handle() -> None:
     # The returned handle *is* the node id — explicit here, so it equals "a".
     assert a == "a"
     b = builder.node("b")
-    graph = builder.connect(a, b, text="hi").build()
-    assert graph.edges["a->b"].content is not None
+    graph = builder.connect(a, b, TextArtifact("hi")).build()
+    assert graph.edges["a->b"].content
 
 
 def test_omitted_node_id_is_auto_generated_and_unique() -> None:
@@ -76,17 +77,17 @@ def test_auto_edge_id_disambiguates_three_times() -> None:
     assert set(graph.edges) == {"a->b", "a->b#2", "a->b#3"}
 
 
-def test_connect_puts_puzzle_on_edge() -> None:
+def test_connect_puts_artifacts_on_edge() -> None:
     from puzzcombinator import CaesarCipherPuzzle
 
     cipher = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
     builder = GraphBuilder()
     a = builder.node("a")
     b = builder.node("b")
-    graph = builder.connect(a, b, puzzle=cipher).build()
+    graph = builder.connect(a, b, *cipher.artifacts().values()).build()
     content = graph.edges["a->b"].content
-    assert content is not None
-    assert content.puzzle is cipher
+    assert [art.name for art in content] == ["cipher"]
+    assert content[0].ciphertext == cipher.ciphertext
 
 
 def test_explicit_edge_id_is_kept() -> None:

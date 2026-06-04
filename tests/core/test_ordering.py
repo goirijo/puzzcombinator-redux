@@ -70,19 +70,21 @@ def test_cycle_raises() -> None:
 
 
 def test_required_inputs(converging_hunt: Graph) -> None:
-    texts = {c.text for c in required_inputs(converging_hunt, "merge")}
+    texts = {a.text for a in required_inputs(converging_hunt, "merge")}
     assert texts == {"half one", "half two"}
 
 
 def test_produced_outputs(converging_hunt: Graph) -> None:
-    texts = {c.text for c in produced_outputs(converging_hunt, "start")}
+    texts = {a.text for a in produced_outputs(converging_hunt, "start")}
     assert texts == {"path A", "path B"}
 
 
 def test_produced_outputs_for_physical_step() -> None:
-    # A pure action node carries no puzzle; its output flows on the edge.
+    # A pure action node carries a plain text artifact; its output flows on the edge.
+    from puzzcombinator import TextArtifact
+
     builder = GraphBuilder()
     s = builder.node("s")
     t = builder.node("t")
-    graph = builder.connect(s, t, text="key under the mat").build()
-    assert [c.text for c in produced_outputs(graph, "s")] == ["key under the mat"]
+    graph = builder.connect(s, t, TextArtifact("key under the mat")).build()
+    assert [a.text for a in produced_outputs(graph, "s")] == ["key under the mat"]

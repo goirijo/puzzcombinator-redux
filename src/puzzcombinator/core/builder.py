@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from puzzcombinator.core.graph import Content, Edge, Graph, Node
+from puzzcombinator.core.graph import Edge, Graph, Node
 from puzzcombinator.errors import GraphError
 
 if TYPE_CHECKING:
-    from puzzcombinator.puzzles.base import Puzzle
+    from puzzcombinator.rendering.fragment import Artifact
 
 
 class GraphBuilder:
@@ -19,7 +19,7 @@ class GraphBuilder:
         b = GraphBuilder()
         start = b.node(label="Kickoff")
         solve = b.node(action="solve", label="Opening cipher")
-        b.connect(start, solve, puzzle=cipher)
+        b.connect(start, solve, *cipher.artifacts().values())
         hunt = b.build()
 
     :meth:`node` returns the new node's id (the handle for :meth:`connect`);
@@ -59,25 +59,22 @@ class GraphBuilder:
         self,
         source: str,
         target: str,
-        *,
-        text: str | None = None,
-        data: dict[str, Any] | None = None,
-        puzzle: Puzzle | None = None,
-        content: Content | None = None,
+        *artifacts: Artifact,
         id: str | None = None,
     ) -> GraphBuilder:
-        """Add an edge from ``source`` to ``target``.
+        """Add an edge from ``source`` to ``target`` carrying ``artifacts``.
 
-        Pass ``content`` directly, or any of ``text`` / ``data`` / ``puzzle`` as a
-        shorthand to build the :class:`Content` (e.g. ``connect(a, b, puzzle=cw)``
-        or ``connect(a, b, text="go to the kitchen")``).
+        Pass the artifacts that flow along this edge directly, e.g.
+        ``connect(a, b, TextArtifact("go to the kitchen"))`` or, to place a
+        puzzle's pieces, ``connect(a, b, *cw.artifacts().values())``. An edge may
+        carry no artifacts (a pure structural link).
         """
-        if content is None and (text is not None or data is not None or puzzle is not None):
-            content = Content(text=text, data=data or {}, puzzle=puzzle)
         edge_id = id if id is not None else self._auto_edge_id(source, target)
         if edge_id in self._edges:
             raise GraphError(f"duplicate edge id {edge_id!r}")
-        self._edges[edge_id] = Edge(id=edge_id, source=source, target=target, content=content)
+        self._edges[edge_id] = Edge(
+            id=edge_id, source=source, target=target, content=tuple(artifacts)
+        )
         return self
 
     def build(self) -> Graph:

@@ -1,49 +1,99 @@
-# This is a simple riddle puzzle. A riddle is a string and has a string as an
-# answer. The riddle can be split into multiple substrings so that the answer
-# is impossible to guess until they're all put together in the right order.
+"""A riddle puzzle: a string with a unique answer, split into ordered pieces.
+
+A riddle can be broken into substrings so the answer is impossible to guess until
+they're assembled in the right order. Each piece is a separate
+:class:`RiddleLineArtifact`, so the designer can **scatter** them across the graph
+— a different line found at each of several locations — and the player assembles
+them at a merge. The game-master set adds the answer as a :class:`TextArtifact`.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
+from puzzcombinator.artifacts.registry import register_artifact
+from puzzcombinator.artifacts.text import TextArtifact
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.registry import register_puzzle
 from puzzcombinator.rendering import presets
 from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 
-@register_puzzle
+@register_artifact
+class RiddleLineArtifact(Artifact):
+    """One line of a riddle, labelled with its position so the player can order them."""
+
+    type_name = "riddle_line"
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        index: int,
+        total: int,
+        name: str | None = None,
+        audience: Audience = Audience.PLAYER,
+        id: str | None = None,
+    ) -> None:
+        super().__init__(
+            name=name if name is not None else f"line{index}", audience=audience, id=id
+        )
+        self.text = text
+        self.index = index
+        self.total = total
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"text": self.text, "index": self.index, "total": self.total}
+
+    @classmethod
+    def from_payload(
+        cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]
+    ) -> RiddleLineArtifact:
+        return cls(
+            payload["text"],
+            index=payload["index"],
+            total=payload["total"],
+            name=name,
+            audience=audience,
+            id=id,
+        )
+
+    def render(self) -> RenderFragment:
+        return presets.text(
+            self.text, title=f"Line {self.index + 1}/{self.total}", id=self.id, monospace=True
+        )
+
+
 class RiddlePuzzle(Puzzle):
-    """A riddle has a unique answer and may be split into substrings so that it can't be guessed
-    until they're all assembled."""
+    """Generates a riddle's ordered line artifacts (player) plus its answer (GM)."""
 
-    type_name = "riddle"  # unique, stable registry key
+    type_name = "riddle"
 
-    # TODO: make it accept just a string if it's not split into segments
     def __init__(self, id: str | None = None, *, riddle: list[str], answer: str) -> None:
-        super().__init__(id)  # <-- stores self.id; do not skip
+        super().__init__(id)
         self.parts = riddle
         self.answer = answer
 
-    def to_payload(self) -> dict[str, Any]:
-        return {"parts": self.parts, "answer": self.answer}
-
-    @classmethod
-    def from_payload(cls, id: str, payload: dict[str, Any]) -> RiddlePuzzle:
-        return cls(id, riddle=payload["parts"], answer=payload["answer"])
-
-    def render(self, audience: Audience) -> RenderFragment:
-        if audience is Audience.PLAYER:
-            return presets.text("\n".join(self.parts), title="Riddle", id=self.id, monospace=True)
-        return presets.text(self.answer, title="Answer", id=self.id)
-
-    def player_artifacts(self) -> list[Artifact]:
-        """Each part of the riddle is found separately; the answer emerges when combined."""
+    def _artifacts(self, audience: Audience) -> list[Artifact]:
         total = len(self.parts)
-        return [
-            Artifact(
-                f"line{ix}",
-                presets.text(part, title=f"Line {ix + 1}/{total}", id=self.id, monospace=True),
+        out: list[Artifact] = [
+            RiddleLineArtifact(
+                part,
+                index=ix,
+                total=total,
+                name=f"line{ix}",
+                audience=audience,
+                id=self.artifact_id(f"line{ix}"),
             )
             for ix, part in enumerate(self.parts)
         ]
+        if audience is Audience.GAME_MASTER:
+            out.append(
+                TextArtifact(
+                    self.answer,
+                    title="Answer",
+                    name="answer",
+                    audience=audience,
+                    id=self.artifact_id("answer"),
+                )
+            )
+        return out

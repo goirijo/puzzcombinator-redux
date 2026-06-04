@@ -6,7 +6,7 @@ import zlib
 
 import pytest
 
-from puzzcombinator import Audience, ImagePuzzle
+from puzzcombinator.artifacts import ImageArtifact
 from puzzcombinator.errors import PuzzleError
 
 
@@ -30,53 +30,51 @@ def _png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
 
 def test_from_bytes_builds_data_uri() -> None:
     data = _png(2, 1, (255, 0, 0))
-    puzzle = ImagePuzzle.from_bytes(data, mime="image/png", prompt="hue?", answer="RED", id="img1")
-    assert puzzle.data_uri.startswith("data:image/png;base64,")
-    decoded = base64.b64decode(puzzle.data_uri.split(",", 1)[1])
+    art = ImageArtifact.from_bytes(data, mime="image/png", alt="a red dot", id="img1")
+    assert art.data_uri.startswith("data:image/png;base64,")
+    decoded = base64.b64decode(art.data_uri.split(",", 1)[1])
     assert decoded == data
 
 
 def test_from_file_guesses_mime(tmp_path) -> None:
     p = tmp_path / "clue.png"
     p.write_bytes(_png(1, 1, (0, 0, 255)))
-    puzzle = ImagePuzzle.from_file(p, prompt="look", id="img1")
-    assert puzzle.data_uri.startswith("data:image/png;base64,")
+    art = ImageArtifact.from_file(p, alt="look", id="img1")
+    assert art.data_uri.startswith("data:image/png;base64,")
 
 
 def test_from_file_unknown_mime_raises(tmp_path) -> None:
     p = tmp_path / "clue.unknownext"
     p.write_bytes(b"nope")
     with pytest.raises(PuzzleError):
-        ImagePuzzle.from_file(p, id="img1")
+        ImageArtifact.from_file(p, id="img1")
 
 
 def test_non_data_uri_rejected() -> None:
     with pytest.raises(PuzzleError):
-        ImagePuzzle("img1", data_uri="https://example.com/x.png")
+        ImageArtifact("https://example.com/x.png")
+
+
+def test_render_emits_the_image() -> None:
+    uri = ImageArtifact.from_bytes(_png(1, 1, (1, 2, 3)), mime="image/png").data_uri
+    markup = ImageArtifact(uri, alt="a clue", id="p").render().markup
+    assert "data:image/png;base64," in markup
+    assert 'alt="a clue"' in markup
 
 
 def test_payload_roundtrip_is_byte_exact() -> None:
     data = _png(3, 2, (0, 128, 0))
-    puzzle = ImagePuzzle.from_bytes(data, mime="image/png", answer="GREEN", alt="bar", id="img1")
-    rebuilt = ImagePuzzle.from_payload("img1", puzzle.to_payload())
-    assert rebuilt == puzzle
+    art = ImageArtifact.from_bytes(data, mime="image/png", alt="bar", id="img1")
+    rebuilt = ImageArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
+    assert rebuilt == art
     assert base64.b64decode(rebuilt.data_uri.split(",", 1)[1]) == data
-
-
-def test_player_view_hides_answer_gm_shows_it() -> None:
-    data = _png(1, 1, (1, 2, 3))
-    puzzle = ImagePuzzle.from_bytes(data, mime="image/png", answer="SECRET", id="img1")
-    player = puzzle.render(Audience.PLAYER).markup
-    gm = puzzle.render(Audience.GAME_MASTER).markup
-    assert "data:image/png;base64," in player
-    assert "SECRET" not in player
-    assert "SECRET" in gm
 
 
 def test_eq_and_hash() -> None:
     data = _png(1, 1, (9, 9, 9))
-    a = ImagePuzzle.from_bytes(data, mime="image/png", id="img1")
-    b = ImagePuzzle.from_bytes(data, mime="image/png", id="img1")
+    uri = ImageArtifact.from_bytes(data, mime="image/png").data_uri
+    a = ImageArtifact(uri, id="img1")
+    b = ImageArtifact(uri, id="img1")
     assert a == b
-    assert a != "not a puzzle"
+    assert a != "not an artifact"
     assert len({a, b}) == 1

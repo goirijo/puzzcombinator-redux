@@ -1,19 +1,19 @@
 """Convert a :class:`~puzzcombinator.core.graph.Graph` to/from plain dicts.
 
-This is the only place that knows the on-disk shape. It drives the validator-
-and puzzle-type registries to rebuild polymorphic payloads, and it never embeds
-nodes inside edges — node wiring is recomputed on load — so the dict is acyclic
-and round-trips to a value-equal graph.
+This is the only place that knows the on-disk shape. It drives the artifact-type
+registry to rebuild polymorphic payloads, and it never embeds nodes inside edges —
+node wiring is recomputed on load — so the dict is acyclic and round-trips to a
+value-equal graph.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from puzzcombinator.core.graph import Content, Edge, Graph, Node
+from puzzcombinator.artifacts.registry import build_artifact
+from puzzcombinator.core.graph import Edge, Graph, Node
 from puzzcombinator.errors import SerializationError
-from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.registry import build_puzzle
+from puzzcombinator.rendering.fragment import Artifact, Audience
 from puzzcombinator.serialization.schema import (
     KEY_EDGES,
     KEY_GRAPH,
@@ -23,32 +23,23 @@ from puzzcombinator.serialization.schema import (
 )
 
 
-def _puzzle_to_dict(puzzle: Puzzle) -> dict[str, Any]:
-    return {"type": puzzle.type_name, "id": puzzle.id, "payload": puzzle.to_payload()}
-
-
-def _puzzle_from_dict(data: dict[str, Any]) -> Puzzle:
-    return build_puzzle(data["type"], data["id"], data["payload"])
-
-
-def _content_to_dict(content: Content | None) -> dict[str, Any] | None:
-    if content is None:
-        return None
+def _artifact_to_dict(artifact: Artifact) -> dict[str, Any]:
     return {
-        "text": content.text,
-        "data": content.data,
-        "puzzle": _puzzle_to_dict(content.puzzle) if content.puzzle is not None else None,
+        "type": artifact.type_name,
+        "id": artifact.id,
+        "name": artifact.name,
+        "audience": artifact.audience.value,
+        "payload": artifact.to_payload(),
     }
 
 
-def _content_from_dict(data: dict[str, Any] | None) -> Content | None:
-    if data is None:
-        return None
-    puzzle_data = data.get("puzzle")
-    return Content(
-        text=data.get("text"),
-        data=data.get("data", {}),
-        puzzle=_puzzle_from_dict(puzzle_data) if puzzle_data else None,
+def _artifact_from_dict(data: dict[str, Any]) -> Artifact:
+    return build_artifact(
+        data["type"],
+        name=data["name"],
+        audience=Audience(data["audience"]),
+        id=data["id"],
+        payload=data["payload"],
     )
 
 
@@ -75,7 +66,7 @@ def _edge_to_dict(edge: Edge) -> dict[str, Any]:
         "id": edge.id,
         "source": edge.source,
         "target": edge.target,
-        "content": _content_to_dict(edge.content),
+        "content": [_artifact_to_dict(a) for a in edge.content],
     }
 
 
@@ -84,7 +75,7 @@ def _edge_from_dict(data: dict[str, Any]) -> Edge:
         id=data["id"],
         source=data["source"],
         target=data["target"],
-        content=_content_from_dict(data.get("content")),
+        content=tuple(_artifact_from_dict(d) for d in data.get("content", [])),
     )
 
 

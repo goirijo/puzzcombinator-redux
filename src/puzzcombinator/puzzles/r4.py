@@ -23,9 +23,10 @@ import string
 from collections.abc import Iterable
 from typing import Any
 
+from puzzcombinator.artifacts.registry import register_artifact
+from puzzcombinator.artifacts.text import TextArtifact
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.puzzles.registry import register_puzzle
 from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 OPEN = "O"
@@ -159,10 +160,61 @@ def _svg(
     return "".join(parts)
 
 
+# -- artifact -------------------------------------------------------------
+
+
+@register_artifact
+class R4PieceArtifact(Artifact):
+    """One printable R4 sheet — the letter grid or the decoder grille — as inline
+    SVG. Renders exactly what its payload specifies (letters and/or shaded cells),
+    so the generator bakes the player (blank/revealed) or game-master (solved) view
+    into each instance."""
+
+    type_name = "r4_piece"
+
+    def __init__(
+        self,
+        *,
+        dim: int,
+        letters: list[str] | None = None,
+        shaded: list[tuple[int, int]] | None = None,
+        name: str,
+        audience: Audience = Audience.PLAYER,
+        id: str | None = None,
+    ) -> None:
+        super().__init__(name=name, audience=audience, id=id)
+        self.dim = dim
+        self.letters = letters
+        self.shaded = [(int(r), int(c)) for r, c in shaded] if shaded is not None else None
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "dim": self.dim,
+            "letters": list(self.letters) if self.letters is not None else None,
+            "shaded": [[r, c] for r, c in self.shaded] if self.shaded is not None else None,
+        }
+
+    @classmethod
+    def from_payload(
+        cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]
+    ) -> R4PieceArtifact:
+        return cls(
+            dim=payload["dim"],
+            letters=payload.get("letters"),
+            shaded=payload.get("shaded"),
+            name=name,
+            audience=audience,
+            id=id,
+        )
+
+    def render(self) -> RenderFragment:
+        shaded = set(self.shaded) if self.shaded is not None else None
+        return RenderFragment.svg(_svg(self.dim, letters=self.letters, shaded=shaded))
+
+
 # -- puzzle ---------------------------------------------------------------
 
 
-@register_puzzle
 class R4DecoderPuzzle(Puzzle):
     """A turning-grille cipher: a letter grid plus a rotating decoder."""
 
@@ -294,74 +346,47 @@ class R4DecoderPuzzle(Puzzle):
                         f"R4 grille orbit {sorted(orbit)} must have exactly one open cell"
                     )
 
-    # -- serialization -----------------------------------------------------
+    # -- artifacts ---------------------------------------------------------
 
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "grid": list(self.grid),
-            "grille": list(self.grille),
-            "message_length": self.message_length,
-            "reveal_grid": self.reveal_grid,
-            "reveal_decoder": self.reveal_decoder,
-        }
+    def _shaded_cells(self) -> list[tuple[int, int]]:
+        dim = self.size
+        return [(r, c) for r in range(dim) for c in range(dim) if self.grille[r][c] == SHADED]
 
-    @classmethod
-    def from_payload(cls, id: str, payload: dict[str, Any]) -> R4DecoderPuzzle:
-        return cls(
-            id,
-            grid=payload["grid"],
-            grille=payload["grille"],
-            message_length=payload["message_length"],
-            reveal_grid=payload.get("reveal_grid", True),
-            reveal_decoder=payload.get("reveal_decoder", True),
-        )
-
-    # -- rendering ---------------------------------------------------------
-
-    def svg_assets(self, audience: Audience = Audience.PLAYER) -> dict[str, str]:
-        """The grid and decoder as standalone SVG documents, keyed by name.
-
-        Each value is a complete ``<svg>`` document — write it to a ``.svg`` file
-        to print a piece on its own page or send it to a print service. Honours
-        the reveal flags for ``PLAYER``; ``GAME_MASTER`` shows everything.
-        """
+    def _artifacts(self, audience: Audience) -> list[Artifact]:
+        """Grid and grille as separate printable sheets (the grille is cut out);
+        the game-master set adds a text solution (message + reading order)."""
         gm = audience is Audience.GAME_MASTER
         dim = self.size
-        shaded = {(r, c) for r in range(dim) for c in range(dim) if self.grille[r][c] == SHADED}
-        return {
-            "grid": _svg(dim, letters=self.grid if (gm or self.reveal_grid) else None),
-            "decoder": _svg(dim, shaded=shaded if (gm or self.reveal_decoder) else None),
-        }
-
-    def player_artifacts(self) -> list[Artifact]:
-        """Grid and decoder as separate printable sheets (the decoder is cut out)."""
-        assets = self.svg_assets(Audience.PLAYER)
-        return [
-            Artifact("grid", RenderFragment.svg(assets["grid"])),
-            Artifact("decoder", RenderFragment.svg(assets["decoder"])),
-        ]
-
-    def render(self, audience: Audience) -> RenderFragment:
-        gm = audience is Audience.GAME_MASTER
-        assets = self.svg_assets(audience)
-        parts = [
-            f'<section class="puzzle r4" data-id="{html.escape(self.id)}">',
-            "<h3>R4 Decoder</h3>",
-            '<div class="r4-pieces">',
-            f"<figure><figcaption>Letter grid</figcaption>{assets['grid']}</figure>",
-            f"<figure><figcaption>Decoder</figcaption>{assets['decoder']}</figure>",
-            "</div>",
-            "<p>Place the decoder over the grid (red triangles aligned, top-left), "
-            "read the letters in the open squares, then rotate the decoder 90&deg; "
-            "clockwise and repeat &mdash; four times in all.</p>",
+        grid_letters = self.grid if (gm or self.reveal_grid) else None
+        grille_shaded = self._shaded_cells() if (gm or self.reveal_decoder) else None
+        out: list[Artifact] = [
+            R4PieceArtifact(
+                dim=dim,
+                letters=grid_letters,
+                name="grid",
+                audience=audience,
+                id=self.artifact_id("grid"),
+            ),
+            R4PieceArtifact(
+                dim=dim,
+                shaded=grille_shaded,
+                name="grille",
+                audience=audience,
+                id=self.artifact_id("grille"),
+            ),
         ]
         if gm:
-            parts.append(
-                f'<p class="answer">Message: <strong>{html.escape(self.message)}</strong></p>'
-            )
-            order = " &rarr; ".join(
+            order = " -> ".join(
                 f"({r},{c})" for r, c in self.reading_sequence[: self.message_length]
             )
-            parts.append(f'<p class="reading-order">Reading order: {order}</p>')
-        parts.append("</section>")
-        return RenderFragment.html("".join(parts))
+            out.append(
+                TextArtifact(
+                    f"Message: {self.message}\nReading order: {order}",
+                    title="R4 solution",
+                    monospace=True,
+                    name="solution",
+                    audience=audience,
+                    id=self.artifact_id("solution"),
+                )
+            )
+        return out

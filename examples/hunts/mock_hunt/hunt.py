@@ -9,18 +9,24 @@ Writes a full bundle into examples/hunts/mock_hunt/out/:
     binder.html   — the game master's document: a page per action (in solve order)
                     showing what it receives and produces, plus a production
                     checklist of what to print and stage.
-    players/      — one standalone printable per puzzle, to print and place.
+    players/      — one standalone printable per player-facing artifact.
 
-The hunt is non-linear and uses all five puzzle types plus a physical step.
-Puzzles ride the edges *into* the action that solves them; nodes are pure actions
-(solve / find / combine / unlock):
+The hunt is non-linear and uses all four puzzle types, a standalone image artifact,
+and a physical step. A puzzle is a *generator* of artifacts; the designer places its
+player and game-master artifacts on edges. An image has no puzzle behind it, so it is
+built directly as an artifact. The garden branch shows the payoff: the riddle's
+three lines are **scattered** onto three different edges, found at three spots, and
+assembled at the solve. Nodes are pure actions (solve / find / combine / unlock):
 
     start
       -> [gate cipher] -> solve gate  (reveals: library, attic AND garden)
-           -> find (library) -> [crossword]    -> solve -> "ROAD" -------.
-           -> find (attic)   -> [R4 grille]     -> solve -> "FIFTH STEP" -+
-           -> find (garden)  -> [riddle]        -> solve -> "SUNDIAL" ----+
-                                                                          |
+           -> find (library) -> [crossword]  -> solve -> "ROAD" -----------.
+           -> find (attic)   -> [R4 grille]   -> solve -> "FIFTH STEP" -----+
+           -> find (garden)                                                 |
+                -> shed     -> [riddle line 1] .                            |
+                -> planter  -> [riddle line 2] -+-> solve -> "SUNDIAL" -----+
+                -> birdbath -> [riddle line 3] '                            |
+                                                                            |
                                   combine "ROAD" + "FIFTH STEP" + "SUNDIAL" <'
                                     -> [photo] -> examine the photo
                                       -> unlock the cabinet (physical)
@@ -34,15 +40,32 @@ import zlib
 from pathlib import Path
 
 from puzzcombinator import (
+    Artifact,
+    Audience,
     CaesarCipherPuzzle,
     CrosswordPuzzle,
     GraphBuilder,
-    ImagePuzzle,
+    ImageArtifact,
+    Puzzle,
     R4DecoderPuzzle,
     RiddlePuzzle,
+    TextArtifact,
     hunt_bundle,
     write_bundle,
 )
+
+
+def staged(puzzle: Puzzle) -> list[Artifact]:
+    """Every piece of a puzzle — player printables plus the game-master answers.
+
+    The common "put this whole puzzle on one edge" case; multi-piece puzzles whose
+    pieces are found in different places (see the riddle below) place their
+    artifacts one at a time instead.
+    """
+    return [
+        *puzzle.artifacts().values(),
+        *puzzle.artifacts(audience=Audience.GAME_MASTER).values(),
+    ]
 
 
 def _demo_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
@@ -63,8 +86,9 @@ def _demo_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
     )
 
 
-# Puzzle ids are optional and only name the printable output files; we pass
-# explicit, readable ones here so the players/ filenames stay legible.
+# Puzzle ids are optional and only prefix the ids of the artifacts they emit (which
+# name the printable output files); we pass explicit, readable ones here so the
+# players/ filenames stay legible.
 gate = CaesarCipherPuzzle.from_plaintext(plaintext="LIBRARY ATTIC AND GARDEN", shift=4, id="gate")
 crossword = CrosswordPuzzle(
     solution=["STAR", "H##A", "O##I", "PLOD"],
@@ -83,29 +107,31 @@ riddle = RiddlePuzzle(
     answer="SUNDIAL",
     id="riddle",
 )
-# Uses this hunt's assets/patio.<ext> if present, else a generated placeholder PNG.
+# An image is a standalone artifact — there is no puzzle to generate, so the designer
+# builds it directly (unlike the cipher/crossword/grille/riddle above). Make the
+# player picture once (from this hunt's assets/patio.<ext> if present, else a generated
+# placeholder PNG), then derive the game-master twin: the same bytes plus an answer note.
 _assets = Path(__file__).parent / "assets"
 _photo_file = next(_assets.glob("patio.*"), None) if _assets.is_dir() else None
+_prompt = "Which flagstone in this patio is loose?"
+_alt = "the garden patio by the sundial"
 if _photo_file is not None:
-    photo = ImagePuzzle.from_file(
-        _photo_file,
-        prompt="Which flagstone in this patio is loose?",
-        answer="the cracked stone right beside the sundial",
-        alt="the garden patio by the sundial",
-        id="photo",
-    )
+    photo = ImageArtifact.from_file(_photo_file, prompt=_prompt, alt=_alt, id="photo")
 else:
-    photo = ImagePuzzle.from_bytes(
-        _demo_png(48, 32, (90, 140, 90)),
-        mime="image/png",
-        prompt="Which flagstone in this patio is loose?",
-        answer="the cracked stone right beside the sundial",
-        alt="the garden patio by the sundial",
-        id="photo",
+    photo = ImageArtifact.from_bytes(
+        _demo_png(48, 32, (90, 140, 90)), mime="image/png", prompt=_prompt, alt=_alt, id="photo"
     )
+photo_answer = ImageArtifact(
+    photo.data_uri,
+    prompt=_prompt,
+    answer="the cracked stone right beside the sundial",
+    alt=_alt,
+    audience=Audience.GAME_MASTER,
+    id="photo-answer",
+)
 
 # Nodes are pure actions; node() hands back a handle we wire with (no ids to
-# invent). The bracketed puzzles ride the edge *into* the action that solves them.
+# invent). A puzzle's artifacts ride the edge *into* the action that solves them.
 builder = GraphBuilder()
 start = builder.node(label="Kickoff")
 solve_gate = builder.node(action="solve", label="Opening cipher")
@@ -122,8 +148,11 @@ find_attic = builder.node(
 find_garden = builder.node(
     action="find",
     label="The garden",
-    notes="Scatter the three riddle slips: shed, planter, birdbath.",
+    notes="The garden has three hiding spots; one riddle line in each.",
 )
+find_shed = builder.node(action="find", label="The shed", notes="Riddle line 1 under a flowerpot.")
+find_planter = builder.node(action="find", label="The planter", notes="Riddle line 2 in the soil.")
+find_birdbath = builder.node(action="find", label="The birdbath", notes="Riddle line 3 underneath.")
 solve_cw = builder.node(action="solve", label="Library crossword")
 solve_grille = builder.node(action="solve", label="Attic grille")
 solve_riddle = builder.node(action="solve", label="Garden riddle")
@@ -142,32 +171,49 @@ end = builder.node(label="Treasure")
 
 hunt = (
     # opening cipher
-    builder.connect(start, solve_gate, puzzle=gate)
+    builder.connect(start, solve_gate, *staged(gate))
     # it sends them three places (branch)
-    .connect(solve_gate, find_library, text="Search the LIBRARY.")
-    .connect(solve_gate, find_attic, text="Search the ATTIC.")
-    .connect(solve_gate, find_garden, text="Search the GARDEN.")
-    # each location yields a puzzle, carried on the edge into its solve action
-    .connect(find_library, solve_cw, puzzle=crossword)
-    .connect(find_attic, solve_grille, puzzle=grille)
-    .connect(find_garden, solve_riddle, puzzle=riddle)
+    .connect(solve_gate, find_library, TextArtifact("Search the LIBRARY.", id="to-library"))
+    .connect(solve_gate, find_attic, TextArtifact("Search the ATTIC.", id="to-attic"))
+    .connect(solve_gate, find_garden, TextArtifact("Search the GARDEN.", id="to-garden"))
+    # library and attic each yield one whole puzzle on the edge into its solve
+    .connect(find_library, solve_cw, *staged(crossword))
+    .connect(find_attic, solve_grille, *staged(grille))
+    # the garden fans out to three spots, each hiding ONE scattered riddle line
+    .connect(find_garden, find_shed, TextArtifact("Check the shed.", id="to-shed"))
+    .connect(find_garden, find_planter, TextArtifact("Check the planter.", id="to-planter"))
+    .connect(find_garden, find_birdbath, TextArtifact("Check the birdbath.", id="to-birdbath"))
+    .connect(find_shed, solve_riddle, riddle.artifacts("line0"))
+    .connect(find_planter, solve_riddle, riddle.artifacts("line1"))
+    .connect(find_birdbath, solve_riddle, riddle.artifacts("line2"))
     # the three solutions converge (merge)
-    .connect(solve_cw, combine, text="ROAD")
-    .connect(solve_grille, combine, text="FIFTH STEP")
-    .connect(solve_riddle, combine, text="SUNDIAL")
+    .connect(solve_cw, combine, TextArtifact("ROAD", id="word-road"))
+    .connect(solve_grille, combine, TextArtifact("FIFTH STEP", id="word-fifth-step"))
+    .connect(
+        solve_riddle,
+        combine,
+        TextArtifact("SUNDIAL", id="word-sundial"),
+        riddle.artifacts("answer", audience=Audience.GAME_MASTER),
+    )
     # combined, they point to the patio; a photo pins the exact spot
     .connect(
         combine,
         examine,
-        text="By the SUNDIAL, pace the ROAD to its FIFTH STEP. Study the photo.",
-        puzzle=photo,
+        TextArtifact(
+            "By the SUNDIAL, pace the ROAD to its FIFTH STEP. Study the photo.", id="to-patio"
+        ),
+        photo,
+        photo_answer,
     )
     # examine -> a physical step -> the prize
-    .connect(examine, vault, text="Lift the loose flagstone for the cabinet key.")
-    .connect(vault, end, text="Open the cabinet — you found the treasure!")
+    .connect(
+        examine, vault, TextArtifact("Lift the loose flagstone for the cabinet key.", id="to-vault")
+    )
+    .connect(vault, end, TextArtifact("Open the cabinet — you found the treasure!", id="to-end"))
     .build()
 )
 
-out_dir = Path(__file__).parent / "out"
-for path in write_bundle(hunt_bundle(hunt), out_dir):
-    print(f"wrote {path}")
+if __name__ == "__main__":
+    out_dir = Path(__file__).parent / "out"
+    for path in write_bundle(hunt_bundle(hunt), out_dir):
+        print(f"wrote {path}")

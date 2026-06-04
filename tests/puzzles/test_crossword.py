@@ -4,8 +4,10 @@ import pytest
 
 from puzzcombinator import (
     Audience,
+    CrosswordArtifact,
     CrosswordPuzzle,
     GraphBuilder,
+    TextArtifact,
 )
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.crossword import Slot
@@ -43,35 +45,45 @@ def test_lowercase_grid_is_normalized() -> None:
     assert puzzle.solution == ["CAT", "A#O", "RYE"]
 
 
-def test_player_render_hides_answers() -> None:
-    markup = _puzzle().render(Audience.PLAYER).markup
+def test_player_artifact_hides_answers() -> None:
+    markup = _puzzle().artifacts("crossword").render().markup
     assert "Feline" in markup
     assert '<span class="len">(3)</span>' in markup  # enumeration shown
     assert '<span class="num">1</span></td>' in markup  # numbered but empty cell
     assert "Hidden word" not in markup
 
 
-def test_game_master_render_shows_answers() -> None:
-    markup = _puzzle().render(Audience.GAME_MASTER).markup
+def test_game_master_artifact_shows_answers() -> None:
+    markup = _puzzle().artifacts("crossword", audience=Audience.GAME_MASTER).render().markup
     assert '<span class="num">1</span>C' in markup  # filled cell
     assert '<span class="answer">CAT</span>' in markup
     assert "Hidden word" in markup
     assert "<strong>COY</strong>" in markup
 
 
-def test_payload_roundtrip() -> None:
-    puzzle = _puzzle()
-    assert CrosswordPuzzle.from_payload("cw1", puzzle.to_payload()) == puzzle
+def test_artifact_payload_roundtrip() -> None:
+    art = _puzzle().artifacts("crossword", audience=Audience.GAME_MASTER)
+    rebuilt = CrosswordArtifact.from_payload(
+        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
+    )
+    assert rebuilt == art
+    assert rebuilt.emergent_word == "COY"
 
 
 def test_graph_json_roundtrip() -> None:
+    puzzle = _puzzle()
     builder = GraphBuilder()
     start = builder.node("start")
     solve = builder.node("solve", action="solve", label="The grid")
     end = builder.node("end")
     graph = (
-        builder.connect(start, solve, puzzle=_puzzle())
-        .connect(solve, end, text="The word is COY")
+        builder.connect(
+            start,
+            solve,
+            puzzle.artifacts("crossword"),
+            puzzle.artifacts("crossword", audience=Audience.GAME_MASTER),
+        )
+        .connect(solve, end, TextArtifact("The word is COY"))
         .build()
     )
     assert from_json(to_json(graph)) == graph

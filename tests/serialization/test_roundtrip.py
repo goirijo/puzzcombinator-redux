@@ -17,21 +17,38 @@ def test_dict_roundtrip_converging(converging_hunt: Graph) -> None:
 def test_json_roundtrip_cipher(cipher_hunt: Graph) -> None:
     restored = from_json(to_json(cipher_hunt))
     assert restored == cipher_hunt
-    # Node notes and the edge-carried puzzle survive.
+    # Node notes and the edge-carried artifacts survive (player + game-master).
     assert restored.nodes["solve"].notes == "hide under the doormat"
     content = restored.edges["start->solve"].content
-    assert content is not None and content.puzzle is not None
+    assert [a.name for a in content] == ["cipher", "cipher"]
 
 
-def test_json_roundtrip_preserves_puzzle_data(cipher_hunt: Graph) -> None:
-    from puzzcombinator import CaesarCipherPuzzle
+def test_json_roundtrip_preserves_artifact_data(cipher_hunt: Graph) -> None:
+    from puzzcombinator import Audience, CipherArtifact
 
     restored = from_json(to_json(cipher_hunt))
     content = restored.edges["start->solve"].content
-    assert content is not None
-    puzzle = content.puzzle
-    assert isinstance(puzzle, CaesarCipherPuzzle)
-    assert puzzle.solution == "FOUNTAIN"
+    gm = next(a for a in content if a.audience is Audience.GAME_MASTER)
+    assert isinstance(gm, CipherArtifact)
+    assert gm.solution == "FOUNTAIN"
+
+
+def test_json_roundtrip_multi_artifact_edge_preserves_order() -> None:
+    from puzzcombinator import Audience, GraphBuilder, TextArtifact
+
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    graph = builder.connect(
+        a,
+        b,
+        TextArtifact("first", id="t1"),
+        TextArtifact("second", id="t2"),
+        TextArtifact("answer", id="t3", audience=Audience.GAME_MASTER),
+    ).build()
+    restored = from_json(to_json(graph))
+    assert restored == graph
+    assert [a.text for a in restored.edges["a->b"].content] == ["first", "second", "answer"]
 
 
 def test_roundtrip_with_contentless_edges() -> None:

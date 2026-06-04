@@ -76,7 +76,7 @@ def image(
 
     ``caption`` shows beneath the image; ``alt`` is the accessibility/fallback
     text. The bytes are not touched — pass a data URI to keep the hunt
-    self-contained (see :class:`~puzzcombinator.puzzles.image.ImagePuzzle`).
+    self-contained (see :class:`~puzzcombinator.artifacts.image.ImageArtifact`).
     """
     figcaption = f"<figcaption>{html.escape(caption)}</figcaption>" if caption else ""
     body = (

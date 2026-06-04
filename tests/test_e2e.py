@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from puzzcombinator import (
+    Audience,
     CaesarCipherPuzzle,
     GraphBuilder,
+    TextArtifact,
     chronological_order,
     game_master_binder,
     player_pages,
@@ -20,8 +22,13 @@ def test_full_flow() -> None:
     solve = builder.node("solve", action="solve", label="Caesar gate", notes="leave on the bench")
     end = builder.node("end", label="Treasure")
     graph = (
-        builder.connect(start, solve, puzzle=cipher)
-        .connect(solve, end, text="Go to the fountain.")
+        builder.connect(
+            start,
+            solve,
+            cipher.artifacts("cipher"),
+            cipher.artifacts("cipher", audience=Audience.GAME_MASTER),
+        )
+        .connect(solve, end, TextArtifact("Go to the fountain."))
         .build()
     )
 
@@ -33,10 +40,10 @@ def test_full_flow() -> None:
     assert [n.id for n in chronological_order(reloaded)] == ["start", "solve", "end"]
 
     # The solve action's output (the revealed clue) flows on its outgoing edge.
-    assert [c.text for c in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]
+    assert [a.text for a in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]
 
     # The player printable shows the prompt; the game-master binder shows the solution.
-    player_page = player_pages(reloaded)["players/c1-puzzle.html"]
+    player_page = player_pages(reloaded)["players/c1-cipher.html"]
     assert "IRXQWDLQ" in player_page  # ciphertext (FOUNTAIN shifted by 3)
     assert "FOUNTAIN" not in player_page
 
