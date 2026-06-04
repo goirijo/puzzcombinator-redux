@@ -14,7 +14,23 @@ hunt — there is no answer-checking anywhere (in a physical hunt, correctness i
 implicit when one puzzle's output is the next one's input). Live
 progress-tracking is a future, separate layer.
 
-## The core model (current — artifact-on-edge, rearchitected 2026-06-04)
+## ⚠️ Refactor in progress (bottom-up rebuild, started 2026-06-04)
+
+We are rebuilding the library **one layer at a time, lowest first**, to keep each
+change small. **Phase 1 — the Artifact layer — is done** (audience removed from
+artifacts; minimal single-thing primitives; a new composite). See
+`src/puzzcombinator/artifacts/ARTIFACTS.md` for the full artifact guide.
+
+**The higher layers have NOT been migrated yet and currently do not run.**
+`puzzles/*`, `serialization/codec.py`, `rendering/binder.py`, the top-level
+`src/puzzcombinator/__init__.py` re-exports, and the tests for those layers still
+reference the old `audience`-on-artifact design. Below, the **Artifact** model is
+current; the **Puzzle / serialization-codec / binder** descriptions still describe
+the *pre-refactor target* and are the next phases to migrate (puzzles next) — treat
+them as "where we're heading," not "what runs today." Only `pytest tests/artifacts/`
+is green right now.
+
+## The core model (artifact-on-edge, rearchitected 2026-06-04)
 
 A hunt is a **directed graph of actions**, and the graph is the **flow of
 artifacts**:
@@ -22,11 +38,11 @@ artifacts**:
   one action to the next. There is no `Content` wrapper and no `text`/`data`/`puzzle`
   fields anymore.
 - **`Artifact`** (in `rendering/fragment.py`) is the universal **thing that
-  renders**: a registry-backed, serializable, **single-audience** renderable with
-  `render() -> RenderFragment` (no audience arg). Envelope fields beside its
-  type-specific `payload`: `name` (its key within the puzzle that made it),
-  `audience` (`PLAYER` prints its own sheet / `GAME_MASTER` shows only in the answer
-  key), `id` (unique within a hunt; names a player artifact's output file).
+  renders** carried on edges: a registry-backed, serializable renderable that knows
+  nothing about audience. **Its primitives, composite, custom-type recipe, and
+  serialization are documented in full in `src/puzzcombinator/artifacts/ARTIFACTS.md`
+  — read that for the artifact layer; the bullet here only covers how artifacts ride
+  the graph.**
 - **`Puzzle`** (in `puzzles/base.py`) is an authoring-time **generator**, *not*
   stored on edges and *not* serialized. `puzzle.artifacts(name=None, *, audience=
   Audience.PLAYER)` returns a `{name: Artifact}` map (or one artifact by name). It
@@ -58,11 +74,11 @@ artifact you place on the outgoing edge.
   `ordering.py` (`chronological_order` topo sort w/ branch+merge gating,
   `required_inputs`, `produced_outputs` — both return `list[Artifact]`). Stdlib
   only; artifact-agnostic (references only the `Artifact` ABC, for typing).
-- **`artifacts/`** — the **orphan** artifacts (no puzzle behind them) and the
-  registry: `registry.py` (`@register_artifact` / `build_artifact`), `text.py`
-  (`TextArtifact`, the standalone clue), `image.py` (`ImageArtifact`, an inline-data-URI
-  picture with `from_bytes`/`from_file` classmethods). Depends only on `rendering` +
-  `errors`, so `puzzles/` builds on top of it without a cycle.
+- **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`), the composite
+  (`composite.py`), and the registry (`registry.py`). Depends only on `rendering` +
+  `errors`, so `puzzles/` builds on top of it without a cycle. **Fully documented in
+  `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type recipe, and
+  serialization.
 - **`puzzles/`** — `base.py` (`Puzzle` generator ABC) and the puzzle types, each
   pairing a `Puzzle` generator with its `Artifact` subclass(es): `cipher.py`,
   `crossword.py`, `r4.py`, `riddle.py`. Depends on `artifacts` + `rendering` +
@@ -106,21 +122,18 @@ own `styles`, which the binder aggregates. So a new artifact needs zero binder e
 - **String ids, no object cycles** — edges reference nodes by id; node wiring is
   recomputed on load (gives clean value-equality for round-trip tests). Ids are
   auto-generated, not author-invented (see the core-model note above). Artifact
-  `__eq__`/`__hash__` is **value-based** (type + id + name + audience + payload),
-  which is what makes the round-trip `==` invariant hold. Puzzle generators are not
-  serialized and are not compared.
+  `__eq__`/`__hash__` is **value-based** (type + id + name + payload), which is what
+  makes the round-trip `==` invariant hold. Puzzle generators are not serialized and
+  are not compared.
 - **GUI = producer, binder = consumer, model+serialization = the seam.** A visual
   hunt map is deferred (GUI-adjacent).
 
 ## Adding a type (the whole recipe)
 
-1. **The artifact** (the serializable renderable). Subclass `Artifact`, decorate
-   `@register_artifact`, set `type_name`, implement `to_payload` /
-   `from_payload(*, name, audience, id, payload)` / `render() -> RenderFragment`
-   (a pure function of the payload — no audience branching). `__init__` takes the
-   type-specific data plus `*, name=..., audience=Audience.PLAYER, id=None` and
-   passes the last three to `super().__init__(...)`. A pure clue type can reuse
-   `TextArtifact`.
+1. **The artifact** (the serializable renderable). The full recipe — `type_name`,
+   `@register_artifact`, `to_payload`/`from_payload`, a pure `render()`, and where it
+   lives — is in `artifacts/ARTIFACTS.md` ("Writing a custom artifact"). A pure clue
+   can reuse `TextArtifact`; several things together is a `CompositeArtifact`.
 2. **The puzzle generator** (*only* if a single authoring object emits several
    artifacts or needs answer-vs-blank logic). Subclass `Puzzle`, set `type_name`
    (the id prefix), implement `_artifacts(audience) -> list[Artifact]` building the
@@ -144,23 +157,38 @@ file mirroring the others (payload round-trip + render; for a generator, the
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov=puzzcombinator            # 100% coverage on core/ is required
-ruff check . && ruff format --check . && mypy src/puzzcombinator   # must be clean
-python examples/hunts/mock_hunt/hunt.py      # regenerates examples/hunts/mock_hunt/out/
+# Mid-refactor: only the artifact layer is green. Scope checks to it for now —
+# a full `pytest`/`mypy` fails by design until the higher layers are migrated.
+pytest tests/artifacts/                 # the only green suite today
+ruff check src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py
+mypy src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py
 ```
+The full bar (restore once each layer is migrated): `pytest --cov=puzzcombinator`
+(100% on `core/`), `ruff check . && ruff format --check . && mypy src/puzzcombinator`
+all clean, and `python examples/hunts/mock_hunt/hunt.py` regenerating its `out/`.
 Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics
 used), free-form `action` strings, commit messages end with the Co-Authored-By
 trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 
 ## Current status & likely next steps
 
-Working, fully tested. Four puzzle types (cipher, crossword, R4, riddle) plus two
-orphan artifacts (text, image). Full bundle output (binder + players/).
-`examples/hunts/mock_hunt/hunt.py` is the end-to-end reference (every puzzle type,
-the image artifact, a three-way converging branch, a physical step).
+**Mid bottom-up refactor (see the banner at the top).** Phase 1 (the Artifact layer)
+is done and green: audience-free `Artifact` ABC, the `text`/`image` primitives, the
+new `CompositeArtifact`, and the registry envelope helpers — documented in
+`artifacts/ARTIFACTS.md`, covered by `tests/artifacts/`.
 
-Not yet built (defer unless asked): more puzzle types; the visual hunt-map view
-(V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
+**Next phase: puzzles.** `puzzles/*` still emit `audience`-bearing artifacts via
+`_artifacts(audience)` and won't import; migrate them to the new artifact model
+(decide where the player-vs-answer-key split lives now that artifacts are
+audience-free). After that: `serialization/codec.py` (drop `audience` from the edge
+envelope; reuse `artifact_to_dict`/`artifact_from_dict`), then `rendering/binder.py`
+(re-derive player/GM routing without an artifact `audience` field), then the
+top-level `__init__` re-exports, examples, and the remaining tests. Once everything
+is migrated, `examples/hunts/mock_hunt/hunt.py` is the end-to-end reference to get
+green again.
+
+Beyond the refactor (defer unless asked): more puzzle types; the visual hunt-map
+view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
 tracking/monitoring layer (layer 4 — the only place answer-checking would ever
 live). Deferred GUI-readiness: optional node x/y positions + per-puzzle parameter
 metadata in the serialized format.
