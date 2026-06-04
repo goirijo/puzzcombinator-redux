@@ -1,7 +1,7 @@
 # CLAUDE.md — puzzcombinator
 
 Orientation for a fresh session. Read this, skim `README.md` and
-`examples/mock_hunt/hunt.py`, and you're caught up — you do **not** need any prior
+`examples/hunts/mock_hunt/hunt.py`, and you're caught up — you do **not** need any prior
 chat transcript. Deeper rationale lives in the auto-loaded memory files
 (`design-principles`, `roadmap`) and in `git log` (commit messages are detailed).
 
@@ -102,7 +102,7 @@ the others.
 pip install -e ".[dev]"
 pytest --cov=puzzcombinator            # 100% coverage on core/ is required
 ruff check . && ruff format --check . && mypy src/puzzcombinator   # must be clean
-python examples/mock_hunt/hunt.py      # regenerates examples/mock_hunt/out/
+python examples/hunts/mock_hunt/hunt.py      # regenerates examples/hunts/mock_hunt/out/
 ```
 Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics
 used), free-form `action` strings, commit messages end with the Co-Authored-By
@@ -111,7 +111,7 @@ trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 ## Current status & likely next steps
 
 Working, fully tested. Five puzzle types (cipher, crossword, R4, riddle, image).
-Full bundle output (binder + players/). `examples/mock_hunt/hunt.py` is the end-to-end
+Full bundle output (binder + players/). `examples/hunts/mock_hunt/hunt.py` is the end-to-end
 reference (all five puzzle types, a three-way converging branch, a physical step).
 
 Not yet built (defer unless asked): more puzzle types; the visual hunt-map view

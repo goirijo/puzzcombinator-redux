@@ -2,9 +2,9 @@
 
 Run it:
 
-    python examples/crossword_demo.py
+    python examples/puzzles/crossword_demo.py
 
-It writes a bundle into examples/crossword_out/:
+It writes a bundle into examples/puzzles/crossword_out/:
 
     binder.html            — the game master's document (answer key + checklist)
     players/grid-puzzle.html — the player printable (blank grid + clues)

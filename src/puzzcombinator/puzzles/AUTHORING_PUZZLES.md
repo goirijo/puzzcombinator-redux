@@ -412,7 +412,7 @@ All must be clean, and your new puzzle should be fully covered. If your puzzle
 touches the end-to-end flow, regenerate the reference output and eyeball it:
 
 ```bash
-python examples/mock_hunt/hunt.py    # writes examples/mock_hunt/out/
+python examples/hunts/mock_hunt/hunt.py    # writes examples/hunts/mock_hunt/out/
 ```
 
 ---

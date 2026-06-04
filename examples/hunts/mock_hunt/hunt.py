@@ -2,9 +2,9 @@
 
 Run it:
 
-    python examples/mock_hunt/hunt.py
+    python examples/hunts/mock_hunt/hunt.py
 
-Writes a full bundle into examples/mock_hunt/out/:
+Writes a full bundle into examples/hunts/mock_hunt/out/:
 
     binder.html   — the game master's document: a page per action (in solve order)
                     showing what it receives and produces, plus a production

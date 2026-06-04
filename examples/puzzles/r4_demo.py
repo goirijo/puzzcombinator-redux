@@ -2,9 +2,9 @@
 
 Run it:
 
-    python examples/r4_demo.py
+    python examples/puzzles/r4_demo.py
 
-It writes a bundle into examples/r4_out/:
+It writes a bundle into examples/puzzles/r4_out/:
 
     binder.html                  — the game master's document (answer key + checklist)
     players/decoder-grid.svg     — the letter grid, its own standalone printable

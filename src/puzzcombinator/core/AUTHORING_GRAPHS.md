@@ -6,7 +6,7 @@ up: **composing puzzles — and the steps between them — into a whole hunt.** 
 will lay out the path players take, hang puzzles on it, branch it so several
 threads run at once, merge those threads back together, and finally turn the
 result into printable materials. The running example is the shipped reference
-hunt, [`examples/mock_hunt/hunt.py`](../../../examples/mock_hunt/hunt.py); read
+hunt, [`examples/hunts/mock_hunt/hunt.py`](../../../examples/hunts/mock_hunt/hunt.py); read
 this with that file open.
 
 > **Scope.** A hunt is a **directed graph of actions**. Everything here is the
@@ -378,7 +378,7 @@ are decoupled on purpose.
 
 ---
 
-*See [`examples/mock_hunt/hunt.py`](../../../examples/mock_hunt/hunt.py) for all of
+*See [`examples/hunts/mock_hunt/hunt.py`](../../../examples/hunts/mock_hunt/hunt.py) for all of
 the above assembled into one working hunt — five puzzle types, a three-way branch
 and merge, and a physical step — and [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)
 for building the puzzles that ride the edges.*
