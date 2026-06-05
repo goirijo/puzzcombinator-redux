@@ -8,6 +8,7 @@ from puzzcombinator.rendering.binder import (
     player_pages,
     write_bundle,
 )
+from puzzcombinator.rendering.export import html_document, write_html
 from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
 
 __all__ = [
@@ -15,7 +16,9 @@ __all__ = [
     "Audience",
     "RenderFragment",
     "game_master_binder",
+    "html_document",
     "hunt_bundle",
     "player_pages",
     "write_bundle",
+    "write_html",
 ]

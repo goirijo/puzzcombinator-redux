@@ -5,22 +5,24 @@ Run it:
     python examples/artifacts/showcase.py
 
 This lives at the very bottom of the library — it touches no graph, no puzzle, and
-no binder. It exercises only the three orphan artifacts documented in
+no binder. It exercises only the orphan artifacts documented in
 ``src/puzzcombinator/artifacts/ARTIFACTS.md``:
 
     * TextArtifact   — a plain string (plus title / monospace render hints)
     * ImageArtifact  — a single picture carried inline as a data URI
+    * SvgArtifact    — inline vector markup, generated in code
     * CompositeArtifact — several artifacts aggregated into one (and nested)
 
 For each showcased artifact it:
 
     1. asserts the serialization round-trip  artifact_from_dict(artifact_to_dict(a)) == a,
-    2. renders it to a RenderFragment, and
-    3. writes a standalone HTML file you can open in a browser.
+    2. writes an HTML preview with ``write_html`` (works for *any* artifact), and
+    3. for a primitive, also writes its **native** file (a .txt / image / .svg) with the
+       matching ``write_*`` exporter — the "how it looks" vs. "the thing itself" duality.
 
-It also assembles one ``gallery.html`` that embeds every fragment with their CSS
-deduplicated into a single ``<head>`` — the same aggregation the real binder does,
-shown here for a folder of artifacts instead of a whole hunt.
+All the file writers come from ``puzzcombinator.artifacts.export``. It also assembles
+one ``gallery.html`` embedding every fragment with its CSS aggregated into one
+``<head>``, reusing that module's ``html_document`` wrapper.
 """
 
 from __future__ import annotations
@@ -35,7 +37,14 @@ from puzzcombinator.artifacts import (
     artifact_from_dict,
     artifact_to_dict,
 )
-from puzzcombinator.rendering.fragment import Artifact, RenderFragment
+from puzzcombinator.artifacts.export import (
+    html_document,
+    write_html,
+    write_image,
+    write_svg,
+    write_text,
+)
+from puzzcombinator.rendering.fragment import Artifact
 
 HERE = Path(__file__).parent
 ASSET = HERE.parent / "assets" / "patio.jpg"
@@ -120,16 +129,6 @@ def showcase() -> list[Artifact]:
     ]
 
 
-def write_html(fragment: RenderFragment, path: Path) -> None:
-    """Wrap one fragment's markup + CSS in a minimal HTML document on disk."""
-    doc = (
-        "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"<title>{path.stem}</title><style>{fragment.styles}</style></head>"
-        f"<body>{fragment.markup}</body></html>"
-    )
-    path.write_text(doc, encoding="utf-8")
-
-
 def write_gallery(artifacts: list[Artifact], path: Path) -> None:
     """Embed every fragment in one document, CSS aggregated and deduplicated."""
     fragments = [a.render() for a in artifacts]
@@ -149,12 +148,8 @@ def write_gallery(artifacts: list[Artifact], path: Path) -> None:
         " .cell { margin: 0; border: 1px solid #ddd; border-radius: 8px; padding: 1rem;"
         " background: #fafafa; } .cell > figcaption { margin-bottom: 0.5rem; color: #333; }"
     )
-    doc = (
-        "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        "<title>Artifact showcase</title>"
-        f"<style>{gallery_css}{''.join(styles)}</style></head>"
-        f"<body><h1>Artifact showcase</h1><div class='gallery'>{cells}</div></body></html>"
-    )
+    body = f"<h1>Artifact showcase</h1><div class='gallery'>{cells}</div>"
+    doc = html_document("Artifact showcase", body, gallery_css + "".join(styles))
     path.write_text(doc, encoding="utf-8")
 
 
@@ -167,13 +162,20 @@ def main() -> None:
         clone = artifact_from_dict(artifact_to_dict(artifact))
         assert clone == artifact, f"round-trip mismatch for {artifact.id}"
 
-        # 2. + 3. Render and write a standalone file. Every artifact in this layer
-        # (text / image / composite) renders an HTML-kind fragment, so each is a body
-        # snippet wrapped in a minimal HTML document. (Raw-SVG fragments, written as
-        # native .svg files, only arise in the puzzle layer — out of scope here.)
-        fragment = artifact.render()
-        write_html(fragment, OUT / f"{artifact.id}.html")
-        print(f"  {artifact.id:28} {artifact.type_name:10} -> {artifact.id}.html")
+        # 2. An HTML preview for every artifact (presentation, via render()).
+        written = [write_html(artifact, OUT)]
+
+        # 3. For a primitive, also export its native file. A composite has no single
+        #    native form, so it gets only the HTML preview.
+        if isinstance(artifact, SvgArtifact):
+            written.append(write_svg(artifact, OUT))
+        elif isinstance(artifact, ImageArtifact):
+            written.append(write_image(artifact, OUT))
+        elif isinstance(artifact, TextArtifact):
+            written.append(write_text(artifact, OUT))
+
+        names = ", ".join(p.name for p in written)
+        print(f"  {artifact.id:28} {artifact.type_name:10} -> {names}")
 
     write_gallery(artifacts, OUT / "gallery.html")
     print(f"\nWrote {len(artifacts)} artifacts + gallery.html to {OUT}")

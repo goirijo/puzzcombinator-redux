@@ -204,35 +204,37 @@ assert again == clue                   # value-equality round-trips
 
 ---
 
-## Rendering to a file to inspect in a browser
+## Writing an artifact to a file to inspect it
 
-An artifact renders to a `RenderFragment` — a `markup` string (HTML, or inline SVG)
-plus the `styles` (CSS) it needs. To eyeball one, wrap those in a minimal HTML
-document and write it to disk:
+`puzzcombinator.artifacts.export` gives you the single-artifact file writers — one
+import site for both the presentation view and the native exports:
 
 ```python
-from pathlib import Path
-from puzzcombinator.rendering.fragment import RenderFragment
+from puzzcombinator.artifacts.export import write_html, write_svg, write_image, write_text
 
-
-def write_html(artifact, path: str) -> None:
-    frag: RenderFragment = artifact.render()
-    doc = (
-        "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"<style>{frag.styles}</style></head>"
-        f"<body>{frag.markup}</body></html>"
-    )
-    Path(path).write_text(doc, encoding="utf-8")
-
-
-write_html(clue, "clue.html")          # then open clue.html in a browser
+write_html(clue, "out/")        # any artifact -> out/<id>.html (wraps render() in a page)
+write_text(clue, "out/")        # a TextArtifact  -> out/<id>.txt   (the raw string)
+write_image(photo, "out/")      # an ImageArtifact -> out/<id>.png   (decoded bytes; ext from mime)
+write_svg(diagram, "out/")      # an SvgArtifact   -> out/<id>.svg   (markup verbatim)
 ```
 
-This works for **any** artifact — a primitive, a composite, or a custom type —
-because they all render the same way. An SVG-kind fragment is valid inside the
-`<body>`, so it renders inline with no extra handling.
+Each takes an artifact and an **output directory**, derives `<id>.<ext>` itself, and
+returns the written `Path`. Two complementary answers:
 
-> The library's real output layer (`rendering/binder.py`) does this for a whole hunt
-> — a game-master binder plus a `players/` folder, one file per artifact, with all
-> the CSS aggregated into one `<head>`. The one-off helper above is just for
-> inspecting a single artifact while you build it.
+- **`write_html`** works for **any** artifact — primitive, composite, or custom — because
+  they all render the same way (an SVG-kind fragment is valid inline in the `<body>`). It
+  answers *"how does this look?"*
+- **`write_text` / `write_image` / `write_svg`** are the **native** exporters: they bypass
+  `render()` and write a primitive's payload in its own format. They answer *"give me the
+  thing itself."* (A composite has no single native form, so it only has the HTML view.)
+
+The shared `html_document(title, body, styles)` wrapper used by `write_html` is also
+re-exported there if you need to assemble your own page (the showcase's gallery uses it).
+
+> Layering note: the agnostic `html_document` / `write_html` actually live in
+> `rendering/export.py` (they need only the `Artifact` ABC); the native writers live in
+> `artifacts/export.py` (they need the concrete types). The latter re-exports the former
+> so callers import everything from `puzzcombinator.artifacts.export`. Separately, the
+> library's real output layer (`rendering/binder.py`) writes a *whole hunt* — a binder
+> plus a `players/` folder — once that layer is migrated; these helpers are for
+> inspecting or exporting a single artifact.

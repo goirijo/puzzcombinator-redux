@@ -31,7 +31,7 @@ packages = ["src/puzzcombinator"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 
 [tool.ruff]
 src = ["src", "tests"]
