@@ -1,5 +1,15 @@
 """Render a hunt graph into game-master and player materials.
 
+.. warning::
+
+   **STALE — pre-refactor, does not run.** This module has NOT been migrated to the
+   audience-free artifact model (Phase 1, 2026-06-04). It still reads
+   ``artifact.audience``, a field the ``Artifact`` ABC no longer has, so it will
+   raise on import/use. It is kept only as the migration *target* for the binder
+   phase (see CLAUDE.md). **Do not treat anything here as a correct reference for the
+   current artifact layer** — only ``artifacts/ARTIFACTS.md`` and ``tests/artifacts/``
+   describe what runs today.
+
 The output is a **bundle**: a game-master ``binder.html`` plus a ``players/``
 folder of standalone printables. Everything here is a pure, **artifact-agnostic**
 consumer of the model — it walks nodes/edges, calls ``render`` on whatever

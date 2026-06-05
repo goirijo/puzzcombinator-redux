@@ -31,7 +31,7 @@ hold.
 
 ## The primitives
 
-A primitive is a **single thing**. Two exist today (a QR code, coordinates, and
+A primitive is a **single thing**. Three exist today (a QR code, coordinates, and
 others will follow):
 
 ### `TextArtifact` — a string
@@ -66,6 +66,40 @@ inline = ImageArtifact("data:image/png;base64,AAAA", alt="map")
 `alt` is the accessibility/fallback text describing the picture — the only thing an
 image carries besides the image. A caption, prompt, or answer note is *separate
 content*: make it a `TextArtifact` and combine the two with a composite.
+
+### `SvgArtifact` — inline vector markup
+
+The counterpart to `ImageArtifact`. An image is an *opaque picture* (bytes in an
+`<img>`, `kind="html"`); this is the other half — a piece whose value **is** a snippet
+of `<svg>...</svg>`, spliced inline so it renders as live vector graphics
+(`kind="svg"`). Reach for it for anything geometric you generate in code — a map, a
+diagram, a grid — where you want vector precision, CSS-styleable shapes, crisp print,
+and a usable standalone `.svg` file.
+
+```python
+from puzzcombinator.artifacts import SvgArtifact
+
+dot = SvgArtifact('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+                  '<circle cx="5" cy="5" r="4"/></svg>')
+logo = SvgArtifact.from_file("logo.svg")   # read markup verbatim — stays inline
+```
+
+It is a **dumb carrier**: it holds finished SVG and renders it, exactly as
+`TextArtifact` holds a finished string. It does *not* generate — that is the caller's
+job (the designer drawing markup in code, or a puzzle producing it). Keeping
+generation out is what stops the artifact from becoming a drawing engine.
+
+Two consequences of that minimalism, both mirroring `ImageArtifact`:
+
+- A title or caption is *separate content* — it would force a wrapping element and
+  flip the fragment back to `kind="html"`, so put a `TextArtifact` beside it in a
+  composite. Any CSS the graphic needs lives **inside** the markup as a `<style>`
+  element (valid within `<svg>`), so the payload stays one string.
+- To render as a *standalone* `.svg` file the markup must carry
+  `xmlns="http://www.w3.org/2000/svg"`; inline-in-HTML doesn't require it. `render()`
+  is pure and unaware of file-vs-inline, so the namespace is the author's
+  responsibility. (`ImageArtifact.from_file("x.svg")` is still available when you only
+  want the file shown as a flat picture rather than live inline markup.)
 
 ---
 
