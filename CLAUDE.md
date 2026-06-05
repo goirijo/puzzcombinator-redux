@@ -74,11 +74,12 @@ artifact you place on the outgoing edge.
   `ordering.py` (`chronological_order` topo sort w/ branch+merge gating,
   `required_inputs`, `produced_outputs` — both return `list[Artifact]`). Stdlib
   only; artifact-agnostic (references only the `Artifact` ABC, for typing).
-- **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`), the composite
-  (`composite.py`), and the registry (`registry.py`). Depends only on `rendering` +
-  `errors`, so `puzzles/` builds on top of it without a cycle. **Fully documented in
-  `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type recipe, and
-  serialization.
+- **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`, `svg.py`), the
+  composite (`composite.py`), the registry (`registry.py`), and `export.py` (the
+  per-primitive native file writers + a re-export of the agnostic ones). Depends only
+  on `rendering` + `errors`, so `puzzles/` builds on top of it without a cycle. **Fully
+  documented in `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type
+  recipe, and serialization.
 - **`puzzles/`** — `base.py` (`Puzzle` generator ABC) and the puzzle types, each
   pairing a `Puzzle` generator with its `Artifact` subclass(es): `cipher.py`,
   `crossword.py`, `r4.py`, `riddle.py`. Depends on `artifacts` + `rendering` +
@@ -92,7 +93,9 @@ artifact you place on the outgoing edge.
   `from_json(to_json(g)) == g`.
 - **`rendering/`** — `fragment.py` (`RenderFragment` {markup, kind html|svg,
   styles}, `Audience`, and the `Artifact` ABC), `presets.py` (fragment factories),
-  `binder.py` (the output layer). Artifact-agnostic.
+  `export.py` (agnostic single-artifact file writers: `html_document` + `write_html`),
+  `binder.py` (the whole-hunt output layer — **STALE, not yet migrated**).
+  Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
 
 ## Output / the binder
 
@@ -157,11 +160,13 @@ file mirroring the others (payload round-trip + render; for a generator, the
 
 ```bash
 pip install -e ".[dev]"
-# Mid-refactor: only the artifact layer is green. Scope checks to it for now —
-# a full `pytest`/`mypy` fails by design until the higher layers are migrated.
-pytest tests/artifacts/                 # the only green suite today
-ruff check src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py
-mypy src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py
+# Mid-refactor: the artifact + rendering layers are green; puzzles/binder are not.
+# A full `pytest`/`mypy` fails by design until the higher layers are migrated.
+pytest tests/artifacts/ tests/rendering/   # green (tests/rendering/test_binder.py is skipped, pending migration)
+ruff check src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py \
+  src/puzzcombinator/rendering/export.py src/puzzcombinator/rendering/presets.py
+mypy src/puzzcombinator/artifacts src/puzzcombinator/rendering/fragment.py \
+  src/puzzcombinator/rendering/export.py
 ```
 The full bar (restore once each layer is migrated): `pytest --cov=puzzcombinator`
 (100% on `core/`), `ruff check . && ruff format --check . && mypy src/puzzcombinator`
@@ -173,19 +178,25 @@ trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 ## Current status & likely next steps
 
 **Mid bottom-up refactor (see the banner at the top).** Phase 1 (the Artifact layer)
-is done and green: audience-free `Artifact` ABC, the `text`/`image` primitives, the
-new `CompositeArtifact`, and the registry envelope helpers — documented in
-`artifacts/ARTIFACTS.md`, covered by `tests/artifacts/`.
+is done and green: audience-free `Artifact` ABC, the `text`/`image`/`svg` primitives,
+the `CompositeArtifact`, the registry envelope helpers, and the single-artifact file
+writers (`rendering/export.py` + `artifacts/export.py`) — documented in
+`artifacts/ARTIFACTS.md` and `rendering/RENDERING.md`, covered by `tests/artifacts/`
+and `tests/rendering/` (the binder/puzzle integration tests are quarantined in
+`tests/rendering/test_binder.py`, skipped with a reason until their layers migrate).
 
-**Next phase: puzzles.** `puzzles/*` still emit `audience`-bearing artifacts via
-`_artifacts(audience)` and won't import; migrate them to the new artifact model
-(decide where the player-vs-answer-key split lives now that artifacts are
-audience-free). After that: `serialization/codec.py` (drop `audience` from the edge
-envelope; reuse `artifact_to_dict`/`artifact_from_dict`), then `rendering/binder.py`
-(re-derive player/GM routing without an artifact `audience` field), then the
-top-level `__init__` re-exports, examples, and the remaining tests. Once everything
-is migrated, `examples/hunts/mock_hunt/hunt.py` is the end-to-end reference to get
-green again.
+**Next phase: puzzles.** `puzzles/*` import but **fail at runtime** — they still build
+artifacts with `audience=` (e.g. `_artifacts(audience)`), a kwarg the audience-free
+`Artifact` no longer accepts. Migrate them to the new model; the key design decision is
+**where the player-vs-answer-key split lives now that artifacts are audience-free**
+(today a puzzle emits both a player and a GM instance; the new home is likely a
+designer choice at placement, or two explicitly-named emitted artifacts). After that:
+`serialization/codec.py` (drop `audience` from the edge envelope; reuse
+`artifact_to_dict`/`artifact_from_dict`), then `rendering/binder.py` (re-derive
+player/GM routing without an artifact `audience` field — its own open design question),
+then the top-level `__init__` re-exports, examples, and the remaining tests. Once
+everything is migrated, `examples/hunts/mock_hunt/hunt.py` is the end-to-end reference
+to get green again.
 
 Beyond the refactor (defer unless asked): more puzzle types; the visual hunt-map
 view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
