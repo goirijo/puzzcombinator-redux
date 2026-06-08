@@ -30,7 +30,7 @@ Three types carry the whole model (`core/graph.py`):
 |---|---|---|
 | **`Node`** | a **pure action** with a free-form `action` string (`"solve"`, `"find"`, `"move"`, …) | a step the players *do* |
 | **`Edge`** | a directed connection from one node to another, carrying a tuple of `Artifact`s | the information that flows between steps |
-| **`Artifact`** | a serializable, single-audience **thing that renders** (a clue, a cipher, a grid) | one piece of what a step hands to the next |
+| **`Artifact`** | a serializable **thing that renders** (a clue, a cipher, a grid) | one piece of what a step hands to the next |
 
 A **`Puzzle`** is an authoring-time *generator* of artifacts (see
 [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)); it is not part of the
@@ -133,17 +133,15 @@ action next to the artifacts that flow into it — instead of one giant chain yo
 to cross-reference against the node list:
 
 ```python
-from puzzcombinator import Audience, TextArtifact
+from puzzcombinator import TextArtifact
 
 builder = GraphBuilder()
 
 start        = builder.node(label="Kickoff")
 solve_gate   = builder.node(action="solve", label="Opening cipher")
-# a puzzle's artifacts ride the edge *into* the action that solves it: the player
-# sheet, plus the game-master answer so the binder's answer key has it.
-builder.connect(start, solve_gate,
-                gate.artifacts("cipher"),
-                gate.artifacts("cipher", audience=Audience.GAME_MASTER))
+# a puzzle's artifacts ride the edge *into* the action that solves it — the whole
+# set: the ciphertext to decode and the revealed answer for the answer key.
+builder.connect(start, solve_gate, *gate.artifacts().values())
 
 find_library = builder.node(action="find", label="The library")
 builder.connect(solve_gate, find_library, TextArtifact("Search the LIBRARY."))  # the clue to reach it
@@ -168,8 +166,8 @@ The signature is `connect(source, target, *artifacts, id=None)`, where
 
 - **`*artifacts`** are the artifact instances flowing along the edge, in order. Pass
   a `TextArtifact` for a clue, a single artifact you got from `puzzle.artifacts(name)`,
-  or spread a whole set with `*puzzle.artifacts().values()`. To put a puzzle's player
-  *and* game-master pieces on the edge, spread both sets.
+  or spread a whole set with `*puzzle.artifacts().values()` to place every piece a
+  puzzle emits (its prompt pieces and its answer key alike).
 - An edge may carry **nothing** (pass no artifacts) — a pure structural link.
 - **`id`** is optional. By default the edge id is `"{source}->{target}"`, with
   `#2`, `#3`, … appended if you connect the same pair more than once. Pass `id=`
@@ -261,8 +259,8 @@ exactly what "you need all three clues to proceed" means.
 > **Multiple teams / competing players — an open, deferred question.** Several
 > teams racing, diverging onto different paths and re-converging, is expressed
 > with these *same* primitives: divergence is a branch, convergence is a gated
-> merge. It is **never** a puzzle concern — a puzzle never knows who is solving it
-> (the `Audience` axis is only PLAYER vs. GAME_MASTER), and *which team is where*
+> merge. It is **never** a puzzle concern — a puzzle never knows *who* is solving it,
+> and *which team is where*
 > is live playthrough state that belongs to the future tracking layer, not this
 > stateless model. What is **not yet decided** is the ergonomic authoring form for
 > per-team divergent content: one shared graph with a per-edge/path team tag, vs.
@@ -292,10 +290,10 @@ On build the graph:
    - a **dangling edge** — `source` or `target` names a node that doesn't exist
      (usually a handle you didn't capture, or a `connect` before the matching
      `node`);
-   - a **duplicate artifact id** — two *player* artifacts sharing an id would
-     collide on their output filenames; ids auto-generate uniquely (and a puzzle
-     prefixes its pieces with its own id), so this only fires if you pass two
-     explicit ones that clash. Game-master artifacts name no file and are exempt;
+   - a **duplicate artifact id** — two artifacts sharing an id would collide on
+     their output filenames; ids auto-generate uniquely (and a puzzle prefixes its
+     pieces with its own id), so this only fires if you pass two explicit ones that
+     clash;
    - a **cycle** — a hunt must flow forward; a loop back to an earlier action is
      rejected with the offending node ids.
 
@@ -348,11 +346,15 @@ from puzzcombinator import hunt_bundle, write_bundle
 write_bundle(hunt_bundle(hunt), "hunt_out")
 ```
 
+> **The binder is mid-migration.** It has not yet been rebuilt, and exactly how it
+> routes a piece to a player printable vs. the answer key is the open question of
+> that phase (see CLAUDE.md). The shape below describes the *target*; treat it as
+> where this is heading, not what runs today.
+
 - **`hunt_bundle(graph)`** is pure: it returns a `dict` of `{path: contents}` — a
   game-master `binder.html` (one page per action in solve order, rendering each
-  step's incoming and outgoing artifacts, including the game-master ones that reveal
-  answers, plus a production checklist) and a `players/` printable per `PLAYER`
-  artifact.
+  step's incoming and outgoing artifacts, including the answer-key pieces, plus a
+  production checklist) and a `players/` printable per player-facing artifact.
 - **`write_bundle(bundle, dir)`** is the only filesystem I/O — it writes that dict
   to disk and returns the paths written.
 - If you want the pieces separately, `game_master_binder(graph) -> str` and
@@ -380,7 +382,7 @@ assert restored == hunt            # the keystone invariant
 `from_json(to_json(g)) == g` is the invariant the whole serialization layer is
 built to preserve — which is why wiring is recomputed on load and ids (not object
 references) tie everything together. Each edge's artifacts round-trip through their
-registry as `{type, id, name, audience, payload}`, so a loaded hunt rebuilds every
+registry as `{type, id, name, payload}`, so a loaded hunt rebuilds every
 artifact by `type_name`. (Puzzle generators are authoring-time only and are not
 serialized — the artifacts they produced are.) `to_yaml` / `from_yaml` are available
 too (lazy, optional dependency). Malformed input raises `SerializationError`.
@@ -394,9 +396,9 @@ too (lazy, optional dependency). Malformed input raises `SerializationError`.
    returned handle; ids auto-generate (no inventing). Start/end are just the
    un-wired ends, not a property.
 3. `builder.connect(src, tgt, *puzzle.artifacts().values())` (using the handles) to
-   hang a puzzle's pieces on the edge **into** its solve action; add
-   `*puzzle.artifacts(audience=GM).values()` for the answer key;
-   `connect(src, tgt, TextArtifact(…))` for the clue it yields.
+   hang **all** of a puzzle's pieces — prompt and answer key alike — on the edge
+   **into** its solve action; `connect(src, tgt, TextArtifact(…))` for the clue it
+   yields.
 4. Write each puzzle's outgoing clue **by hand** — solutions are not auto-linked.
 5. Branch = a node with several outgoing edges; merge = a node with several
    incoming edges (gated in solve order). Scatter one puzzle's pieces by placing

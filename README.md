@@ -9,11 +9,11 @@ move, …) that consumes its incoming edges and produces its outgoing ones. Node
 may have multiple inputs (e.g. two paths converge) and multiple outputs; start
 and end are simply the nodes with no incoming / no outgoing edges.
 
-An **artifact** is the universal "thing that renders": a serializable, single-audience
-renderable. A **puzzle** is an authoring-time *generator* of artifacts — it emits a
-player set (the pieces players receive) and a game-master set (the same pieces with
-answers revealed). The designer places those artifacts on edges, together or
-scattered across the graph.
+An **artifact** is the universal "thing that renders": a serializable renderable. A
+**puzzle** is an authoring-time *generator* of artifacts — it emits all of its pieces
+(the ones players receive *and* the answer key) as one flat `{name: Artifact}` map.
+The designer places those artifacts on edges, together or scattered across the graph;
+which pieces reach players and which stay in the answer key is a placement decision.
 
 This is a **design-time tool for the hunt's designer** — it helps you create
 puzzles, compose the artifacts they emit into a hunt, and produce printable
@@ -35,7 +35,7 @@ future layer.
 - **`puzzles/`** — the `Puzzle` generator base and the concrete puzzles
   (`CaesarCipherPuzzle`, `CrosswordPuzzle`, `R4DecoderPuzzle`, `RiddlePuzzle`) each
   paired with the artifact type(s) it emits. A puzzle owns its data and emits artifacts via
-  `artifacts(name=None, *, audience=...)`; it has no notion of being "solved" and
+  `artifacts(name=None)`; it has no notion of being "solved" and
   does no answer-checking. The crossword derives its numbering and across/down slots
   from a solution grid, and optional `highlight` cells spell an **emergent word**.
   The R4 decoder is a turning-grille cipher (inline SVG) emitting grid + grille
@@ -43,12 +43,12 @@ future layer.
   artifact per part, so its lines can be scattered across the graph and assembled.
 - **`serialization/`** — round-trip a hunt to/from JSON (stdlib) or YAML
   (optional `[yaml]` extra). Each edge serializes its artifacts as
-  `{type, id, name, audience, payload}`. The Python builder API is primary;
+  `{type, id, name, payload}`. The Python builder API is primary;
   serialization lets a future GUI/web/monitoring layer read and write hunts.
 - **`rendering/`** — format-neutral `RenderFragment`s (HTML or inline SVG, each
   carrying its own CSS) that an artifact emits on demand, plus the output layer:
   `game_master_binder` (a page per action + a production checklist), `player_pages`
-  (one printable per `PLAYER` artifact), and `hunt_bundle` / `write_bundle` to
+  (one printable per artifact), and `hunt_bundle` / `write_bundle` to
   produce a `binder.html` + `players/` folder. Artifact-agnostic: a new artifact
   type needs no binder changes.
 
@@ -59,7 +59,7 @@ future tracking layer, so it can be added without reworking the model.
 ## Quick start
 
 ```python
-from puzzcombinator import Audience, GraphBuilder, CaesarCipherPuzzle, TextArtifact
+from puzzcombinator import GraphBuilder, CaesarCipherPuzzle, TextArtifact
 from puzzcombinator import chronological_order, produced_outputs
 from puzzcombinator import hunt_bundle, write_bundle
 from puzzcombinator.serialization import to_json, from_json
@@ -67,18 +67,13 @@ from puzzcombinator.serialization import to_json, from_json
 cipher = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
 
 # node() returns a handle; capture it and wire edges as you go. The cipher's
-# artifacts ride the edge into the "solve" action — the player sheet and the
-# game-master answer; solving yields the next clue.
+# artifacts ride the edge into the "solve" action — the ciphertext to decode and
+# the revealed answer; solving yields the next clue.
 b = GraphBuilder()
 start = b.node(label="Welcome")
 solve = b.node(action="solve", label="Caesar gate", notes="hide under the doormat")
 end = b.node(label="Treasure")
-b.connect(
-    start,
-    solve,
-    cipher.artifacts("cipher"),
-    cipher.artifacts("cipher", audience=Audience.GAME_MASTER),
-)
+b.connect(start, solve, *cipher.artifacts().values())
 b.connect(solve, end, TextArtifact("Go to the fountain."))
 graph = b.build()
 

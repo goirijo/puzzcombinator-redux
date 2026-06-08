@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from puzzcombinator import (
-    Audience,
     GraphBuilder,
     R4DecoderPuzzle,
     R4PieceArtifact,
@@ -12,11 +11,6 @@ from puzzcombinator import (
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.r4 import _grid_dim
 from puzzcombinator.serialization import from_json, to_json
-
-
-def _markup(puzzle: R4DecoderPuzzle, audience: Audience = Audience.PLAYER) -> str:
-    """All of the puzzle's artifacts for an audience, rendered and concatenated."""
-    return "".join(a.render().markup for a in puzzle.artifacts(audience=audience).values())
 
 
 @pytest.mark.parametrize(
@@ -63,61 +57,61 @@ def test_generated_grille_is_valid_turning_grille() -> None:
     assert len(set(seq)) == len(seq)
 
 
-def test_reveal_flags_control_player_view() -> None:
-    puzzle = R4DecoderPuzzle.from_message(
-        "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
-    )
-    player = _markup(puzzle, Audience.PLAYER)
-    assert "<svg" in player
-    assert "polygon" in player  # orientation marker present
-    assert "<text" not in player  # no letters revealed
-    assert 'fill="black"' not in player  # no shading revealed
-
-    revealed = _markup(
-        R4DecoderPuzzle.from_message(
-            "MEETATDAWN", seed=3, reveal_grid=True, reveal_decoder=True, id="r4"
-        ),
-        Audience.PLAYER,
-    )
-    assert "<text" in revealed
-    assert 'fill="black"' in revealed
-
-
-def test_game_master_always_reveals_everything() -> None:
-    # Even with both player flags off, the game master sees letters, shading, answer.
-    puzzle = R4DecoderPuzzle.from_message(
-        "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
-    )
-    gm = _markup(puzzle, Audience.GAME_MASTER)
-    assert "<text" in gm
-    assert 'fill="black"' in gm
-    assert "MEETATDAWN" in gm
-    assert "Reading order" in gm
-
-
-def test_piece_artifacts_are_standalone_svg_documents() -> None:
+def test_svg_pieces_are_inline_svg_sheets() -> None:
     puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, id="r4")
     pieces = puzzle.artifacts()
-    assert set(pieces) == {"grid", "grille"}
-    for piece in pieces.values():
-        svg = piece.render().markup
-        assert svg.startswith("<svg")
-        assert 'xmlns="http://www.w3.org/2000/svg"' in svg
-        assert svg.endswith("</svg>")
-    # Player view honours reveal flags; game master reveals everything.
-    blank = R4DecoderPuzzle.from_message(
-        "MEETATDAWN", seed=3, reveal_grid=False, reveal_decoder=False, id="r4"
-    )
-    assert "<text" not in blank.artifacts("grid").render().markup
-    assert "<text" in blank.artifacts("grid", audience=Audience.GAME_MASTER).render().markup
+    assert set(pieces) == {
+        "text_blank",
+        "grille_blank",
+        "solution_grille",
+        "solution_grid",
+        "solution_text",
+    }
+    for name in ("text_blank", "grille_blank", "solution_grille", "solution_grid"):
+        fragment = pieces[name].render()
+        assert fragment.kind == "svg"
+        assert fragment.markup.startswith("<svg")
+        assert 'xmlns="http://www.w3.org/2000/svg"' in fragment.markup
+        assert fragment.markup.endswith("</svg>")
+
+
+def test_blanks_are_empty_and_identical() -> None:
+    puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, id="r4")
+    text_blank = puzzle.artifacts("text_blank").render().markup
+    grille_blank = puzzle.artifacts("grille_blank").render().markup
+    # the two starting sheets are identical empty grids (same drawing, different name)
+    assert text_blank == grille_blank
+    assert "<text" not in text_blank  # blank — no letters
+    assert 'fill="black"' not in text_blank  # blank — no shading
+
+
+def test_solution_grid_is_the_filled_grid() -> None:
+    puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, id="r4")
+    solution = puzzle.artifacts("solution_grid").render().markup
+    assert puzzle.artifacts("solution_grid").id == "r4-solution_grid"
+    # the orientation marker is on every sheet, but only the filled grid draws letters
+    assert "polygon" in solution
+    assert solution.count("<text") == puzzle.size * puzzle.size  # every cell filled
+
+
+def test_solution_text_carries_the_decoded_message() -> None:
+    puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, id="r4")
+    text = puzzle.artifacts("solution_text")
+    assert text.render().kind == "html"
+    assert puzzle.message in text.text
+
+
+def test_solution_grille_honours_reveal_decoder() -> None:
+    shaded = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, reveal_decoder=True, id="r4")
+    blank = R4DecoderPuzzle.from_message("MEETATDAWN", seed=3, reveal_decoder=False, id="r4")
+    assert 'fill="black"' in shaded.artifacts("solution_grille").render().markup
+    assert 'fill="black"' not in blank.artifacts("solution_grille").render().markup
 
 
 def test_piece_artifact_payload_roundtrip() -> None:
-    puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=4, reveal_grid=False, id="r4")
-    art = puzzle.artifacts("grid")
-    rebuilt = R4PieceArtifact.from_payload(
-        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
-    )
+    puzzle = R4DecoderPuzzle.from_message("MEETATDAWN", seed=4, id="r4")
+    art = puzzle.artifacts("solution_grid")
+    rebuilt = R4PieceArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
 
 
@@ -128,12 +122,7 @@ def test_graph_json_roundtrip() -> None:
     solve = builder.node("solve", action="solve", label="The grille")
     end = builder.node("end")
     graph = (
-        builder.connect(
-            start,
-            solve,
-            *puzzle.artifacts().values(),
-            *puzzle.artifacts(audience=Audience.GAME_MASTER).values(),
-        )
+        builder.connect(start, solve, *puzzle.artifacts().values())
         .connect(solve, end, TextArtifact("The message is FIND THE KEY"))
         .build()
     )

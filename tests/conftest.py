@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from puzzcombinator import (
-    Audience,
     CaesarCipherPuzzle,
     Graph,
     GraphBuilder,
@@ -41,8 +40,8 @@ def converging_hunt() -> Graph:
 def cipher_hunt() -> Graph:
     """A linear hunt: start -> solve -> end, with a Caesar puzzle on the first edge.
 
-    The first edge carries the cipher's player artifact *and* its game-master
-    artifact (the revealed answer); the second carries a plain text clue.
+    The first edge carries all of the cipher's artifacts (the ciphertext to decode
+    *and* the revealed answer); the second carries a plain text clue.
     """
     cipher = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
     builder = GraphBuilder()
@@ -52,12 +51,7 @@ def cipher_hunt() -> Graph:
     )
     end = builder.node("end", label="Treasure")
     return (
-        builder.connect(
-            start,
-            solve,
-            cipher.artifacts("cipher"),
-            cipher.artifacts("cipher", audience=Audience.GAME_MASTER),
-        )
+        builder.connect(start, solve, *cipher.artifacts().values())
         .connect(solve, end, TextArtifact("Go to the fountain.", id="fountain"))
         .build()
     )

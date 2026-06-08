@@ -9,11 +9,10 @@ from puzzcombinator.rendering.binder import (
     write_bundle,
 )
 from puzzcombinator.rendering.export import html_document, write_html
-from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
     "Artifact",
-    "Audience",
     "RenderFragment",
     "game_master_binder",
     "html_document",

@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from puzzcombinator.artifacts.registry import build_artifact
+from puzzcombinator.artifacts.registry import artifact_from_dict, artifact_to_dict
 from puzzcombinator.core.graph import Edge, Graph, Node
 from puzzcombinator.errors import SerializationError
-from puzzcombinator.rendering.fragment import Artifact, Audience
 from puzzcombinator.serialization.schema import (
     KEY_EDGES,
     KEY_GRAPH,
@@ -21,26 +20,6 @@ from puzzcombinator.serialization.schema import (
     KEY_SCHEMA_VERSION,
     SCHEMA_VERSION,
 )
-
-
-def _artifact_to_dict(artifact: Artifact) -> dict[str, Any]:
-    return {
-        "type": artifact.type_name,
-        "id": artifact.id,
-        "name": artifact.name,
-        "audience": artifact.audience.value,
-        "payload": artifact.to_payload(),
-    }
-
-
-def _artifact_from_dict(data: dict[str, Any]) -> Artifact:
-    return build_artifact(
-        data["type"],
-        name=data["name"],
-        audience=Audience(data["audience"]),
-        id=data["id"],
-        payload=data["payload"],
-    )
 
 
 def _node_to_dict(node: Node) -> dict[str, Any]:
@@ -66,7 +45,7 @@ def _edge_to_dict(edge: Edge) -> dict[str, Any]:
         "id": edge.id,
         "source": edge.source,
         "target": edge.target,
-        "content": [_artifact_to_dict(a) for a in edge.content],
+        "content": [artifact_to_dict(a) for a in edge.content],
     }
 
 
@@ -75,7 +54,7 @@ def _edge_from_dict(data: dict[str, Any]) -> Edge:
         id=data["id"],
         source=data["source"],
         target=data["target"],
-        content=tuple(_artifact_from_dict(d) for d in data.get("content", [])),
+        content=tuple(artifact_from_dict(d) for d in data.get("content", [])),
     )
 
 

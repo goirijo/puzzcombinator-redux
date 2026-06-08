@@ -8,9 +8,9 @@ usual crossword terms ("1 Across", "2 Down").
 A treasure-hunt crossword usually *reveals* something: pass ``highlight`` cells
 and the letters at those cells, read in order, form the **emergent word** — the
 clue the designer then wires onto this node's outgoing edge. The
-:class:`CrosswordPuzzle` generator emits a :class:`CrosswordArtifact` that only
-*represents* itself (a numbered blank grid + clues for players; the filled grid,
-answers, and emergent word for the game master). It does no answer-checking.
+:class:`CrosswordPuzzle` generator emits two :class:`CrosswordArtifact`\\ s —
+``crossword`` (a numbered blank grid + clues) and ``solution`` (the filled grid,
+answers, and emergent word). It does no answer-checking.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any, NamedTuple
 from puzzcombinator.artifacts.registry import register_artifact
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 #: The character marking a black (blocked) square in a solution grid.
 BLOCK = "#"
@@ -104,8 +104,8 @@ def _analyze(
 
 @register_artifact
 class CrosswordArtifact(Artifact):
-    """A crossword grid + clues. ``reveal`` switches between the blank player sheet
-    and the game master's filled grid, answers, and emergent word."""
+    """A crossword grid + clues. ``reveal`` switches between the blank sheet (numbered
+    grid + clue enumerations) and the filled grid with answers and emergent word."""
 
     type_name = "crossword"
 
@@ -118,10 +118,9 @@ class CrosswordArtifact(Artifact):
         highlight: list[tuple[int, int]],
         reveal: bool,
         name: str = "crossword",
-        audience: Audience = Audience.PLAYER,
         id: str | None = None,
     ) -> None:
-        super().__init__(name=name, audience=audience, id=id)
+        super().__init__(name=name, id=id)
         self.solution = solution
         self.across = across
         self.down = down
@@ -143,9 +142,7 @@ class CrosswordArtifact(Artifact):
         }
 
     @classmethod
-    def from_payload(
-        cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]
-    ) -> CrosswordArtifact:
+    def from_payload(cls, *, name: str, id: str, payload: dict[str, Any]) -> CrosswordArtifact:
         return cls(
             solution=payload["solution"],
             across={int(k): v for k, v in payload.get("across", {}).items()},
@@ -153,7 +150,6 @@ class CrosswordArtifact(Artifact):
             highlight=[(int(r), int(c)) for r, c in payload.get("highlight", [])],
             reveal=payload["reveal"],
             name=name,
-            audience=audience,
             id=id,
         )
 
@@ -270,16 +266,21 @@ class CrosswordPuzzle(Puzzle):
             if grid[r][c] == BLOCK:
                 raise PuzzleError(f"highlight cell {(r, c)} is a block")
 
-    def _artifacts(self, audience: Audience) -> list[Artifact]:
-        return [
-            CrosswordArtifact(
+    def _artifacts(self) -> list[Artifact]:
+        """The blank player grid plus the revealed solution (filled grid + answers)."""
+
+        def grid(*, reveal: bool, name: str) -> CrosswordArtifact:
+            return CrosswordArtifact(
                 solution=list(self.solution),
                 across=dict(self.across),
                 down=dict(self.down),
                 highlight=list(self.highlight),
-                reveal=audience is Audience.GAME_MASTER,
-                name="crossword",
-                audience=audience,
-                id=self.artifact_id("crossword"),
+                reveal=reveal,
+                name=name,
+                id=self.artifact_id(name),
             )
+
+        return [
+            grid(reveal=False, name="crossword"),
+            grid(reveal=True, name="solution"),
         ]

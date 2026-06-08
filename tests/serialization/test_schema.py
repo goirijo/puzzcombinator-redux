@@ -14,11 +14,11 @@ def test_envelope_has_version_and_keys(cipher_hunt: Graph) -> None:
     node = next(n for n in data["graph"]["nodes"] if n["id"] == "solve")
     assert node["action"] == "solve"
     assert node["notes"] == "hide under the doormat"
-    # An edge's content is a list of artifact envelopes.
+    # An edge's content is a list of artifact envelopes — audience-free.
     edge = next(e for e in data["graph"]["edges"] if e["id"] == "start->solve")
     assert edge["content"][0]["type"] == "caesar_cipher"
-    assert edge["content"][0]["name"] == "cipher"
-    assert {a["audience"] for a in edge["content"]} == {"PLAYER", "GAME_MASTER"}
+    assert {a["name"] for a in edge["content"]} == {"cipher", "shift", "solution"}
+    assert all("audience" not in a for a in edge["content"])
 
 
 def test_unsupported_version_raises(cipher_hunt: Graph) -> None:

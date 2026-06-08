@@ -1,11 +1,13 @@
 """The puzzle abstraction — an authoring-time *generator* of artifacts.
 
 A :class:`Puzzle` is a design-time helper the designer specializes to *represent*
-a puzzle: it owns the puzzle's data and emits the :class:`Artifact`\\ s that carry
-it into the hunt — a player set (the pieces players physically receive) and a
-game-master set (the same pieces with answers revealed, plus any answer-key
-extras). The designer then places those artifacts on edges, together or scattered
-across the graph.
+a puzzle: it owns the puzzle's data and emits **all** the :class:`Artifact`\\ s that
+make it up — the pieces players receive *and* the answer key — as one flat
+``{name: Artifact}`` map. The designer then places those artifacts on edges,
+together or scattered across the graph. A puzzle makes no routing decision: whether
+a given piece is handed to a player or only kept for the answer key is a
+**placement** decision a higher layer makes, not something the generator bakes in
+(so the same answer artifact can be routed however the designer wants).
 
 A puzzle is **not** stored in the graph and is **not** serialized — only its
 emitted artifacts are (each round-trips through the artifact registry). It knows
@@ -25,7 +27,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from puzzcombinator.errors import PuzzleError
-from puzzcombinator.rendering.fragment import Artifact, Audience
+from puzzcombinator.rendering.fragment import Artifact
 
 
 class Puzzle(ABC):
@@ -45,24 +47,20 @@ class Puzzle(ABC):
         return f"{self.id}-{name}"
 
     @abstractmethod
-    def _artifacts(self, audience: Audience) -> list[Artifact]:
-        """Build this puzzle's artifacts for one audience (each with name/id set)."""
+    def _artifacts(self) -> list[Artifact]:
+        """Build all of this puzzle's artifacts (each with name/id set)."""
 
-    def artifacts(
-        self, name: str | None = None, *, audience: Audience = Audience.PLAYER
-    ) -> dict[str, Artifact] | Artifact:
-        """This puzzle's artifacts for ``audience``, keyed by name.
+    def artifacts(self, name: str | None = None) -> dict[str, Artifact] | Artifact:
+        """This puzzle's artifacts, keyed by name.
 
-        With no ``name`` returns the whole ``{name: Artifact}`` map (player by
-        default); pass a ``name`` to get a single artifact — the idiom for
-        scattering one puzzle's pieces across different edges.
+        With no ``name`` returns the whole ``{name: Artifact}`` map; pass a
+        ``name`` to get a single artifact — the idiom for scattering one puzzle's
+        pieces across different edges.
         """
-        mapping = {a.name: a for a in self._artifacts(audience)}
+        mapping = {a.name: a for a in self._artifacts()}
         if name is None:
             return mapping
         try:
             return mapping[name]
         except KeyError:
-            raise PuzzleError(
-                f"no artifact named {name!r} for {audience.value}; have {sorted(mapping)}"
-            ) from None
+            raise PuzzleError(f"no artifact named {name!r}; have {sorted(mapping)}") from None

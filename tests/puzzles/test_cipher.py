@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from puzzcombinator import Audience, CaesarCipherPuzzle, CipherArtifact
+import pytest
+
+from puzzcombinator import CaesarCipherPuzzle, CipherArtifact
 from puzzcombinator.puzzles.cipher import _caesar
 
 
@@ -32,24 +34,51 @@ def test_omitted_id_is_auto_generated_and_distinct() -> None:
 
 def test_artifacts_named_and_id_prefixed() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
-    player = puzzle.artifacts("cipher")
-    assert player.name == "cipher"
-    assert player.id == "c1-cipher"
+    assert set(puzzle.artifacts()) == {"cipher", "shift", "solution"}
+    cipher = puzzle.artifacts("cipher")
+    assert cipher.name == "cipher"
+    assert cipher.id == "c1-cipher"
 
 
-def test_player_artifact_hides_solution_game_master_reveals_it() -> None:
+def test_three_pieces_split_prompt_shift_and_solution() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
-    assert puzzle.artifacts("cipher").solution is None
-    gm = puzzle.artifacts("cipher", audience=Audience.GAME_MASTER)
-    assert gm.solution == "FOUNTAIN"
+    # The "cipher" piece is the prompt to decode — neither shift nor answer baked in.
+    cipher = puzzle.artifacts("cipher")
+    assert (cipher.shift, cipher.solution) == (None, None)
+    # The "shift" piece carries only the Caesar shift.
+    shift = puzzle.artifacts("shift")
+    assert (shift.shift, shift.solution) == (3, None)
+    assert shift.id == "c1-shift"
+    # The "solution" piece carries only the decoded answer.
+    solution = puzzle.artifacts("solution")
+    assert solution.solution == "FOUNTAIN"
+    assert solution.id == "c1-solution"
+
+
+def test_each_piece_renders_only_its_own_content() -> None:
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
+    cipher = puzzle.artifacts("cipher").render().markup
+    shift = puzzle.artifacts("shift").render().markup
+    solution = puzzle.artifacts("solution").render().markup
+    # the prompt shows the ciphertext but neither the shift nor the answer
+    assert "IRXQWDLQ" in cipher and "FOUNTAIN" not in cipher
+    # the shift piece shows the shift but not the answer
+    assert "3" in shift and "FOUNTAIN" not in shift
+    # the solution piece shows the answer
+    assert "FOUNTAIN" in solution
+
+
+def test_artifacts_drops_audience_kwarg() -> None:
+    # The audience split is gone: artifacts() no longer accepts an audience.
+    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
+    with pytest.raises(TypeError):
+        puzzle.artifacts(audience="anything")  # type: ignore[call-arg]
 
 
 def test_artifact_payload_roundtrip() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="CODE", shift=4, id="c1")
-    art = puzzle.artifacts("cipher", audience=Audience.GAME_MASTER)
-    rebuilt = CipherArtifact.from_payload(
-        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
-    )
+    art = puzzle.artifacts("solution")
+    rebuilt = CipherArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
 
 

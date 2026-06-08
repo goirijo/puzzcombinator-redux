@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from puzzcombinator import Audience, RiddleLineArtifact, RiddlePuzzle
+from puzzcombinator import RiddleLineArtifact, RiddlePuzzle
 from puzzcombinator.errors import PuzzleError
 
 
@@ -26,29 +26,40 @@ def test_construction() -> None:
     assert puzzle.parts == parts
 
 
-def test_player_artifacts_one_per_part_for_scattering() -> None:
+def test_line_artifacts_one_per_part_for_scattering() -> None:
     puzzle = RiddlePuzzle("r1", riddle=parts, answer=answer)
     artifacts = puzzle.artifacts()
-    assert list(artifacts) == [f"line{i}" for i in range(len(parts))]
-    # the answer must never leak onto a player sheet
-    assert all(answer not in a.render().markup for a in artifacts.values())
+    # One artifact per line (scatterable), then the assembled full text, then the answer.
+    assert list(artifacts) == [f"line{i}" for i in range(len(parts))] + ["full_text", "answer"]
+    # the answer appears only on the answer piece, never on a line sheet
+    lines = [a for name, a in artifacts.items() if name.startswith("line")]
+    assert all(answer not in a.render().markup for a in lines)
     # each line is addressable on its own (the scatter idiom)
     assert puzzle.artifacts("line1").id == "r1-line1"
 
 
-def test_game_master_set_adds_the_answer() -> None:
+def test_full_text_joins_every_line() -> None:
     puzzle = RiddlePuzzle("r1", riddle=parts, answer=answer)
-    gm = puzzle.artifacts(audience=Audience.GAME_MASTER)
-    assert "answer" in gm
-    assert answer in gm["answer"].render().markup
+    full = puzzle.artifacts("full_text")
+    assert full.id == "r1-full_text"
+    assert full.text == "\n".join(parts)
+    # the assembled riddle carries every line but not the answer
+    assert all(part in full.text for part in parts)
+    assert answer not in full.render().markup
+
+
+def test_artifacts_include_the_answer() -> None:
+    puzzle = RiddlePuzzle("r1", riddle=parts, answer=answer)
+    artifacts = puzzle.artifacts()
+    assert "answer" in artifacts
+    assert answer in artifacts["answer"].render().markup
+    assert artifacts["answer"].id == "r1-answer"
 
 
 def test_line_artifact_payload_roundtrip() -> None:
     puzzle = RiddlePuzzle("r1", riddle=parts, answer=answer)
     art = puzzle.artifacts("line0")
-    rebuilt = RiddleLineArtifact.from_payload(
-        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
-    )
+    rebuilt = RiddleLineArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
 
 

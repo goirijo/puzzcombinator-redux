@@ -27,7 +27,7 @@ from puzzcombinator.artifacts.registry import register_artifact
 from puzzcombinator.artifacts.text import TextArtifact
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.base import Puzzle
-from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 OPEN = "O"
 SHADED = "#"
@@ -167,8 +167,7 @@ def _svg(
 class R4PieceArtifact(Artifact):
     """One printable R4 sheet — the letter grid or the decoder grille — as inline
     SVG. Renders exactly what its payload specifies (letters and/or shaded cells),
-    so the generator bakes the player (blank/revealed) or game-master (solved) view
-    into each instance."""
+    so the generator bakes the blank or revealed view into each instance."""
 
     type_name = "r4_piece"
 
@@ -179,10 +178,9 @@ class R4PieceArtifact(Artifact):
         letters: list[str] | None = None,
         shaded: list[tuple[int, int]] | None = None,
         name: str,
-        audience: Audience = Audience.PLAYER,
         id: str | None = None,
     ) -> None:
-        super().__init__(name=name, audience=audience, id=id)
+        super().__init__(name=name, id=id)
         self.dim = dim
         self.letters = letters
         self.shaded = [(int(r), int(c)) for r, c in shaded] if shaded is not None else None
@@ -195,15 +193,12 @@ class R4PieceArtifact(Artifact):
         }
 
     @classmethod
-    def from_payload(
-        cls, *, name: str, audience: Audience, id: str, payload: dict[str, Any]
-    ) -> R4PieceArtifact:
+    def from_payload(cls, *, name: str, id: str, payload: dict[str, Any]) -> R4PieceArtifact:
         return cls(
             dim=payload["dim"],
             letters=payload.get("letters"),
             shaded=payload.get("shaded"),
             name=name,
-            audience=audience,
             id=id,
         )
 
@@ -227,16 +222,13 @@ class R4DecoderPuzzle(Puzzle):
         grid: Iterable[str],
         grille: Iterable[str],
         message_length: int,
-        reveal_grid: bool = True,
         reveal_decoder: bool = True,
     ) -> None:
         super().__init__(id)
         self.grid: list[str] = [row.upper() for row in grid]
         self.grille: list[str] = list(grille)
         self.message_length = message_length
-        #: Whether the player view shows the grid's letters (else a blank grid to fill).
-        self.reveal_grid = reveal_grid
-        #: Whether the player view shows the decoder's shading (else blank, to shade in).
+        #: Whether the decoder ``grille`` sheet shows its shading (else blank, to shade in).
         self.reveal_decoder = reveal_decoder
         self._validate()
 
@@ -247,7 +239,6 @@ class R4DecoderPuzzle(Puzzle):
         *,
         size: int | None = None,
         seed: int | None = None,
-        reveal_grid: bool = True,
         reveal_decoder: bool = True,
         id: str | None = None,
     ) -> R4DecoderPuzzle:
@@ -268,7 +259,6 @@ class R4DecoderPuzzle(Puzzle):
             grid=grid,
             grille=grille,
             message_length=len(cleaned),
-            reveal_grid=reveal_grid,
             reveal_decoder=reveal_decoder,
         )
 
@@ -352,41 +342,38 @@ class R4DecoderPuzzle(Puzzle):
         dim = self.size
         return [(r, c) for r in range(dim) for c in range(dim) if self.grille[r][c] == SHADED]
 
-    def _artifacts(self, audience: Audience) -> list[Artifact]:
-        """Grid and grille as separate printable sheets (the grille is cut out);
-        the game-master set adds a text solution (message + reading order)."""
-        gm = audience is Audience.GAME_MASTER
+    def _artifacts(self) -> list[Artifact]:
+        """Five pieces, named ``{role}_{form}``.
+
+        Two identical blank SVG grids the player works on — ``text_blank`` (write the
+        letters in) and ``grille_blank`` (turn into the decoder, by cutting or blocking
+        its open cells) — plus the answer key: ``solution_grille`` (which cells are
+        open, honouring ``reveal_decoder``), ``solution_grid`` (the same grid with its
+        letters filled in), and ``solution_text`` (the decoded message and its reading
+        order)."""
         dim = self.size
-        grid_letters = self.grid if (gm or self.reveal_grid) else None
-        grille_shaded = self._shaded_cells() if (gm or self.reveal_decoder) else None
-        out: list[Artifact] = [
-            R4PieceArtifact(
-                dim=dim,
-                letters=grid_letters,
-                name="grid",
-                audience=audience,
-                id=self.artifact_id("grid"),
-            ),
+        grille_shaded = self._shaded_cells() if self.reveal_decoder else None
+        order = " ".join(f"({r},{c})" for r, c in self.reading_sequence[: self.message_length])
+        return [
+            R4PieceArtifact(dim=dim, name="text_blank", id=self.artifact_id("text_blank")),
+            R4PieceArtifact(dim=dim, name="grille_blank", id=self.artifact_id("grille_blank")),
             R4PieceArtifact(
                 dim=dim,
                 shaded=grille_shaded,
-                name="grille",
-                audience=audience,
-                id=self.artifact_id("grille"),
+                name="solution_grille",
+                id=self.artifact_id("solution_grille"),
+            ),
+            R4PieceArtifact(
+                dim=dim,
+                letters=self.grid,
+                name="solution_grid",
+                id=self.artifact_id("solution_grid"),
+            ),
+            TextArtifact(
+                f"Message: {self.message}\nReading order: {order}",
+                title="R4 solution",
+                monospace=True,
+                name="solution_text",
+                id=self.artifact_id("solution_text"),
             ),
         ]
-        if gm:
-            order = " -> ".join(
-                f"({r},{c})" for r, c in self.reading_sequence[: self.message_length]
-            )
-            out.append(
-                TextArtifact(
-                    f"Message: {self.message}\nReading order: {order}",
-                    title="R4 solution",
-                    monospace=True,
-                    name="solution",
-                    audience=audience,
-                    id=self.artifact_id("solution"),
-                )
-            )
-        return out

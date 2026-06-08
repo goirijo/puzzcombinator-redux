@@ -110,22 +110,16 @@ class Graph:
         self._check_acyclic()
 
     def _check_unique_artifact_ids(self) -> None:
-        """Reject two player artifacts sharing an id.
+        """Reject two artifacts sharing an id.
 
-        A player artifact's id names its printable output file, so a collision
-        would silently overwrite one printable with another. (This stays
-        artifact-agnostic — it only reads the ``Artifact`` ABC's ``id`` and
-        ``audience``. Game-master artifacts render inline in the binder and name no
-        file, so they're exempt.) Edges and their content are visited in order for
-        a deterministic message.
+        An artifact's id names its printable output file, so a collision would
+        silently overwrite one printable with another. (This stays
+        artifact-agnostic — it only reads the ``Artifact`` ABC's ``id``.) Edges and
+        their content are visited in order for a deterministic message.
         """
-        from puzzcombinator.rendering.fragment import Audience
-
         seen: set[str] = set()
         for edge_id in sorted(self.edges):
             for artifact in self.edges[edge_id].content:
-                if artifact.audience is not Audience.PLAYER:
-                    continue
                 if artifact.id in seen:
                     raise GraphError(f"duplicate artifact id {artifact.id!r}")
                 seen.add(artifact.id)

@@ -18,7 +18,6 @@ from __future__ import annotations
 import pytest
 
 from puzzcombinator import (
-    Audience,
     CaesarCipherPuzzle,
     Graph,
     game_master_binder,
@@ -42,7 +41,7 @@ def test_player_artifact_shows_ciphertext_not_answer() -> None:
 
 def test_game_master_artifact_shows_solution() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
-    fragment = puzzle.artifacts("cipher", audience=Audience.GAME_MASTER).render()
+    fragment = puzzle.artifacts("solution").render()
     assert "FOUNTAIN" in fragment.markup
 
 
@@ -86,12 +85,7 @@ def test_multi_piece_puzzle_svg_player_pages() -> None:
     builder = GraphBuilder()
     find = builder.node("find", action="find")
     solve = builder.node("solve", action="solve")
-    graph = builder.connect(
-        find,
-        solve,
-        *r4.artifacts().values(),
-        *r4.artifacts(audience=Audience.GAME_MASTER).values(),
-    ).build()
+    graph = builder.connect(find, solve, *r4.artifacts().values()).build()
     pages = player_pages(graph)
     # Two player sheets, one per piece; the game-master "solution" makes no file.
     assert set(pages) == {"players/grille-grid.svg", "players/grille-grille.svg"}
@@ -106,8 +100,7 @@ def test_binder_without_artifacts_has_no_checklist() -> None:
     builder = GraphBuilder()
     a = builder.node("a")
     b = builder.node("b")
-    # Only a game-master artifact: nothing for players to print.
-    graph = builder.connect(a, b, TextArtifact("go", audience=Audience.GAME_MASTER)).build()
+    graph = builder.connect(a, b, TextArtifact("go")).build()
     binder = game_master_binder(graph)
     assert "Production checklist" not in binder
 

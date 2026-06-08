@@ -7,9 +7,8 @@ binder and prints sharply).
 An :class:`Artifact` is the universal **thing that renders** carried on a graph
 edge: a registry-backed, serializable renderable (a clue, a cipher, a grid, a pair
 of coordinates). It owns its type-specific data and turns it into a
-:class:`RenderFragment` on demand, knowing nothing about audience. Puzzles (in the
-``puzzles`` layer) are authoring-time *generators* of artifacts; the graph only ever
-holds artifacts.
+:class:`RenderFragment` on demand. Puzzles (in the ``puzzles`` layer) are
+authoring-time *generators* of artifacts; the graph only ever holds artifacts.
 
 This module is dependency-free (stdlib only) so every other layer can import it
 without an import cycle — concrete artifact types live in the ``puzzles`` layer.
@@ -20,15 +19,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, ClassVar, Literal
-
-
-class Audience(Enum):
-    """Who a rendered fragment is intended for."""
-
-    PLAYER = "PLAYER"
-    GAME_MASTER = "GAME_MASTER"
 
 
 @dataclass(frozen=True)
@@ -61,9 +52,9 @@ class Artifact(ABC):
 
     An artifact is a *pure renderer of its own payload*: :meth:`render` reads the
     type-specific data and returns a :class:`RenderFragment`, with no branching on
-    who's asking. An artifact knows nothing about audience — whether a piece goes
-    to the player or only into the answer key is a *placement* decision made by a
-    higher layer, not a property of the thing that renders.
+    who's asking. Whether a piece goes to the player or only into the answer key is a
+    *placement* decision made by a higher layer, not a property of the thing that
+    renders.
 
     Two envelope fields sit beside the type-specific ``payload``:
 

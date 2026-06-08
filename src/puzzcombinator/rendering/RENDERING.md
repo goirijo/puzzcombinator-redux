@@ -7,8 +7,9 @@ produces it, and the ready-made factories + file writers built on top.
 
 > Companion to `artifacts/ARTIFACTS.md` (which covers the concrete artifact *types*).
 > This guide covers *how* an artifact turns into markup and a file. The whole-hunt
-> output layer — `binder.py` — is **stale / not yet migrated** (it still reads the
-> removed `artifact.audience`); ignore it as a reference until its phase lands.
+> output layer — `binder.py` — is **stale / not yet migrated**: its
+> player-vs-answer-key routing hasn't been rebuilt and its tests are skipped. Ignore
+> it as a reference until its phase lands.
 
 ## `RenderFragment` — the format-neutral primitive
 
@@ -54,13 +55,8 @@ about the right drawing medium, recorded as `kind`.
 
 `Artifact` (also in `fragment.py`) is the universal *thing that renders* carried on a
 graph edge: a registry-backed, serializable renderable that turns its own payload into a
-`RenderFragment` via a pure `render()`. It knows nothing about audience — see
-`ARTIFACTS.md` for the full type/registry/serialization story.
-
-> `Audience` (PLAYER / GAME_MASTER) still lives in `fragment.py`, but it is **vestigial
-> for artifacts** post-refactor: artifacts are audience-free, and player-vs-GM is a
-> placement decision. The enum survives only because the not-yet-migrated `puzzles/` and
-> `binder.py` still reference it; expect it to move or change when those phases land.
+`RenderFragment` via a pure `render()` — see `ARTIFACTS.md` for the full
+type/registry/serialization story.
 
 ## `presets.py` — fragment factories (the easy path)
 

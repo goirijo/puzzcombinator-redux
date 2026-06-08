@@ -41,11 +41,10 @@ from puzzcombinator.rendering.binder import (
     player_pages,
     write_bundle,
 )
-from puzzcombinator.rendering.fragment import Artifact, Audience, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
     "Artifact",
-    "Audience",
     "CaesarCipherPuzzle",
     "CipherArtifact",
     "CrosswordArtifact",

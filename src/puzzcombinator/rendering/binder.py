@@ -33,7 +33,7 @@ from pathlib import Path
 
 from puzzcombinator.core.graph import Graph, Node
 from puzzcombinator.core.ordering import chronological_order
-from puzzcombinator.rendering.fragment import Artifact, Audience
+from puzzcombinator.rendering.fragment import Artifact
 
 # Generic binder layout only — never artifact-specific. Artifacts carry their own
 # CSS via RenderFragment.styles, which the document aggregates.
@@ -113,8 +113,6 @@ def _checklist(graph: Graph, order: list[Node]) -> str:
     for node in order:
         for edge in graph.outgoing(node.id):
             for artifact in edge.content:
-                if artifact.audience is not Audience.PLAYER:
-                    continue
                 path = _artifact_path(artifact.id, artifact.render().kind)
                 items.append(f"<li>Print &amp; place <code>{_esc(path)}</code></li>")
         if node.notes:
@@ -155,8 +153,6 @@ def player_pages(graph: Graph) -> dict[str, str]:
     pages: dict[str, str] = {}
     for edge in graph.edges.values():
         for artifact in edge.content:
-            if artifact.audience is not Audience.PLAYER:
-                continue
             fragment = artifact.render()
             path = _artifact_path(artifact.id, fragment.kind)
             if fragment.kind == "svg":

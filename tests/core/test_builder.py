@@ -86,7 +86,7 @@ def test_connect_puts_artifacts_on_edge() -> None:
     b = builder.node("b")
     graph = builder.connect(a, b, *cipher.artifacts().values()).build()
     content = graph.edges["a->b"].content
-    assert [art.name for art in content] == ["cipher"]
+    assert [art.name for art in content] == ["cipher", "shift", "solution"]
     assert content[0].ciphertext == cipher.ciphertext
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from puzzcombinator import (
-    Audience,
     CrosswordArtifact,
     CrosswordPuzzle,
     GraphBuilder,
@@ -45,7 +44,14 @@ def test_lowercase_grid_is_normalized() -> None:
     assert puzzle.solution == ["CAT", "A#O", "RYE"]
 
 
-def test_player_artifact_hides_answers() -> None:
+def test_artifacts_are_blank_grid_and_solution() -> None:
+    puzzle = _puzzle()
+    assert set(puzzle.artifacts()) == {"crossword", "solution"}
+    assert puzzle.artifacts("crossword").id == "cw1-crossword"
+    assert puzzle.artifacts("solution").id == "cw1-solution"
+
+
+def test_crossword_artifact_hides_answers() -> None:
     markup = _puzzle().artifacts("crossword").render().markup
     assert "Feline" in markup
     assert '<span class="len">(3)</span>' in markup  # enumeration shown
@@ -53,8 +59,8 @@ def test_player_artifact_hides_answers() -> None:
     assert "Hidden word" not in markup
 
 
-def test_game_master_artifact_shows_answers() -> None:
-    markup = _puzzle().artifacts("crossword", audience=Audience.GAME_MASTER).render().markup
+def test_solution_artifact_shows_answers() -> None:
+    markup = _puzzle().artifacts("solution").render().markup
     assert '<span class="num">1</span>C' in markup  # filled cell
     assert '<span class="answer">CAT</span>' in markup
     assert "Hidden word" in markup
@@ -62,10 +68,8 @@ def test_game_master_artifact_shows_answers() -> None:
 
 
 def test_artifact_payload_roundtrip() -> None:
-    art = _puzzle().artifacts("crossword", audience=Audience.GAME_MASTER)
-    rebuilt = CrosswordArtifact.from_payload(
-        name=art.name, audience=art.audience, id=art.id, payload=art.to_payload()
-    )
+    art = _puzzle().artifacts("solution")
+    rebuilt = CrosswordArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
     assert rebuilt.emergent_word == "COY"
 
@@ -77,12 +81,7 @@ def test_graph_json_roundtrip() -> None:
     solve = builder.node("solve", action="solve", label="The grid")
     end = builder.node("end")
     graph = (
-        builder.connect(
-            start,
-            solve,
-            puzzle.artifacts("crossword"),
-            puzzle.artifacts("crossword", audience=Audience.GAME_MASTER),
-        )
+        builder.connect(start, solve, *puzzle.artifacts().values())
         .connect(solve, end, TextArtifact("The word is COY"))
         .build()
     )
