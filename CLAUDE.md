@@ -33,7 +33,7 @@ change small.
 **Only `rendering/binder.py` remains stale** — the **last** layer to migrate (plus
 its skipped tests in `tests/rendering/test_binder.py` + `tests/test_e2e.py`, and the
 `examples/hunts/mock_hunt/` example). It must not constrain the layers below it —
-break it freely. Everything else is green: `pytest` is **132 passed / 10 skipped**,
+break it freely. Everything else is green: `pytest` is **136 passed / 10 skipped**,
 `ruff` + `mypy` clean.
 
 ## The core model (artifact-on-edge, rearchitected 2026-06-04)
@@ -53,9 +53,10 @@ artifacts**:
   stored on edges and *not* serialized. `puzzle.artifacts(name=None)` returns a
   `{name: Artifact}` map (or one artifact by name) — *all* the pieces the puzzle is
   made of, prompt and answer key alike. The designer places those artifacts on edges.
-  A multi-piece puzzle (riddle lines, R4 grid+grille, cipher prompt+solution) is just
-  a generator that emits several artifacts — placeable together or **scattered**
-  across edges and assembled at a merge.
+  A multi-piece puzzle (riddle lines + full text, R4's blanks/grille/grid/text,
+  cipher's ciphertext/shift/solution) is just a generator that emits several
+  artifacts — placeable together or **scattered** across edges and assembled at a
+  merge.
 - **`Node`** is a **pure action** with a free-form **`action`** string
   (`"solve"`/`"find"`/`"move"`/…). **No `payload`, no `kind` enum.** Start/end are
   derived from topology (no incoming / no outgoing edges). The model is
@@ -172,7 +173,7 @@ file mirroring the others (payload round-trip + render; for a generator, the
 
 ```bash
 pip install -e ".[dev]"
-pytest                 # 132 passed, 10 skipped (binder + e2e, deferred)
+pytest                 # 136 passed, 10 skipped (binder + e2e, deferred)
 ruff check . && ruff format --check .
 mypy src/puzzcombinator
 ```
@@ -201,10 +202,6 @@ where the designer placed it. Migrating it also unskips `tests/rendering/test_bi
 + `tests/test_e2e.py` (rewrite their assertions to the new routing) and gets
 `examples/hunts/mock_hunt/hunt.py` green end-to-end. The binder must not constrain the
 layers below it — break it freely while finishing lower work.
-
-Possible earlier follow-up on puzzles (migrated, not necessarily finished): e.g. R4's
-answer key is text-only while the crossword emits a revealed grid — revisit whether R4
-should also emit a revealed sheet.
 
 Beyond the refactor (defer unless asked): more puzzle types; the visual hunt-map
 view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
