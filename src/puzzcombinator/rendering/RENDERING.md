@@ -82,6 +82,10 @@ so every import stays downward (no cycle):
   - `write_html(artifact, out_dir) -> Path` — render *any* artifact and write
     `{id}.html`. Works for everything because it goes through `render()` (an inline
     `<svg>` lands in the body and renders fine). Answers *"how does this look?"*
+  - `dump_artifacts(artifacts, out_dir) -> list[Path]` — the whole-map sibling of
+    `write_html`: dump a `{name: Artifact}` bag, each piece keyed by its **name** (not
+    id) — svg-kind raw to `{name}.svg`, the rest wrapped to `{name}.html`. The
+    inspection helper a puzzle demo uses to eyeball all of `puzzle.artifacts()` at once.
 - **`artifacts/export.py`** (one layer up — needs the **concrete types**): the *native*
   exporters `write_text` / `write_image` / `write_svg`, which bypass `render()` and write
   a primitive's payload in its own format (a `.txt`, decoded image bytes with the

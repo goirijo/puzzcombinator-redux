@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from puzzcombinator import RiddlePuzzle
-from puzzcombinator.rendering.export import html_document
+from puzzcombinator.rendering.export import dump_artifacts
 
 PUZZLE = RiddlePuzzle(
     "riddle",
@@ -33,15 +33,7 @@ PUZZLE = RiddlePuzzle(
 
 def main() -> None:
     out = Path(__file__).parent / "out"
-    out.mkdir(exist_ok=True)
-    for name, artifact in PUZZLE.artifacts().items():
-        fragment = artifact.render()
-        if fragment.kind == "svg":
-            path = out / f"{name}.svg"
-            path.write_text(fragment.markup, encoding="utf-8")
-        else:
-            path = out / f"{name}.html"
-            path.write_text(html_document(name, fragment.markup, fragment.styles), encoding="utf-8")
+    for path in dump_artifacts(PUZZLE.artifacts(), out):
         print(f"wrote {path}")
 
 

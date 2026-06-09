@@ -26,9 +26,10 @@ from pathlib import Path
 from puzzcombinator.artifacts.image import ImageArtifact
 from puzzcombinator.artifacts.svg import SvgArtifact
 from puzzcombinator.artifacts.text import TextArtifact
-from puzzcombinator.rendering.export import html_document, write_html
+from puzzcombinator.rendering.export import dump_artifacts, html_document, write_html
 
 __all__ = [
+    "dump_artifacts",
     "html_document",
     "write_html",
     "write_image",

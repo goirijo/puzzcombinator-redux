@@ -17,6 +17,7 @@ site.
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from pathlib import Path
 
 from puzzcombinator.rendering.fragment import Artifact
@@ -46,3 +47,26 @@ def write_html(artifact: Artifact, out_dir: str | Path) -> Path:
     path = Path(out_dir) / f"{artifact.id}.html"
     path.write_text(html_document(artifact.id, fragment.markup, fragment.styles), encoding="utf-8")
     return path
+
+
+def dump_artifacts(artifacts: Mapping[str, Artifact], out_dir: str | Path) -> list[Path]:
+    """Render every named artifact to its own file in ``out_dir``; return the paths.
+
+    Keyed by each artifact's **map name** (not its id): an svg-kind fragment is written
+    raw to ``{name}.svg``, everything else is wrapped via :func:`html_document` into
+    ``{name}.html``. The whole-bag sibling of :func:`write_html` — the inspection helper a
+    puzzle demo uses to eyeball all of ``puzzle.artifacts()`` at once.
+    """
+    out = Path(out_dir)
+    out.mkdir(exist_ok=True)
+    paths: list[Path] = []
+    for name, artifact in artifacts.items():
+        fragment = artifact.render()
+        if fragment.kind == "svg":
+            path = out / f"{name}.svg"
+            path.write_text(fragment.markup, encoding="utf-8")
+        else:
+            path = out / f"{name}.html"
+            path.write_text(html_document(name, fragment.markup, fragment.styles), encoding="utf-8")
+        paths.append(path)
+    return paths
