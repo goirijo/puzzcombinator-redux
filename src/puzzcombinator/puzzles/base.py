@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import ClassVar, overload
 
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.rendering.fragment import Artifact
@@ -49,6 +49,11 @@ class Puzzle(ABC):
     @abstractmethod
     def _artifacts(self) -> list[Artifact]:
         """Build all of this puzzle's artifacts (each with name/id set)."""
+
+    @overload
+    def artifacts(self, name: None = None) -> dict[str, Artifact]: ...
+    @overload
+    def artifacts(self, name: str) -> Artifact: ...
 
     def artifacts(self, name: str | None = None) -> dict[str, Artifact] | Artifact:
         """This puzzle's artifacts, keyed by name.
