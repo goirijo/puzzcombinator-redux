@@ -19,9 +19,10 @@ Every artifact carries two envelope fields beside its payload:
 - `name` — a generic label/key (a composite addresses its children by it; a puzzle
   generator names the pieces it emits). Defaults to a per-type value (`"text"`,
   `"image"`, `"composite"`).
-- `id` — unique within a hunt; it names the artifact's output file. Auto-generated
-  as `{type_name}-{uuid}` when you don't supply one. Pass an explicit `id` when you
-  want a readable filename.
+- `id` — identifies the artifact (and names its output file). Auto-generated as
+  `{type_name}-{uuid}` when you don't supply one, so distinct artifacts get distinct
+  ids. Pass an explicit `id` when you want a readable filename. The *same* artifact
+  may ride several edges (reuse); a graph only rejects a repeated id within one edge.
 
 Artifacts compare by **value** (`type` + `id` + `name` + `payload`), which is what
 makes the serialization round-trip `artifact_from_dict(artifact_to_dict(a)) == a`

@@ -100,28 +100,33 @@ class Graph:
             node.outgoing_edge_ids = tuple(outgoing[node_id])
 
     def validate_structure(self) -> None:
-        """Raise :class:`GraphError` on dangling edges, duplicate artifact ids, or cycles."""
+        """Raise :class:`GraphError` on dangling edges, a repeated artifact id within
+        one edge, or cycles."""
         for edge in self.edges.values():
             if edge.source not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown source node {edge.source!r}")
             if edge.target not in self.nodes:
                 raise GraphError(f"edge {edge.id!r} has unknown target node {edge.target!r}")
-        self._check_unique_artifact_ids()
+        self._check_no_duplicate_ids_within_edge()
         self._check_acyclic()
 
-    def _check_unique_artifact_ids(self) -> None:
-        """Reject two artifacts sharing an id.
+    def _check_no_duplicate_ids_within_edge(self) -> None:
+        """Reject an artifact id appearing more than once on a single edge.
 
-        An artifact's id names its printable output file, so a collision would
-        silently overwrite one printable with another. (This stays
-        artifact-agnostic — it only reads the ``Artifact`` ABC's ``id``.) Edges and
-        their content are visited in order for a deterministic message.
+        The same artifact may be *reused* across multiple edges (one piece used in
+        several places — e.g. a combination unlocking several locks); ids are unique
+        by construction, so cross-edge repeats are intentional reuse, not collisions.
+        Within one edge a repeat is just redundant, so it is rejected. (This stays
+        artifact-agnostic — it only reads the ``Artifact`` ABC's ``id``.) Edges are
+        visited in order for a deterministic message.
         """
-        seen: set[str] = set()
         for edge_id in sorted(self.edges):
+            seen: set[str] = set()
             for artifact in self.edges[edge_id].content:
                 if artifact.id in seen:
-                    raise GraphError(f"duplicate artifact id {artifact.id!r}")
+                    raise GraphError(
+                        f"duplicate artifact id {artifact.id!r} within edge {edge_id!r}"
+                    )
                 seen.add(artifact.id)
 
     def _check_acyclic(self) -> None:

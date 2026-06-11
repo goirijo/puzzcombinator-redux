@@ -290,10 +290,10 @@ On build the graph:
    - a **dangling edge** — `source` or `target` names a node that doesn't exist
      (usually a handle you didn't capture, or a `connect` before the matching
      `node`);
-   - a **duplicate artifact id** — two artifacts sharing an id would collide on
-     their output filenames; ids auto-generate uniquely (and a puzzle prefixes its
-     pieces with its own id), so this only fires if you pass two explicit ones that
-     clash;
+   - a **repeated artifact id within one edge** — placing the same id twice on a
+     single edge is just redundant. The same artifact *may* be reused across
+     **different** edges (one piece used in several places, e.g. a combination
+     unlocking multiple locks); only the within-edge repeat is rejected;
    - a **cycle** — a hunt must flow forward; a loop back to an earlier action is
      rejected with the offending node ids.
 

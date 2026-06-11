@@ -66,8 +66,9 @@ artifacts**:
   chaining (connect still returns self). Omitted node ids auto-generate (`n1`, `n2`,
   …). Artifact ids default to `{type_name}-{uuid}`; a puzzle prefixes its emitted
   artifacts as `{puzzle.id}-{name}` so pass an explicit puzzle/artifact id only for
-  readable `players/` filenames. `Graph.assemble` rejects duplicate artifact ids
-  (they name output files).
+  readable `players/` filenames. The same artifact may be **reused** on several
+  edges (one piece used in multiple places); `Graph.assemble` only rejects a
+  repeated id *within a single edge*.
 
 Authoring: `connect(source, target, *artifacts)`. Example —
 `connect(start, solve, *cipher.artifacts().values())`, then

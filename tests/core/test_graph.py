@@ -35,19 +35,23 @@ def test_unknown_source_edge_raises() -> None:
         Graph.assemble([Node(id="b")], [Edge(id="x", source="ghost", target="b")])
 
 
-def test_duplicate_artifact_id_is_rejected() -> None:
-    # Two artifacts sharing an id would collide on their output filenames
-    # (silently overwriting one printable with the other), so build() rejects it.
+def test_same_artifact_reused_across_edges_is_allowed() -> None:
+    # The same artifact is a single puzzle piece the designer may reuse in several
+    # places (e.g. one combination unlocking several locks), so it may ride more
+    # than one edge. Cross-edge id repeats are intentional reuse, not collisions.
     from puzzcombinator import GraphBuilder, TextArtifact
 
+    combo = TextArtifact("1-2-3-4", id="combo")
     builder = GraphBuilder()
     a = builder.node("a")
     b = builder.node("b")
     c = builder.node("c")
-    builder.connect(a, b, TextArtifact("one", id="dup"))
-    builder.connect(b, c, TextArtifact("two", id="dup"))
-    with pytest.raises(GraphError, match="duplicate artifact id"):
-        builder.build()
+    builder.connect(a, b, combo)
+    builder.connect(b, c, combo)
+    graph = builder.build()
+
+    assert graph.edge("a->b").content == (combo,)
+    assert graph.edge("b->c").content == (combo,)
 
 
 def test_duplicate_artifact_id_within_one_edge_is_rejected() -> None:
