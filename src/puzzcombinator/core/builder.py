@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from puzzcombinator.core.graph import Edge, Graph, Node
@@ -59,21 +60,36 @@ class GraphBuilder:
         self,
         source: str,
         target: str,
-        *artifacts: Artifact,
+        *artifacts: Artifact | Iterable[Artifact],
         id: str | None = None,
     ) -> GraphBuilder:
         """Add an edge from ``source`` to ``target`` carrying ``artifacts``.
 
-        Pass the artifacts that flow along this edge directly, e.g.
-        ``connect(a, b, TextArtifact("go to the kitchen"))`` or, to place a
-        puzzle's pieces, ``connect(a, b, *cw.artifacts().values())``. An edge may
-        carry no artifacts (a pure structural link).
+        Each argument may be a single :class:`Artifact` or any iterable of them;
+        iterables are flattened, so all of these place the same content::
+
+            connect(a, b, art1, art2)                 # individual artifacts
+            connect(a, b, *cw.artifacts().values())    # an unpacked iterable
+            connect(a, b, tiles)                       # an iterable, as-is
+            connect(a, b, prompt, tiles)               # mixed
+
+        Many artifacts flowing from one action into another belong on **one**
+        edge like this — an edge *is* that flow. Use separate edges only for
+        genuinely distinct branches (a different ``source`` or ``target``), which
+        is what the branch/merge gating in :mod:`~puzzcombinator.core.ordering`
+        reads. An edge may carry no artifacts (a pure structural link).
         """
         edge_id = id if id is not None else self._auto_edge_id(source, target)
         if edge_id in self._edges:
             raise GraphError(f"duplicate edge id {edge_id!r}")
+        content: list[Artifact] = []
+        for item in artifacts:
+            if isinstance(item, Iterable):
+                content.extend(item)
+            else:
+                content.append(item)
         self._edges[edge_id] = Edge(
-            id=edge_id, source=source, target=target, content=tuple(artifacts)
+            id=edge_id, source=source, target=target, content=tuple(content)
         )
         return self
 
