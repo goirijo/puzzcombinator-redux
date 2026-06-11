@@ -41,7 +41,6 @@ from pathlib import Path
 
 from puzzcombinator import (
     Artifact,
-    Audience,
     CaesarCipherPuzzle,
     CrosswordPuzzle,
     GraphBuilder,

@@ -52,3 +52,11 @@ class TextArtifact(Artifact):
 
     def render(self) -> RenderFragment:
         return presets.text(self.text, title=self.title, id=self.id, monospace=self.monospace)
+
+    def native(self) -> tuple[str, bytes]:
+        """The raw string itself — ``title``/``monospace`` are render-only hints, dropped.
+
+        Reads :attr:`text` directly (the same payload :meth:`render` starts from), so the
+        ``.txt`` is the bare source, never the un-escaped/un-wrapped HTML.
+        """
+        return (".txt", self.text.encode("utf-8"))

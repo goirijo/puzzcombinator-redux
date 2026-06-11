@@ -180,6 +180,13 @@ Rules to follow:
   / `RenderFragment.svg(...)` with your own `styles=` only when a preset isn't
   enough. Escape any untrusted text yourself (`html.escape`) — the typed presets do
   this for you, `card`/raw fragments do not.
+- `native()` (optional, 5th piece) declares a **native file form** as `(extension,
+  bytes)` for `write_artifact` — read from the payload, never from `render()`'s output.
+  Override it **only when the native form differs from the render**: a `.txt` of the raw
+  string, decoded image bytes. The base default already covers the two common cases — an
+  `svg`-kind render is served verbatim as `.svg`, and anything else returns `None` (HTML
+  page fallback) — so most custom types (`CoordinateArtifact` above, any html-rendering
+  type) need no override.
 
 Where it lives: an **orphan** artifact (no generator behind it — text, image, a
 coordinate) goes in this package next to `text.py` / `image.py`, and is exported from
@@ -206,35 +213,40 @@ assert again == clue                   # value-equality round-trips
 
 ## Writing an artifact to a file to inspect it
 
-`puzzcombinator.artifacts.export` gives you the single-artifact file writers — one
-import site for both the presentation view and the native exports:
+`puzzcombinator.rendering.export` gives you the single-artifact file writers — both the
+presentation view and the native exports:
 
 ```python
-from puzzcombinator.artifacts.export import write_html, write_svg, write_image, write_text
+from puzzcombinator.rendering.export import write_html, write_artifact, write_artifacts
 
 write_html(clue, "out/")        # any artifact -> out/<id>.html (wraps render() in a page)
-write_text(clue, "out/")        # a TextArtifact  -> out/<id>.txt   (the raw string)
-write_image(photo, "out/")      # an ImageArtifact -> out/<id>.png   (decoded bytes; ext from mime)
-write_svg(diagram, "out/")      # an SvgArtifact   -> out/<id>.svg   (markup verbatim)
+write_artifact(clue, "out/")    # a TextArtifact  -> out/<id>.txt   (the raw string)
+write_artifact(photo, "out/")   # an ImageArtifact -> out/<id>.png   (decoded bytes; ext from mime)
+write_artifact(diagram, "out/") # an SvgArtifact   -> out/<id>.svg   (markup verbatim)
+write_artifacts(puzzle.artifacts(), "out/")  # write_artifact over a whole {name: Artifact} map
 ```
 
-Each takes an artifact and an **output directory**, derives `<id>.<ext>` itself, and
-returns the written `Path`. Two complementary answers:
+(`write_artifact` / `write_artifacts` are also re-exported from the top-level
+`puzzcombinator` package and from `puzzcombinator.rendering`.) Each takes an artifact and
+an **output directory**, derives `<id>.<ext>` itself, and returns the written `Path`
+(`write_artifacts` returns the list). Two complementary answers:
 
 - **`write_html`** works for **any** artifact — primitive, composite, or custom — because
   they all render the same way (an SVG-kind fragment is valid inline in the `<body>`). It
   answers *"how does this look?"*
-- **`write_text` / `write_image` / `write_svg`** are the **native** exporters: they bypass
-  `render()` and write a primitive's payload in its own format. They answer *"give me the
-  thing itself."* (A composite has no single native form, so it only has the HTML view.)
+- **`write_artifact`** is the **native** exporter: it asks the artifact for its native form
+  via `native()` and writes that — a `.txt` string, decoded image
+  bytes, raw `.svg` markup — falling back to `write_html` for anything with no native form
+  (a composite). It answers *"give me the thing itself."* There is **no per-type dispatch**
+  here: each artifact declares its own native `(extension, bytes)`, so a new type needs no
+  edit to the exporter. `write_artifacts` is just `write_artifact` over a whole map.
 
-The shared `html_document(title, body, styles)` wrapper used by `write_html` is also
-re-exported there if you need to assemble your own page (the showcase's gallery uses it).
+The shared `html_document(title, body, styles)` wrapper used by `write_html` is also there
+if you need to assemble your own page (the showcase's gallery uses it).
 
-> Layering note: the agnostic `html_document` / `write_html` actually live in
-> `rendering/export.py` (they need only the `Artifact` ABC); the native writers live in
-> `artifacts/export.py` (they need the concrete types). The latter re-exports the former
-> so callers import everything from `puzzcombinator.artifacts.export`. Separately, the
-> library's real output layer (`rendering/binder.py`) writes a *whole hunt* — a binder
-> plus a `players/` folder — once that layer is migrated; these helpers are for
-> inspecting or exporting a single artifact.
+> Layering note: all four writers live in `rendering/export.py` and need only the
+> `Artifact` ABC — the type-specific knowledge lives in each artifact's `render()` /
+> `native()`, so the exporter names no concrete type. Separately, the library's real output
+> layer (`rendering/binder.py`) writes a *whole hunt* — a binder plus a `players/` folder —
+> once that layer is migrated; these helpers are for inspecting or exporting a single
+> artifact.

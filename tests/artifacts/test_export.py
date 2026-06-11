@@ -1,10 +1,20 @@
+"""Each artifact's native file form (the ``native()`` contract) and id legibility.
+
+The exporters that *consume* ``native()`` (``write_artifact`` / ``write_artifacts``) are
+tested in ``tests/rendering/test_export.py``; here we pin what each artifact *reports*.
+"""
+
 from __future__ import annotations
 
 import struct
 import zlib
 
-from puzzcombinator.artifacts import ImageArtifact, SvgArtifact, TextArtifact
-from puzzcombinator.artifacts.export import write_image, write_svg, write_text
+from puzzcombinator.artifacts import (
+    CompositeArtifact,
+    ImageArtifact,
+    SvgArtifact,
+    TextArtifact,
+)
 
 CIRCLE = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
@@ -30,29 +40,41 @@ def _png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
     )
 
 
-def test_write_text_writes_raw_string(tmp_path) -> None:
+# --- native(): each artifact's source form, read from the payload (not the render) ---
+
+
+def test_text_native_is_the_raw_string() -> None:
+    # title/monospace are render-only hints, dropped — the native form is the text itself.
     art = TextArtifact("Search the LIBRARY", title="Clue", monospace=True, id="t1")
-    path = write_text(art, tmp_path)
-    assert path == tmp_path / "t1.txt"
-    # Render hints (title/monospace) are dropped — the native form is the text itself.
-    assert path.read_text(encoding="utf-8") == "Search the LIBRARY"
+    assert art.native() == (".txt", b"Search the LIBRARY")
 
 
-def test_write_svg_writes_markup_verbatim(tmp_path) -> None:
-    path = write_svg(SvgArtifact(CIRCLE, id="s1"), tmp_path)
-    assert path == tmp_path / "s1.svg"
-    assert path.read_text(encoding="utf-8") == CIRCLE
+def test_svg_native_is_markup_verbatim() -> None:
+    # No override on SvgArtifact: the base default serves an svg-kind render verbatim.
+    assert SvgArtifact(CIRCLE, id="s1").native() == (".svg", CIRCLE.encode("utf-8"))
 
 
-def test_write_image_roundtrips_bytes_with_mime_extension(tmp_path) -> None:
+def test_image_native_roundtrips_bytes_with_mime_extension() -> None:
     data = _png(3, 2, (0, 128, 0))
     art = ImageArtifact.from_bytes(data, mime="image/png", id="img1")
-    path = write_image(art, tmp_path)
-    assert path == tmp_path / "img1.png"
-    assert path.read_bytes() == data
+    assert art.native() == (".png", data)
 
 
-def test_write_image_picks_jpg_for_jpeg(tmp_path) -> None:
-    art = ImageArtifact("data:image/jpeg;base64,/9j/", id="img2")
-    path = write_image(art, tmp_path)
-    assert path.suffix == ".jpg"
+def test_image_native_picks_jpg_for_jpeg() -> None:
+    ext, _ = ImageArtifact("data:image/jpeg;base64,/9j/", id="img2").native()
+    assert ext == ".jpg"
+
+
+def test_composite_has_no_native_form() -> None:
+    assert CompositeArtifact([TextArtifact("hi")], id="c1").native() is None
+
+
+# --- the name folds into the auto-generated id, so files read legibly ---
+
+
+def test_named_artifact_id_folds_in_name() -> None:
+    assert TextArtifact("hi", name="instructions").id.startswith("instructions-")
+
+
+def test_unnamed_artifact_id_keeps_its_type() -> None:
+    assert TextArtifact("hi").id.startswith("text-")

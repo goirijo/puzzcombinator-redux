@@ -74,7 +74,10 @@ class Artifact(ABC):
         id: str | None = None,
     ) -> None:
         self.name = name
-        self.id = id if id is not None else f"{type(self).type_name}-{uuid.uuid4().hex}"
+        # The name flows into the auto-generated id, so the id (and the file it names)
+        # reads legibly once an artifact is named. Every concrete type defaults its name
+        # to its own type ("text"/"svg"/…), so an *unnamed* artifact's id is unchanged.
+        self.id = id if id is not None else f"{name}-{uuid.uuid4().hex}"
 
     @abstractmethod
     def to_payload(self) -> dict[str, Any]:
@@ -88,6 +91,26 @@ class Artifact(ABC):
     @abstractmethod
     def render(self) -> RenderFragment:
         """Produce this artifact's printable fragment (a pure function of its data)."""
+
+    def native(self) -> tuple[str, bytes] | None:
+        """This artifact's native file as ``(extension, content)``, or ``None``.
+
+        The companion to :meth:`render`, split along the two axes a piece has: ``render``
+        is the *presentation* (markup to embed in a document); ``native`` is the *source*
+        in its most natural file format. The default handles the one case where the two
+        coincide — an ``svg``-kind render **is** already a standalone ``.svg``, so it is
+        served verbatim; any other render has no single native file and returns ``None``
+        (the exporter then falls back to an HTML page). Override only when the native form
+        *differs* from the render: ``TextArtifact`` -> the raw string as ``.txt``,
+        ``ImageArtifact`` -> the decoded bytes — read from the payload, never recovered by
+        un-rendering the markup, so the two never duplicate logic. ``extension`` includes
+        the leading dot. This is what lets the export layer write any artifact natively
+        without a per-type ``isinstance`` switch.
+        """
+        fragment = self.render()
+        if fragment.kind == "svg":
+            return (".svg", fragment.markup.encode("utf-8"))
+        return None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Artifact) or type(self) is not type(other):

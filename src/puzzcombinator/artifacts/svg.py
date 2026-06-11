@@ -86,3 +86,8 @@ class SvgArtifact(Artifact):
 
     def render(self) -> RenderFragment:
         return RenderFragment.svg(self.markup)
+
+    # No native() override: an svg-kind render is already a standalone .svg, so the
+    # Artifact base serves the markup verbatim. (Validity still requires the markup to
+    # carry xmlns="http://www.w3.org/2000/svg" — the author's responsibility, per the
+    # class docstring.)

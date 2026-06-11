@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from puzzcombinator import CrosswordPuzzle
-from puzzcombinator.rendering.export import dump_artifacts
+from puzzcombinator.rendering.export import write_artifacts
 
 # Solution grid (# = black square):
 #   S T A R
@@ -37,7 +37,7 @@ PUZZLE = CrosswordPuzzle(
 
 def main() -> None:
     out = Path(__file__).parent / "out"
-    for path in dump_artifacts(PUZZLE.artifacts(), out):
+    for path in write_artifacts(PUZZLE.artifacts(), out):
         print(f"wrote {path}")
 
 

@@ -62,6 +62,10 @@ class Puzzle(ABC):
         ``name`` to get a single artifact — the idiom for scattering one puzzle's
         pieces across different edges.
         """
+        # TODO: guard against duplicate names. Two artifacts sharing a name silently
+        # collapse here (dict keeps the last), so a piece vanishes from the map with no
+        # error. Compare len(mapping) to the list length and raise PuzzleError on a
+        # collision so the puzzle implementer gets a loud failure instead.
         mapping = {a.name: a for a in self._artifacts()}
         if name is None:
             return mapping

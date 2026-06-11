@@ -73,36 +73,34 @@ only when a preset isn't enough. The typed presets escape untrusted text for you
 
 ## Writing one artifact to a file
 
-The single-artifact file writers are split across two modules by what they depend on,
-so every import stays downward (no cycle):
+All the single-artifact file writers live in **`rendering/export.py`** and need only the
+`Artifact` ABC (the type-specific knowledge lives in each artifact's `render()` /
+`native()`, so they name no concrete type):
 
-- **`rendering/export.py`** (here, **agnostic** — needs only the `Artifact` ABC):
-  - `html_document(title, body, styles="") -> str` — wrap body markup + CSS in a minimal
-    standalone HTML document (pure, no I/O).
-  - `write_html(artifact, out_dir) -> Path` — render *any* artifact and write
-    `{id}.html`. Works for everything because it goes through `render()` (an inline
-    `<svg>` lands in the body and renders fine). Answers *"how does this look?"*
-  - `dump_artifacts(artifacts, out_dir) -> list[Path]` — the whole-map sibling of
-    `write_html`: dump a `{name: Artifact}` bag, each piece keyed by its **name** (not
-    id) — svg-kind raw to `{name}.svg`, the rest wrapped to `{name}.html`. The
-    inspection helper a puzzle demo uses to eyeball all of `puzzle.artifacts()` at once.
-- **`artifacts/export.py`** (one layer up — needs the **concrete types**): the *native*
-  exporters `write_text` / `write_image` / `write_svg`, which bypass `render()` and write
-  a primitive's payload in its own format (a `.txt`, decoded image bytes with the
-  extension from the mime, a raw `.svg`). They answer *"give me the thing itself."* This
-  module re-exports `html_document` + `write_html`, so callers get everything from one
-  import site: `from puzzcombinator.artifacts.export import ...`.
+- `html_document(title, body, styles="") -> str` — wrap body markup + CSS in a minimal
+  standalone HTML document (pure, no I/O).
+- `write_html(artifact, out_dir) -> Path` — render *any* artifact and write `{id}.html`.
+  Works for everything because it goes through `render()` (an inline `<svg>` lands in the
+  body and renders fine). Answers *"how does this look?"*
+- `write_artifact(artifact, out_dir) -> Path` — the *native* exporter. Asks the artifact
+  for its native form via `native()` and writes that (a `.txt`, decoded image bytes with
+  the extension from the mime, a raw `.svg`), falling back to `write_html` when there is
+  none (a composite). Answers *"give me the thing itself."* No per-type dispatch — a new
+  artifact type is handled by declaring its own `native()`.
+- `write_artifacts(artifacts, out_dir) -> list[Path]` — `write_artifact` over a whole
+  `{name: Artifact}` bag, each file named by its **id**. The inspection helper a puzzle
+  demo uses to eyeball all of `puzzle.artifacts()` at once.
 
 Every writer takes an artifact and an **output directory**, derives `{id}.{ext}`, and
 returns the written `Path`. A composite has no single native form, so it only has the
 HTML view. `examples/artifacts/showcase.py` exercises all of this and assembles a
 `gallery.html` (via `html_document`).
 
-### Why the split (a layering note worth keeping)
+### Why they all live here (a layering note worth keeping)
 
-The native writers need concrete-type knowledge (`.markup`, `.data_uri`, `.text`), which
-is an *artifact*-layer concern; the HTML wrapper needs only the ABC, a *rendering*
-concern. Forcing all four into `rendering/` made the native writers reach *up* to the
-artifact layer, which only worked via a `TYPE_CHECKING` import dodge to avoid a cycle —
-the signal they were in the wrong layer. Split by where each helper's dependencies point,
-the dodge disappears and all imports are downward.
+The native exporter once needed concrete-type knowledge (`.markup`, `.data_uri`, `.text`)
+and so lived up in the *artifact* layer. Moving that knowledge onto the artifacts
+themselves — each declares its own native `(extension, bytes)` via `native()` — made the
+exporter agnostic, so it now sits beside `write_html` in `rendering/`, needing only the
+ABC. The whole family points *downward* at the `Artifact` interface; none reaches up at a
+concrete type.

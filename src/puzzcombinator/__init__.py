@@ -41,6 +41,7 @@ from puzzcombinator.rendering.binder import (
     player_pages,
     write_bundle,
 )
+from puzzcombinator.rendering.export import write_artifact, write_artifacts, write_html
 from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
@@ -74,5 +75,8 @@ __all__ = [
     "produced_outputs",
     "register_artifact",
     "required_inputs",
+    "write_artifact",
+    "write_artifacts",
     "write_bundle",
+    "write_html",
 ]

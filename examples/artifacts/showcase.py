@@ -17,10 +17,10 @@ For each showcased artifact it:
 
     1. asserts the serialization round-trip  artifact_from_dict(artifact_to_dict(a)) == a,
     2. writes an HTML preview with ``write_html`` (works for *any* artifact), and
-    3. for a primitive, also writes its **native** file (a .txt / image / .svg) with the
-       matching ``write_*`` exporter — the "how it looks" vs. "the thing itself" duality.
+    3. for a primitive, also writes its **native** file (a .txt / image / .svg) with
+       ``write_artifact`` — the "how it looks" vs. "the thing itself" duality.
 
-All the file writers come from ``puzzcombinator.artifacts.export``. It also assembles
+All the file writers come from ``puzzcombinator.rendering.export``. It also assembles
 one ``gallery.html`` embedding every fragment with its CSS aggregated into one
 ``<head>``, reusing that module's ``html_document`` wrapper.
 """
@@ -37,12 +37,10 @@ from puzzcombinator.artifacts import (
     artifact_from_dict,
     artifact_to_dict,
 )
-from puzzcombinator.artifacts.export import (
+from puzzcombinator.rendering.export import (
     html_document,
+    write_artifact,
     write_html,
-    write_image,
-    write_svg,
-    write_text,
 )
 from puzzcombinator.rendering.fragment import Artifact
 
@@ -165,14 +163,10 @@ def main() -> None:
         # 2. An HTML preview for every artifact (presentation, via render()).
         written = [write_html(artifact, OUT)]
 
-        # 3. For a primitive, also export its native file. A composite has no single
-        #    native form, so it gets only the HTML preview.
-        if isinstance(artifact, SvgArtifact):
-            written.append(write_svg(artifact, OUT))
-        elif isinstance(artifact, ImageArtifact):
-            written.append(write_image(artifact, OUT))
-        elif isinstance(artifact, TextArtifact):
-            written.append(write_text(artifact, OUT))
+        # 3. For a primitive, also export its native file. A composite returns None from
+        #    native(), so it gets only the HTML preview — no type-check needed here.
+        if artifact.native() is not None:
+            written.append(write_artifact(artifact, OUT))
 
         names = ", ".join(p.name for p in written)
         print(f"  {artifact.id:28} {artifact.type_name:10} -> {names}")

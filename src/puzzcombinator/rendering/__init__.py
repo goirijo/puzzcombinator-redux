@@ -8,17 +8,23 @@ from puzzcombinator.rendering.binder import (
     player_pages,
     write_bundle,
 )
-from puzzcombinator.rendering.export import dump_artifacts, html_document, write_html
+from puzzcombinator.rendering.export import (
+    html_document,
+    write_artifact,
+    write_artifacts,
+    write_html,
+)
 from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
     "Artifact",
     "RenderFragment",
-    "dump_artifacts",
     "game_master_binder",
     "html_document",
     "hunt_bundle",
     "player_pages",
+    "write_artifact",
+    "write_artifacts",
     "write_bundle",
     "write_html",
 ]

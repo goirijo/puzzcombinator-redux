@@ -82,11 +82,12 @@ you place on the outgoing edge.
   `required_inputs`, `produced_outputs` — both return `list[Artifact]`). Stdlib
   only; artifact-agnostic (references only the `Artifact` ABC, for typing).
 - **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`, `svg.py`), the
-  composite (`composite.py`), the registry (`registry.py`), and `export.py` (the
-  per-primitive native file writers + a re-export of the agnostic ones). Depends only
-  on `rendering` + `errors`, so `puzzles/` builds on top of it without a cycle. **Fully
-  documented in `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type
-  recipe, and serialization.
+  composite (`composite.py`), and the registry (`registry.py`). Each artifact declares
+  its own native file form via `native()` (the `Artifact` ABC default serves an svg-kind
+  render as `.svg`; `text`/`image` override). Depends only on `rendering` + `errors`, so
+  `puzzles/` builds on top of it without a cycle. **Fully documented in
+  `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type recipe, and
+  serialization.
 - **`puzzles/`** — `base.py` (`Puzzle` generator ABC) and the puzzle types, each
   pairing a `Puzzle` generator with its `Artifact` subclass(es): `cipher.py`,
   `crossword.py`, `r4.py`, `riddle.py`. Depends on `artifacts` + `rendering` +
@@ -100,10 +101,11 @@ you place on the outgoing edge.
   The interchange seam for a future GUI/monitoring layer. Keystone invariant:
   `from_json(to_json(g)) == g`.
 - **`rendering/`** — `fragment.py` (`RenderFragment` {markup, kind html|svg,
-  styles} and the `Artifact` ABC), `presets.py` (fragment factories), `export.py`
-  (agnostic single-artifact file writers: `html_document` + `write_html`),
-  `binder.py` (the whole-hunt output layer — **STALE, the last layer still to
-  migrate**). Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
+  styles} and the `Artifact` ABC, incl. `render()` + `native()`), `presets.py` (fragment
+  factories), `export.py` (the agnostic single-artifact file writers: `html_document`,
+  `write_html`, `write_artifact`, `write_artifacts` — all need only the ABC), `binder.py`
+  (the whole-hunt output layer — **STALE, the last layer still to migrate**).
+  Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
 
 ## Output / the binder
 

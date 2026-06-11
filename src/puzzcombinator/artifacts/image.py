@@ -33,6 +33,34 @@ def _data_uri(data: bytes, mime: str) -> str:
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
+def _decode_data_uri(data_uri: str) -> tuple[str, bytes]:
+    """Split ``data:{mime};base64,{blob}`` into ``(mime, raw_bytes)``.
+
+    :meth:`ImageArtifact.from_bytes` always emits base64, but a hand-built data URI may
+    not — fall back to treating the payload as UTF-8 text in that case.
+    """
+    header, _, payload = data_uri.partition(",")
+    mime = header.removeprefix("data:").split(";", 1)[0] or "application/octet-stream"
+    data = base64.b64decode(payload) if ";base64" in header else payload.encode("utf-8")
+    return mime, data
+
+
+def _extension_for(mime: str) -> str:
+    """A file extension for ``mime`` — common image types pinned, else ``mimetypes``.
+
+    ``mimetypes.guess_extension`` is platform-dependent (e.g. it can return ``.jpe`` for
+    JPEG), so the common image types are pinned for stable, expected filenames.
+    """
+    pinned = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/svg+xml": ".svg",
+    }
+    return pinned.get(mime) or mimetypes.guess_extension(mime) or ".bin"
+
+
 @register_artifact
 class ImageArtifact(Artifact):
     """A single picture embedded inline as a data URI."""
@@ -102,3 +130,13 @@ class ImageArtifact(Artifact):
 
     def render(self) -> RenderFragment:
         return presets.image(self.data_uri, alt=self.alt, id=self.id)
+
+    def native(self) -> tuple[str, bytes]:
+        """Decode the data URI back to ``(extension, raw_bytes)`` — the original picture.
+
+        Reads :attr:`data_uri` (the payload), reversing the base64 that :meth:`from_bytes`
+        applied, with the extension derived from the embedded MIME type. The ``<img>`` that
+        :meth:`render` builds is never consulted.
+        """
+        mime, data = _decode_data_uri(self.data_uri)
+        return (_extension_for(mime), data)

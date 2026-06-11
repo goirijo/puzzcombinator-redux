@@ -17,14 +17,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from puzzcombinator import CaesarCipherPuzzle
-from puzzcombinator.rendering.export import dump_artifacts
+from puzzcombinator.rendering.export import write_artifacts
 
 
 def main() -> None:
     puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="cipher")
 
     out = Path(__file__).parent / "out"
-    for path in dump_artifacts(puzzle.artifacts(), out):
+    for path in write_artifacts(puzzle.artifacts(), out):
         print(f"wrote {path}")
 
 

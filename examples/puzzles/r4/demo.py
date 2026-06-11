@@ -20,14 +20,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from puzzcombinator import R4DecoderPuzzle
-from puzzcombinator.rendering.export import dump_artifacts
+from puzzcombinator.rendering.export import write_artifacts
 
 
 def main() -> None:
     puzzle = R4DecoderPuzzle.from_message("MEET AT DAWN", seed=7, id="r4")
 
     out = Path(__file__).parent / "out"
-    for path in dump_artifacts(puzzle.artifacts(), out):
+    for path in write_artifacts(puzzle.artifacts(), out):
         print(f"wrote {path}")
 
 
