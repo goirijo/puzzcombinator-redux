@@ -60,7 +60,8 @@ class Puzzle(ABC):
 
         With no ``name`` returns the whole ``{name: Artifact}`` map; pass a
         ``name`` to get a single artifact — the idiom for scattering one puzzle's
-        pieces across different edges.
+        pieces across different edges. Each puzzle subclass documents the keys it
+        emits on its ``_artifacts`` method.
         """
         # TODO: guard against duplicate names. Two artifacts sharing a name silently
         # collapse here (dict keeps the last), so a piece vanishes from the map with no

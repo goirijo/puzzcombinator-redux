@@ -117,8 +117,13 @@ class CaesarCipherPuzzle(Puzzle):
         return _caesar(self.ciphertext, -self.shift)
 
     def _artifacts(self) -> list[Artifact]:
-        """The ciphertext to decode, then the Caesar shift and the decoded answer as
-        separate revealed pieces."""
+        """Build this puzzle's three artifacts.
+
+        Keys:
+        - ``cipher`` — the ciphertext for the player to decode.
+        - ``shift`` — the Caesar shift, as a revealed answer-key hint.
+        - ``solution`` — the decoded plaintext message.
+        """
         return [
             CipherArtifact(self.ciphertext, name="cipher", id=self.artifact_id("cipher")),
             CipherArtifact(

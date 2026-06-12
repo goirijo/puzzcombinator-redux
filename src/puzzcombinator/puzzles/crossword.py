@@ -267,7 +267,12 @@ class CrosswordPuzzle(Puzzle):
                 raise PuzzleError(f"highlight cell {(r, c)} is a block")
 
     def _artifacts(self) -> list[Artifact]:
-        """The blank player grid plus the revealed solution (filled grid + answers)."""
+        """Build this puzzle's two artifacts.
+
+        Keys:
+        - ``crossword`` — the blank player grid: numbered cells + clue enumerations.
+        - ``solution`` — the filled grid with answers and the emergent/hidden word.
+        """
 
         def grid(*, reveal: bool, name: str) -> CrosswordArtifact:
             return CrosswordArtifact(

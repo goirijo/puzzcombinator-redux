@@ -343,14 +343,17 @@ class R4DecoderPuzzle(Puzzle):
         return [(r, c) for r in range(dim) for c in range(dim) if self.grille[r][c] == SHADED]
 
     def _artifacts(self) -> list[Artifact]:
-        """Five pieces, named ``{role}_{form}``.
+        """Build this puzzle's five artifacts, named ``{role}_{form}``.
 
-        Two identical blank SVG grids the player works on — ``text_blank`` (write the
-        letters in) and ``grille_blank`` (turn into the decoder, by cutting or blocking
-        its open cells) — plus the answer key: ``solution_grille`` (which cells are
-        open, honouring ``reveal_decoder``), ``solution_grid`` (the same grid with its
-        letters filled in), and ``solution_text`` (the decoded message and its reading
-        order)."""
+        Keys:
+        - ``text_blank`` — blank SVG grid the player writes the letters into.
+        - ``grille_blank`` — identical blank grid the player turns into the decoder,
+          by cutting or blocking its open cells.
+        - ``solution_grille`` — answer key: which cells are open (honouring
+          ``reveal_decoder``).
+        - ``solution_grid`` — answer key: the same grid with its letters filled in.
+        - ``solution_text`` — answer key: the decoded message and its reading order.
+        """
         dim = self.size
         grille_shaded = self._shaded_cells() if self.reveal_decoder else None
         order = " ".join(f"({r},{c})" for r, c in self.reading_sequence[: self.message_length])

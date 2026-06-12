@@ -69,8 +69,13 @@ class RiddlePuzzle(Puzzle):
         self.answer = answer
 
     def _artifacts(self) -> list[Artifact]:
-        """One artifact per ordered line, the lines joined as a ``full_text`` artifact,
-        plus the answer as a text artifact."""
+        """Build this puzzle's artifacts.
+
+        Keys:
+        - ``line0``, ``line1``, … ``line{N-1}`` — one per ordered riddle line.
+        - ``full_text`` — every line joined into a single monospace text artifact.
+        - ``answer`` — the riddle's answer, as a text artifact.
+        """
         total = len(self.parts)
         out: list[Artifact] = [
             RiddleLineArtifact(
