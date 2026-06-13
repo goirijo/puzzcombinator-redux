@@ -26,7 +26,7 @@ future layer.
 
 - **`core/`** — the artifact-agnostic graph engine: `Node` (a pure action with a
   free-form `action` label), `Edge` carrying a tuple of `Artifact`s, `Graph`, a
-  `GraphBuilder`, and a topological `chronological_order` with branch/merge gating.
+  `GraphBuilder`, and a topological `topological_order` with branch/merge gating.
   Stdlib only.
 - **`artifacts/`** — the *orphan* artifacts that have no puzzle behind them
   (`TextArtifact`, and `ImageArtifact` — an inline-data-URI picture you build
@@ -60,9 +60,9 @@ future tracking layer, so it can be added without reworking the model.
 
 ```python
 from puzzcombinator import GraphBuilder, CaesarCipherPuzzle, TextArtifact
-from puzzcombinator import chronological_order, produced_outputs
+from puzzcombinator import topological_order, produced_outputs
 from puzzcombinator import hunt_bundle, write_bundle
-from puzzcombinator.serialization import to_json, from_json
+from puzzcombinator.serialization import graph_to_dict, graph_from_dict
 
 cipher = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
 
@@ -77,13 +77,15 @@ b.connect(start, solve, *cipher.artifacts().values())
 b.connect(solve, end, TextArtifact("Go to the fountain."))
 graph = b.build()
 
-for node in chronological_order(graph):
+for node in topological_order(graph):
     print(node.id, node.action)
 
 # The artifacts this action produces flow on its outgoing edge (use the handle).
 assert [a.text for a in produced_outputs(graph, solve)] == ["Go to the fountain."]
 
-restored = from_json(to_json(graph))
+# A graph round-trips losslessly through its own JSON slice. (To save a whole hunt
+# to a file, wrap it: to_json(HuntDocument.single(graph)) — see AUTHORING_GRAPHS.md.)
+restored = graph_from_dict(graph_to_dict(graph))
 assert restored == graph
 
 # Generate the materials: a game-master binder.html + a players/ folder.

@@ -32,7 +32,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from puzzcombinator.core.graph import Graph, Node
-from puzzcombinator.core.ordering import chronological_order
+from puzzcombinator.core.ordering import topological_order
 from puzzcombinator.rendering.fragment import Artifact
 
 # Generic binder layout only — never artifact-specific. Artifacts carry their own
@@ -128,7 +128,7 @@ def _checklist(graph: Graph, order: list[Node]) -> str:
 
 def game_master_binder(graph: Graph) -> str:
     """The game master's document: a page per node (solve order) + a checklist."""
-    order = chronological_order(graph)
+    order = topological_order(graph)
     styles: set[str] = set()
     pages: list[str] = []
     for node in order:

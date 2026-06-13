@@ -15,11 +15,12 @@ import pytest
 from puzzcombinator import (
     CaesarCipherPuzzle,
     GraphBuilder,
+    HuntDocument,
     TextArtifact,
-    chronological_order,
     game_master_binder,
     player_pages,
     produced_outputs,
+    topological_order,
 )
 from puzzcombinator.serialization import from_json, to_json
 
@@ -40,12 +41,12 @@ def test_full_flow() -> None:
         .build()
     )
 
-    # Serialize and reload — value-equal.
-    reloaded = from_json(to_json(graph))
+    # Serialize and reload — value-equal (through the hunt-document envelope).
+    reloaded = from_json(to_json(HuntDocument.single(graph))).main
     assert reloaded == graph
 
     # Solve order respects the chain.
-    assert [n.id for n in chronological_order(reloaded)] == ["start", "solve", "end"]
+    assert [n.id for n in topological_order(reloaded)] == ["start", "solve", "end"]
 
     # The solve action's output (the revealed clue) flows on its outgoing edge.
     assert [a.text for a in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]

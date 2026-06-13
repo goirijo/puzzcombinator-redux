@@ -313,18 +313,18 @@ With a built graph you have a small set of pure, side-effect-free queries (all
 exported from the top-level package):
 
 ```python
-from puzzcombinator import chronological_order
+from puzzcombinator import topological_order
 
 hunt.start_nodes()                 # [Node(...)]   — derived entry points
 hunt.end_nodes()                   # [Node(...)]   — derived exits
 hunt.incoming(combine)             # the three edges feeding the merge
 hunt.outgoing(solve_gate)          # the three branch edges
 
-for node in chronological_order(hunt):
+for node in topological_order(hunt):
     print(node.label)              # a valid solve order, merges gated correctly
 ```
 
-`chronological_order(graph, start=None)` is a Kahn-style topological sort: a node
+`topological_order(graph, start=None)` is a Kahn-style topological sort: a node
 is emitted only once **all** its incoming sources have been emitted (the merge
 gating from step 4), and ties break by node id so the order is **deterministic**
 regardless of how you inserted edges. Pass `start=` to prefer a particular seed
@@ -368,24 +368,32 @@ changes. See the reference hunt's tail for the canonical invocation.
 
 ## Step 8 — Save and load
 
-The graph round-trips losslessly through `serialization/` — the interchange seam
-for any future GUI or tracking layer:
+Everything round-trips losslessly through `serialization/` — the interchange seam
+for any future GUI or tracking layer. The codec is **compositional**: each level
+serializes its own slice, so you persist the thing you actually hold.
 
 ```python
-from puzzcombinator.serialization import to_json, from_json
+from puzzcombinator import HuntDocument
+from puzzcombinator.serialization import graph_to_dict, graph_from_dict, to_json, from_json
 
-text = to_json(hunt)               # JSON string (stdlib; indent=2 by default)
-restored = from_json(text)         # an equal Graph
-assert restored == hunt            # the keystone invariant
+# A single graph round-trips its own {nodes, edges} slice — no document needed:
+restored = graph_from_dict(graph_to_dict(hunt))
+assert restored == hunt            # the keystone invariant, at the graph level
+
+# A whole hunt *file* is a HuntDocument (one or more graphs keyed by id):
+text = to_json(HuntDocument.single(hunt))   # JSON string (stdlib; indent=2 by default)
+assert from_json(text).main == hunt         # .main is the default "main" graph
 ```
 
-`from_json(to_json(g)) == g` is the invariant the whole serialization layer is
+`*_from_dict(*_to_dict(x)) == x` is the invariant the whole serialization layer is
 built to preserve — which is why wiring is recomputed on load and ids (not object
 references) tie everything together. Each edge's artifacts round-trip through their
 registry as `{type, id, name, payload}`, so a loaded hunt rebuilds every
 artifact by `type_name`. (Puzzle generators are authoring-time only and are not
-serialized — the artifacts they produced are.) `to_yaml` / `from_yaml` are available
-too (lazy, optional dependency). Malformed input raises `SerializationError`.
+serialized — the artifacts they produced are.) `to_json` / `from_json` (and lazy,
+optional `to_yaml` / `from_yaml`) operate on a `HuntDocument` — a saved hunt file is a
+whole document, with room to grow additively (more graphs, future data) without a
+schema migration. Malformed input raises `SerializationError`.
 
 ---
 
@@ -404,10 +412,11 @@ too (lazy, optional dependency). Malformed input raises `SerializationError`.
    incoming edges (gated in solve order). Scatter one puzzle's pieces by placing
    each `puzzle.artifacts(name)` on a different edge into the merge.
 6. `.build()` — wires and validates (dangling edges, cycles → `GraphError`).
-7. `chronological_order` / `start_nodes` / `end_nodes` / `incoming` / `outgoing`
+7. `topological_order` / `start_nodes` / `end_nodes` / `incoming` / `outgoing`
    / `required_inputs` / `produced_outputs` to inspect.
-8. `write_bundle(hunt_bundle(graph), dir)` for materials; `to_json` / `from_json`
-   to persist.
+8. `write_bundle(hunt_bundle(graph), dir)` for materials; `graph_to_dict` /
+   `graph_from_dict` to round-trip one graph, `to_json` / `from_json` (on a
+   `HuntDocument`) to persist a whole hunt file.
 
 **You never edit `puzzles/` or `rendering/` to author a hunt, and the graph layer
 never names a concrete artifact type.** If you reach for either, stop — the layers

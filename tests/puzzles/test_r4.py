@@ -2,15 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from puzzcombinator import (
-    GraphBuilder,
-    R4DecoderPuzzle,
-    R4PieceArtifact,
-    TextArtifact,
-)
+from puzzcombinator import R4DecoderPuzzle, R4PieceArtifact
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.r4 import _grid_dim
-from puzzcombinator.serialization import from_json, to_json
 
 
 @pytest.mark.parametrize(
@@ -113,20 +107,6 @@ def test_piece_artifact_payload_roundtrip() -> None:
     art = puzzle.artifacts("solution_grid")
     rebuilt = R4PieceArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
-
-
-def test_graph_json_roundtrip() -> None:
-    puzzle = R4DecoderPuzzle.from_message("FINDTHEKEY", seed=8, id="decoder")
-    builder = GraphBuilder()
-    start = builder.node("start")
-    solve = builder.node("solve", action="solve", label="The grille")
-    end = builder.node("end")
-    graph = (
-        builder.connect(start, solve, *puzzle.artifacts().values())
-        .connect(solve, end, TextArtifact("The message is FIND THE KEY"))
-        .build()
-    )
-    assert from_json(to_json(graph)) == graph
 
 
 def test_message_too_long_for_explicit_size() -> None:

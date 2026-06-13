@@ -5,9 +5,9 @@ import pytest
 from puzzcombinator import (
     Graph,
     GraphBuilder,
-    chronological_order,
     produced_outputs,
     required_inputs,
+    topological_order,
 )
 
 
@@ -16,12 +16,12 @@ def _index(order: list, node_id: str) -> int:
 
 
 def test_linear_order(cipher_hunt: Graph) -> None:
-    order = [n.id for n in chronological_order(cipher_hunt)]
+    order = [n.id for n in topological_order(cipher_hunt)]
     assert order == ["start", "solve", "end"]
 
 
 def test_merge_gated_after_both_paths(converging_hunt: Graph) -> None:
-    order = chronological_order(converging_hunt)
+    order = topological_order(converging_hunt)
     assert _index(order, "merge") > _index(order, "A")
     assert _index(order, "merge") > _index(order, "B")
     assert _index(order, "end") == len(order) - 1
@@ -40,7 +40,7 @@ def test_order_is_insertion_independent(flip: bool) -> None:
     else:
         builder.connect(start, a).connect(start, b)
         builder.connect(a, merge).connect(b, merge)
-    order = [n.id for n in chronological_order(builder.build())]
+    order = [n.id for n in topological_order(builder.build())]
     assert order == ["start", "A", "B", "merge"]
 
 
@@ -50,8 +50,8 @@ def test_start_argument_is_preferred_seed() -> None:
     builder.node("x")
     builder.node("y")
     graph = builder.build()
-    assert [n.id for n in chronological_order(graph, start="y")][0] == "y"
-    assert [n.id for n in chronological_order(graph, start="x")][0] == "x"
+    assert [n.id for n in topological_order(graph, start="y")][0] == "y"
+    assert [n.id for n in topological_order(graph, start="x")][0] == "x"
 
 
 def test_cycle_raises() -> None:
@@ -66,7 +66,7 @@ def test_cycle_raises() -> None:
     )
     graph._rewire()
     with pytest.raises(Exception, match="cycle"):
-        chronological_order(graph)
+        topological_order(graph)
 
 
 def test_required_inputs(converging_hunt: Graph) -> None:

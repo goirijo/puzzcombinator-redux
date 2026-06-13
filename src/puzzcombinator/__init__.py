@@ -18,11 +18,12 @@ from puzzcombinator.artifacts.image import ImageArtifact
 from puzzcombinator.artifacts.registry import build_artifact, register_artifact
 from puzzcombinator.artifacts.text import TextArtifact
 from puzzcombinator.core.builder import GraphBuilder
+from puzzcombinator.core.document import HuntDocument
 from puzzcombinator.core.graph import Edge, Graph, Node
 from puzzcombinator.core.ordering import (
-    chronological_order,
     produced_outputs,
     required_inputs,
+    topological_order,
 )
 from puzzcombinator.errors import (
     GraphError,
@@ -54,6 +55,7 @@ __all__ = [
     "Graph",
     "GraphBuilder",
     "GraphError",
+    "HuntDocument",
     "ImageArtifact",
     "Node",
     "Puzzle",
@@ -68,7 +70,7 @@ __all__ = [
     "TextArtifact",
     "__version__",
     "build_artifact",
-    "chronological_order",
+    "topological_order",
     "game_master_binder",
     "hunt_bundle",
     "player_pages",

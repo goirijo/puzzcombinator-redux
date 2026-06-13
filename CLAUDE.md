@@ -33,8 +33,8 @@ change small.
 **Only `rendering/binder.py` remains stale** — the **last** layer to migrate (plus
 its skipped tests in `tests/rendering/test_binder.py` + `tests/test_e2e.py`, and the
 `examples/hunts/mock_hunt/` example). It must not constrain the layers below it —
-break it freely. Everything else is green: `pytest` is **136 passed / 10 skipped**,
-`ruff` + `mypy` clean.
+break it freely. Everything else is green: `pytest` is **159 passed / 10 skipped**,
+`ruff` + `mypy` clean (the 10 skips are the stale binder + e2e tests).
 
 ## The core model (artifact-on-edge, rearchitected 2026-06-04)
 
@@ -79,7 +79,7 @@ you place on the outgoing edge.
 ## Package map (`src/puzzcombinator/`)
 
 - **`core/`** — `graph.py` (Node, Edge, Graph), `builder.py` (`GraphBuilder`),
-  `ordering.py` (`chronological_order` topo sort w/ branch+merge gating,
+  `ordering.py` (`topological_order` topo sort w/ branch+merge gating,
   `required_inputs`, `produced_outputs` — both return `list[Artifact]`). Stdlib
   only; artifact-agnostic (references only the `Artifact` ABC, for typing).
 - **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`, `svg.py`), the
@@ -94,19 +94,37 @@ you place on the outgoing edge.
   `crossword.py`, `r4.py`, `riddle.py`. Depends on `artifacts` + `rendering` +
   `errors`. (An artifact with no puzzle logic — text, image, a future lat/long — is
   an *orphan* and lives in `artifacts/`, not here.)
-- **`serialization/`** — `codec.py` (Graph ↔ dict; the only place that knows the
-  on-disk shape; each edge's content is a list of artifacts round-tripped via the
-  registry as `{type,id,name,payload}` — it reuses the registry's
-  `artifact_to_dict`/`artifact_from_dict`), `__init__.py` (`to_json`/`from_json`
-  stdlib, `to_yaml`/`from_yaml` lazy optional), `schema.py` (`SCHEMA_VERSION = "2"`).
-  The interchange seam for a future GUI/monitoring layer. Keystone invariant:
-  `from_json(to_json(g)) == g`.
+- **`serialization/`** — `codec.py` (the only place that knows the on-disk shape;
+  **compositional** — each level serializes its own slice, no type-switching: a `Graph`
+  via `graph_to_dict`/`graph_from_dict` (`{schema_version, graph:{nodes,edges}}`), a
+  `HuntDocument` via `document_to_dict`/`document_from_dict`
+  (`{schema_version, graphs:{id:…}}`); the document reuses the graph slice; each edge's
+  content is a list of artifacts round-tripped via the registry as `{type,id,name,payload}`),
+  `__init__.py` (`to_json`/`from_json` + lazy `to_yaml`/`from_yaml` — these operate on a
+  **`HuntDocument`**, since a saved hunt *file* is a whole document), `schema.py`
+  (`SCHEMA_VERSION = "3"`; version dispatch + migration scaffold in
+  `codec._assert_current_version`). The interchange seam for a future GUI/monitoring
+  layer. Keystone invariant: `*_from_dict(*_to_dict(x)) == x`. The envelope is
+  **additive** — new top-level keys (more graphs, floating artifacts, geo-coords) need no
+  migration; `schema_version` bumps only for non-additive changes. **Canvas/visualization
+  state (node x/y, views) is a SEPARATE channel — see `app/canvas.py` — never in
+  `HuntDocument`.**
 - **`rendering/`** — `fragment.py` (`RenderFragment` {markup, kind html|svg,
   styles} and the `Artifact` ABC, incl. `render()` + `native()`), `presets.py` (fragment
   factories), `export.py` (the agnostic single-artifact file writers: `html_document`,
   `write_html`, `write_artifact`, `write_artifacts` — all need only the ABC), `binder.py`
   (the whole-hunt output layer — **STALE, the last layer still to migrate**).
   Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
+- **`app/`** — the **GUI editor layer** (new top layer; the "GUI = producer" half of
+  the seam rule). `layout.py` (pure, tested layered-DAG node positions via
+  `topological_order`), `canvas.py` (the **canvas/views channel** shape —
+  `CanvasDocument`/`View`/`Position`, the separate "where it's drawn" data; defined, not
+  yet persisted), `server.py` (thin FastAPI: `GET /api/graph` = `graph_to_dict` + layout;
+  `PUT /api/graph` writes the edited graph back to the `PUZZ_GRAPH` file as a
+  `HuntDocument`; serves `static/`), `demo.py` (a built-in sample graph), and `static/`
+  (vanilla HTML/CSS/SVG, no build step — `render.js`/`inspector.js` pure, `app.js` the
+  sole state + I/O, incl. the Save control). Consumes/produces the serialization seam
+  only; imports lower layers, modifies none. **Documented in `app/APP.md`.**
 
 ## Output / the binder
 
@@ -176,7 +194,7 @@ file mirroring the others (payload round-trip + render; for a generator, the
 
 ```bash
 pip install -e ".[dev]"
-pytest                 # 136 passed, 10 skipped (binder + e2e, deferred)
+pytest                 # 159 passed, 10 skipped (binder + e2e, deferred)
 ruff check . && ruff format --check .
 mypy src/puzzcombinator
 ```
@@ -209,5 +227,6 @@ layers below it — break it freely while finishing lower work.
 Beyond the refactor (defer unless asked): more puzzle types; the visual hunt-map
 view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
 tracking/monitoring layer (layer 4 — the only place answer-checking would ever
-live). Deferred GUI-readiness: optional node x/y positions + per-puzzle parameter
-metadata in the serialized format.
+live). Deferred GUI-readiness: the canvas/views channel (`app/canvas.py`) is defined
+but positions aren't persisted yet (arrives with the drag/React-Flow milestone);
+per-puzzle parameter metadata in the serialized format is still open.

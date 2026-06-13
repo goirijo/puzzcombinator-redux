@@ -2,15 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from puzzcombinator import (
-    CrosswordArtifact,
-    CrosswordPuzzle,
-    GraphBuilder,
-    TextArtifact,
-)
+from puzzcombinator import CrosswordArtifact, CrosswordPuzzle
 from puzzcombinator.errors import PuzzleError
 from puzzcombinator.puzzles.crossword import Slot
-from puzzcombinator.serialization import from_json, to_json
 
 # Solution grid:
 #   C A T
@@ -72,20 +66,6 @@ def test_artifact_payload_roundtrip() -> None:
     rebuilt = CrosswordArtifact.from_payload(name=art.name, id=art.id, payload=art.to_payload())
     assert rebuilt == art
     assert rebuilt.emergent_word == "COY"
-
-
-def test_graph_json_roundtrip() -> None:
-    puzzle = _puzzle()
-    builder = GraphBuilder()
-    start = builder.node("start")
-    solve = builder.node("solve", action="solve", label="The grid")
-    end = builder.node("end")
-    graph = (
-        builder.connect(start, solve, *puzzle.artifacts().values())
-        .connect(solve, end, TextArtifact("The word is COY"))
-        .build()
-    )
-    assert from_json(to_json(graph)) == graph
 
 
 @pytest.mark.parametrize(

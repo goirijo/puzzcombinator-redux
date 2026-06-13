@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from puzzcombinator.rendering.fragment import Artifact
 
 
-def chronological_order(graph: Graph, start: str | None = None) -> list[Node]:
+def topological_order(graph: Graph, start: str | None = None) -> list[Node]:
     """Return nodes in a valid solve order (Kahn-style topological sort).
 
     A node is emitted only once **all** of its incoming edges' sources have been
