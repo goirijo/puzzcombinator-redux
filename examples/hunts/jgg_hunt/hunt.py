@@ -26,24 +26,20 @@ Each team gets one grid.
 from __future__ import annotations
 
 from pathlib import Path
-import json
 
 from puzzcombinator import (
+    Binder,
+    Chapter,
     CrosswordPuzzle,
     GraphBuilder,
+    HuntDocument,
     ImageArtifact,
     R4DecoderPuzzle,
     RiddlePuzzle,
     TextArtifact,
-    HuntDocument,
+    topological_order,
 )
-
 from puzzcombinator.serialization import (
-    document_from_dict,
-    document_to_dict,
-    from_json,
-    graph_from_dict,
-    graph_to_dict,
     to_json,
 )
 
@@ -60,6 +56,7 @@ def make_fake_block_coords_artifacts():
 
 if __name__ == "__main__":
     out_dir = Path(__file__).parent / "out"
+    assets_dir = Path(__file__).parent / "assets"
 
     builder = GraphBuilder()
 
@@ -126,9 +123,9 @@ if __name__ == "__main__":
 
     e_Rcw_sol = cw.artifacts("solution")
     n_Rfind2 = builder.node(action="find", notes="Find picture in the bathroom")
-    builder = builder.connect(n_Rsolve_cw, n_Rfind2, e_Rcw)
+    builder = builder.connect(n_Rsolve_cw, n_Rfind2, e_Rcw_sol)
 
-    e_Rpic = ImageArtifact.from_file("./assets/doormat.jpg")
+    e_Rpic = ImageArtifact.from_file(assets_dir / "doormat.jpg")
     n_Rfind3 = builder.node(action="find", notes="Find tiles under mat")
     builder = builder.connect(n_Rfind2, n_Rfind3, e_Rpic)
 
@@ -161,9 +158,57 @@ if __name__ == "__main__":
 
     graph = builder.build()
     doc = HuntDocument.single(graph)
-    doc_json = to_json(doc)
+    doc_jsons = to_json(doc)
 
-    with open(Path.joinpath(out_dir,'jgg_hunt.json'), 'w', encoding='utf-8') as f:
-        f.write(doc_json)
+    with open(Path.joinpath(out_dir, "jgg_hunt.json"), "w", encoding="utf-8") as f:
+        f.write(doc_jsons)
 
+    n_all = topological_order(graph)
 
+    by_nodes_all = Binder.of_nodes(graph, n_all)
+    with open(Path.joinpath(out_dir, "by_nodes_all.html"), "w", encoding="utf-8") as f:
+        f.write(by_nodes_all.render())
+
+    by_artifacts_r4 = Binder.of_artifacts(r4.artifacts().values())
+    with open(Path.joinpath(out_dir, "by_artifacts_r4.html"), "w", encoding="utf-8") as f:
+        f.write(by_artifacts_r4.render())
+
+    n_Right = [
+        n_start,
+        n_tutorial,
+        n_Rfind1,
+        n_Rsolve_cw,
+        n_Rfind2,
+        n_Rfind3,
+        n_Rgrid_assemble,
+        n_grid_merge,
+        n_find_final,
+        n_end,
+    ]
+
+    n_Left = [
+        n_start,
+        n_tutorial,
+        n_Lfind1,
+        n_Lfind2,
+        n_Lgrid_assemble,
+        n_grid_merge,
+        n_find_final,
+        n_end,
+    ]
+
+    e_solutions = [
+        riddle.artifacts("answer"),
+        r4.artifacts("solution_grille"),
+        r4.artifacts("solution_grid"),
+        r4.artifacts("solution_text"),
+        cw.artifacts("solution"),
+    ]
+
+    right_chapter = Chapter.of_nodes(graph, n_Right, title="The RIGHT path")
+    left_chapter = Chapter.of_nodes(graph, n_Left, title="The LEFT path")
+    solution_chapter = Chapter.of_artifacts(e_solutions)
+
+    by_chapters = Binder((right_chapter, left_chapter, solution_chapter), "The big Dog")
+    with open(Path.joinpath(out_dir, "by_chapters.html"), "w", encoding="utf-8") as f:
+        f.write(by_chapters.render())
