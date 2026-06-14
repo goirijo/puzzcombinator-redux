@@ -6,10 +6,8 @@ things: the format-neutral render primitive (`RenderFragment`), the `Artifact` A
 produces it, and the ready-made factories + file writers built on top.
 
 > Companion to `artifacts/ARTIFACTS.md` (which covers the concrete artifact *types*).
-> This guide covers *how* an artifact turns into markup and a file. The whole-hunt
-> output layer — `binder.py` — is **stale / not yet migrated**: its
-> player-vs-answer-key routing hasn't been rebuilt and its tests are skipped. Ignore
-> it as a reference until its phase lands.
+> This guide covers *how* an artifact turns into markup and a file, and how `binder.py`
+> composes many renderings into one document.
 
 ## `RenderFragment` — the format-neutral primitive
 
@@ -104,3 +102,47 @@ themselves — each declares its own native `(extension, bytes)` via `native()` 
 exporter agnostic, so it now sits beside `write_html` in `rendering/`, needing only the
 ABC. The whole family points *downward* at the `Artifact` interface; none reaches up at a
 concrete type.
+
+## Composing many renderings: the binder (`binder.py`)
+
+A **binder** is not a fixed thing — it is just *a collection of renderings that
+logically belong together*, chosen by the designer. There is **no player-vs-answer-key
+routing** and no opinion about what a hunt's output "should" be: you decide what goes in
+(every `solution` artifact; a page per node; the props for one branch) and the binder
+gives you the composition + layout machinery. Like the writers above, it is pure (renders
+to a string — write it with `Path.write_text`) and artifact-agnostic.
+
+Three nesting levels, each a renderable that aggregates the one below — the same shape as
+`CompositeArtifact`, one layer up:
+
+- **`Section`** — one rendered item. `Section.from_artifact(artifact)` wraps a single
+  artifact's render; `Section.from_node(graph, node, *, incoming=True, outgoing=True)`
+  renders a node's header (label / action / notes) plus the artifacts on its incoming
+  and/or outgoing edges (reusing `core.ordering.required_inputs` / `produced_outputs`).
+- **`Chapter`** — a group of closely-related sections under an optional title. The unit of
+  "keep these together." `Chapter.of_artifacts(artifacts, *, title=None)` and
+  `Chapter.of_nodes(graph, nodes, *, …, title=None)` build the common ones.
+- **`Binder`** — a collection of chapters that renders to **one standalone HTML document**
+  (via `html_document`). The only level that produces a finished document, and where the
+  layout knobs live as fields: `title`, `chapter_divider` (a page break by default,
+  between chapters) and `section_divider` (a thin rule by default, between sections within
+  a chapter). All overridable — pass any HTML string. `Binder.of_artifacts(...)` /
+  `Binder.of_nodes(graph, nodes, …)` wrap everything in one chapter for the ungrouped case.
+
+```python
+# A page per node, in solve order:
+Binder.of_nodes(graph, topological_order(graph), title="Walkthrough").render()
+
+# An answer key — just a different collection, no special tag:
+Binder.of_artifacts([p.artifacts("solution") for p in puzzles], title="Answers").render()
+
+# Grouped by hand — chapters get a page break, sections within a thin rule:
+Binder((Chapter.of_nodes(graph, branch_a, title="Branch A"),
+        Chapter.of_nodes(graph, branch_b, title="Branch B"))).render()
+```
+
+Every fragment's `styles` aggregate up and are **de-duplicated** (a local copy of
+`CompositeArtifact`'s `_dedupe`, since `rendering` must not import `artifacts`) into one
+`<head>`, so each artifact type's CSS appears once however many times it is embedded — and
+a new artifact type needs zero binder edits. `examples/hunts/mock_hunt/hunt.py` builds
+several binders from one graph to show all of this.

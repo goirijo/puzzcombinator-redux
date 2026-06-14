@@ -1,32 +1,25 @@
 """End-to-end: author -> serialize -> reload -> order -> inspect I/O -> render.
 
-DEFERRED until the binder migrates. The author/serialize/order/IO half is green now,
-but the render half (`player_pages`, `game_master_binder`) still assumes the
-pre-refactor `audience`-on-artifact model, and how player-vs-game-master routing is
-re-derived without `artifact.audience` is the binder phase's open question (see
-CLAUDE.md). The whole module is skipped so it doesn't hard-fail the suite; rewrite the
-render assertions and unskip when the binder lands.
+The full loop a designer takes: build a graph, round-trip it through the hunt-document
+envelope, confirm solve order and the artifacts flowing on each edge, then compose a
+binder over the reloaded graph. There is no player-vs-game-master split anymore — a
+binder is just the renderings the designer chose to collect, so the answer-key and the
+prompt pieces both appear in a node-walk binder (the designer omits or separates pieces
+by *which* binder they build, not by a tag on the artifact).
 """
 
 from __future__ import annotations
 
-import pytest
-
 from puzzcombinator import (
+    Binder,
     CaesarCipherPuzzle,
     GraphBuilder,
     HuntDocument,
     TextArtifact,
-    game_master_binder,
-    player_pages,
     produced_outputs,
     topological_order,
 )
 from puzzcombinator.serialization import from_json, to_json
-
-pytestmark = pytest.mark.skip(
-    reason="Awaits the binder migration to the audience-free model; see CLAUDE.md."
-)
 
 
 def test_full_flow() -> None:
@@ -51,12 +44,15 @@ def test_full_flow() -> None:
     # The solve action's output (the revealed clue) flows on its outgoing edge.
     assert [a.text for a in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]
 
-    # The player printable shows the prompt; the game-master binder shows the solution.
-    player_page = player_pages(reloaded)["players/c1-cipher.html"]
-    assert "IRXQWDLQ" in player_page  # ciphertext (FOUNTAIN shifted by 3)
-    assert "FOUNTAIN" not in player_page
+    # A node-walk binder renders the whole reloaded graph in solve order.
+    walkthrough = Binder.of_nodes(reloaded, topological_order(reloaded)).render()
+    assert "<!DOCTYPE html>" in walkthrough
+    assert "IRXQWDLQ" in walkthrough  # the ciphertext piece (FOUNTAIN shifted by 3)
+    assert "FOUNTAIN" in walkthrough  # the solution piece placed on the same edge
+    assert "leave on the bench" in walkthrough  # designer notes
+    assert "Go to the fountain." in walkthrough  # the revealed downstream clue
 
-    gm_binder = game_master_binder(reloaded)
-    assert "FOUNTAIN" in gm_binder  # solution (answer key)
-    assert "leave on the bench" in gm_binder  # designer notes
-    assert "Production checklist" in gm_binder
+    # An answer-key binder is just the solution pieces collected on their own.
+    answers = Binder.of_artifacts([cipher.artifacts("solution")], title="Answers").render()
+    assert "FOUNTAIN" in answers
+    assert "IRXQWDLQ" not in answers  # the ciphertext isn't in this collection

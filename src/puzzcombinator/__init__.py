@@ -36,18 +36,15 @@ from puzzcombinator.puzzles.cipher import CaesarCipherPuzzle, CipherArtifact
 from puzzcombinator.puzzles.crossword import CrosswordArtifact, CrosswordPuzzle
 from puzzcombinator.puzzles.r4 import R4DecoderPuzzle, R4PieceArtifact
 from puzzcombinator.puzzles.riddle import RiddleLineArtifact, RiddlePuzzle
-from puzzcombinator.rendering.binder import (
-    game_master_binder,
-    hunt_bundle,
-    player_pages,
-    write_bundle,
-)
+from puzzcombinator.rendering.binder import Binder, Chapter, Section
 from puzzcombinator.rendering.export import write_artifact, write_artifacts, write_html
 from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
     "Artifact",
+    "Binder",
     "CaesarCipherPuzzle",
+    "Chapter",
     "CipherArtifact",
     "CrosswordArtifact",
     "CrosswordPuzzle",
@@ -66,19 +63,16 @@ __all__ = [
     "RenderFragment",
     "RiddleLineArtifact",
     "RiddlePuzzle",
+    "Section",
     "SerializationError",
     "TextArtifact",
     "__version__",
     "build_artifact",
-    "topological_order",
-    "game_master_binder",
-    "hunt_bundle",
-    "player_pages",
     "produced_outputs",
     "register_artifact",
     "required_inputs",
+    "topological_order",
     "write_artifact",
     "write_artifacts",
-    "write_bundle",
     "write_html",
 ]

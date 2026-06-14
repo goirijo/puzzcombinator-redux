@@ -1,185 +1,244 @@
-"""Render a hunt graph into game-master and player materials.
+"""Compose artifact and node renderings into printable binders.
 
-.. warning::
+A **binder** is not a fixed thing. It is simply *a collection of renderings that
+logically belong together* — whatever the designer decides belongs together: every
+``solution`` artifact, one page per node in solve order, the props for a single hunt
+branch. This module gives the designer the composition machinery and stays out of the
+business of deciding what a hunt's output "should" be (there is no player-vs-answer-key
+routing here — that is a placement decision the designer already made on the graph).
 
-   **STALE — pre-refactor, does not run.** This module has NOT been migrated to the
-   audience-free artifact model (Phase 1, 2026-06-04). It still reads
-   ``artifact.audience``, a field the ``Artifact`` ABC no longer has, so it will
-   raise on import/use. It is kept only as the migration *target* for the binder
-   phase (see CLAUDE.md). **Do not treat anything here as a correct reference for the
-   current artifact layer** — only ``artifacts/ARTIFACTS.md`` and ``tests/artifacts/``
-   describe what runs today.
+Three nesting levels, each a renderable that aggregates the one below — mirroring
+:class:`~puzzcombinator.artifacts.composite.CompositeArtifact`, which aggregates child
+artifacts:
 
-The output is a **bundle**: a game-master ``binder.html`` plus a ``players/``
-folder of standalone printables. Everything here is a pure, **artifact-agnostic**
-consumer of the model — it walks nodes/edges, calls ``render`` on whatever
-artifacts the edges carry, and aggregates the CSS each fragment declares. Adding a
-new artifact type needs no changes here. The only function that touches the
-filesystem is :func:`write_bundle`.
+- :class:`Section` — **one** rendered item: a single artifact, or a single node (its
+  label/action/notes plus the artifacts on its incoming and/or outgoing edges).
+- :class:`Chapter` — a group of closely-related sections under an optional title. The
+  unit of "keep these together": sections within a chapter share a page; chapters break.
+- :class:`Binder` — a collection of chapters that renders to **one standalone HTML
+  document**. The only level that produces a finished document; the layout knobs
+  (``title`` and the two dividers) live here.
 
-Artifacts live on edges, so a node page shows the artifacts on its incoming *and*
-outgoing edges. Player printables come from ``PLAYER``-audience artifacts (each its
-own file); the game-master binder renders every artifact on a node's edges, so the
-answer key shows both the player-facing pieces and the ``GAME_MASTER`` ones (the
-revealed answers). A visual hunt map is intentionally deferred (it belongs with the
-future GUI).
+Everything is **pure** (no filesystem access — a binder renders to a string; write it
+with ``Path.write_text``) and **artifact-agnostic** (each artifact carries its own CSS
+via its :class:`~puzzcombinator.rendering.fragment.RenderFragment`; the binder only
+aggregates and de-duplicates those styles, so a new artifact type needs zero edits here).
 """
 
 from __future__ import annotations
 
 import html
 from collections.abc import Iterable
-from pathlib import Path
+from dataclasses import dataclass
 
 from puzzcombinator.core.graph import Graph, Node
-from puzzcombinator.core.ordering import topological_order
+from puzzcombinator.core.ordering import produced_outputs, required_inputs
+from puzzcombinator.rendering.export import html_document
 from puzzcombinator.rendering.fragment import Artifact
 
-# Generic binder layout only — never artifact-specific. Artifacts carry their own
-# CSS via RenderFragment.styles, which the document aggregates.
-_CSS = """
-  body { font-family: system-ui, sans-serif; margin: 2rem; }
-  .page { page-break-after: always; margin-bottom: 2rem; }
-  .action { font-size: 0.6em; color: #888; vertical-align: middle; text-transform: uppercase; }
-  .io { margin: 0.5rem 0; }
-  .io.out { color: #060; }
-  .io h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0.3rem 0; }
-  .notes { font-style: italic; color: #555; }
-  .checklist ul.check { list-style: none; padding-left: 0; }
-  .checklist ul.check li::before { content: "\\2610\\00a0\\00a0"; }
-  .checklist code { background: #f4f4f4; padding: 0 0.25em; }
+#: Divider HTML placed *between* items. A page break (its CSS lives in ``_BINDER_CSS``)
+#: separates chapters; a thin rule separates sections within a chapter. Pass either — or
+#: any HTML string of your own — to a :class:`Binder`'s ``chapter_divider`` /
+#: ``section_divider`` to change how the divisions look.
+PAGE_BREAK = '<div class="binder-break"></div>'
+RULE = '<hr class="binder-divider">'
+
+#: Generic binder layout only — never artifact-specific. Artifacts carry their own CSS
+#: via ``RenderFragment.styles``, which :meth:`Binder.render` aggregates alongside this.
+_BINDER_CSS = """
+  .binder-break { page-break-after: always; }
+  .binder-divider { border: none; border-top: 1px solid #ddd; margin: 1.5rem 0; }
+  .binder-chapter { margin-bottom: 1.5rem; }
+  .binder-chapter > h2 { font-size: 1.1rem; border-bottom: 2px solid #333; padding-bottom: 0.2rem; }
+  .binder-node > h3 { margin-bottom: 0.2rem; }
+  .binder-action { font-size: 0.6em; color: #888; text-transform: uppercase;
+                   vertical-align: middle; }
+  .binder-notes { font-style: italic; color: #555; }
+  .binder-io > h4 { font-size: 0.75rem; text-transform: uppercase;
+                    letter-spacing: 0.05em; margin: 0.4rem 0 0.2rem; }
+  .binder-io.binder-out { color: #060; }
 """
 
-_DOC = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>{title}</title>
-<style>{css}</style>
-</head>
-<body>
-{body}
-</body>
-</html>"""
+
+def _dedupe(blocks: Iterable[str]) -> str:
+    """Join CSS blocks, keeping the first occurrence of each and preserving order.
+
+    A local copy of the same helper used by ``CompositeArtifact`` — the binder lives in
+    ``rendering`` and must not reach up into ``artifacts``.
+    """
+    seen: dict[str, None] = {}
+    for block in blocks:
+        if block and block not in seen:
+            seen[block] = None
+    return "".join(seen)
 
 
-def _esc(text: str) -> str:
-    return html.escape(text)
-
-
-def _document(title: str, body: str, extra_styles: Iterable[str] = ()) -> str:
-    css = _CSS + "".join(sorted(set(extra_styles)))
-    return _DOC.format(title=_esc(title), css=css, body=body)
-
-
-def _artifact_path(artifact_id: str, kind: str) -> str:
-    ext = "svg" if kind == "svg" else "html"
-    return f"players/{artifact_id}.{ext}"
-
-
-# -- game-master binder ---------------------------------------------------
-
-
-def _render_artifacts(artifacts: Iterable[Artifact]) -> tuple[str, set[str]]:
-    """Render a run of artifacts for the binder, collecting the CSS they declare."""
-    parts: list[str] = []
-    styles: set[str] = set()
+def _render_run(artifacts: Iterable[Artifact]) -> tuple[str, tuple[str, ...]]:
+    """Render a run of artifacts to concatenated markup + the CSS blocks they declare."""
+    markup: list[str] = []
+    styles: list[str] = []
     for artifact in artifacts:
         fragment = artifact.render()
-        parts.append(fragment.markup)
+        markup.append(fragment.markup)
         if fragment.styles:
-            styles.add(fragment.styles)
-    return "".join(parts), styles
+            styles.append(fragment.styles)
+    return "".join(markup), tuple(styles)
 
 
-def _node_page(graph: Graph, node: Node) -> tuple[str, set[str]]:
-    styles: set[str] = set()
-    action = f' <span class="action">{_esc(node.action)}</span>' if node.action else ""
-    parts = [f"<h2>{_esc(node.label or node.id)}{action}</h2>"]
-    for direction, title in (("in", "Receives"), ("out", "Produces")):
-        edges = graph.incoming(node.id) if direction == "in" else graph.outgoing(node.id)
-        markup, sub = _render_artifacts(a for e in edges for a in e.content)
-        styles |= sub
-        if markup:
-            parts.append(f'<section class="io {direction}"><h3>{title}</h3>{markup}</section>')
-    if node.notes:
-        parts.append(f'<aside class="notes"><strong>Setup:</strong> {_esc(node.notes)}</aside>')
-    page = f'<article class="page node" data-id="{_esc(node.id)}">{"".join(parts)}</article>'
-    return page, styles
+@dataclass(frozen=True)
+class Section:
+    """One rendered item — a single artifact or a single node — and the CSS it needs.
 
-
-def _checklist(graph: Graph, order: list[Node]) -> str:
-    items: list[str] = []
-    for node in order:
-        for edge in graph.outgoing(node.id):
-            for artifact in edge.content:
-                path = _artifact_path(artifact.id, artifact.render().kind)
-                items.append(f"<li>Print &amp; place <code>{_esc(path)}</code></li>")
-        if node.notes:
-            label = _esc(node.label or node.id)
-            items.append(f"<li><strong>{label}</strong>: {_esc(node.notes)}</li>")
-    if not items:
-        return ""
-    return (
-        '<section class="page checklist"><h2>Production checklist</h2>'
-        '<ul class="check">' + "".join(items) + "</ul></section>"
-    )
-
-
-def game_master_binder(graph: Graph) -> str:
-    """The game master's document: a page per node (solve order) + a checklist."""
-    order = topological_order(graph)
-    styles: set[str] = set()
-    pages: list[str] = []
-    for node in order:
-        markup, sub = _node_page(graph, node)
-        styles |= sub
-        pages.append(markup)
-    body = "\n".join(pages) + "\n" + _checklist(graph, order)
-    return _document("Master Binder", body, styles)
-
-
-# -- player printables ----------------------------------------------------
-
-
-def player_pages(graph: Graph) -> dict[str, str]:
-    """Standalone player printables, keyed by relative path (``players/...``).
-
-    One file per ``PLAYER`` artifact carried on an edge: SVG artifacts are written
-    as standalone ``.svg`` documents; HTML artifacts are wrapped in a minimal page
-    that carries the fragment's own styles. ``GAME_MASTER`` artifacts render only
-    in the binder and produce no file.
+    ``markup`` is already rendered (an artifact renders itself; there is nothing to tune
+    at this level). ``styles`` is the ordered tuple of CSS blocks the item pulled in,
+    de-duplicated against everything else only when the whole document is assembled.
     """
-    pages: dict[str, str] = {}
-    for edge in graph.edges.values():
-        for artifact in edge.content:
-            fragment = artifact.render()
-            path = _artifact_path(artifact.id, fragment.kind)
-            if fragment.kind == "svg":
-                pages[path] = fragment.markup
-            else:
-                extra = {fragment.styles} if fragment.styles else set()
-                pages[path] = _document(artifact.id, fragment.markup, extra)
-    return pages
+
+    markup: str
+    styles: tuple[str, ...] = ()
+
+    @classmethod
+    def from_artifact(cls, artifact: Artifact) -> Section:
+        """A section showing a single artifact's render."""
+        fragment = artifact.render()
+        markup = (
+            f'<section class="binder-section" data-id="{html.escape(artifact.id)}">'
+            f"{fragment.markup}</section>"
+        )
+        return cls(markup, (fragment.styles,) if fragment.styles else ())
+
+    @classmethod
+    def from_node(
+        cls, graph: Graph, node: Node, *, incoming: bool = True, outgoing: bool = True
+    ) -> Section:
+        """A section for one node: its header (label/action/notes) plus the artifacts on
+        its incoming and/or outgoing edges.
+
+        ``incoming``/``outgoing`` select which side(s) to include — e.g. ``outgoing=False``
+        for a sheet that shows only what each action hands the player.
+        """
+        action = (
+            f' <span class="binder-action">{html.escape(node.action)}</span>' if node.action else ""
+        )
+        parts = [f"<h3>{html.escape(node.label or node.id)}{action}</h3>"]
+        if node.notes:
+            parts.append(f'<p class="binder-notes">{html.escape(node.notes)}</p>')
+        styles: list[str] = []
+        for include, node_artifacts, css_class, title in (
+            (incoming, required_inputs, "binder-in", "Receives"),
+            (outgoing, produced_outputs, "binder-out", "Produces"),
+        ):
+            if not include:
+                continue
+            body, sub = _render_run(node_artifacts(graph, node.id))
+            styles.extend(sub)
+            if body:
+                parts.append(f'<div class="binder-io {css_class}"><h4>{title}</h4>{body}</div>')
+        markup = (
+            f'<section class="binder-section binder-node" data-id="{html.escape(node.id)}">'
+            f"{''.join(parts)}</section>"
+        )
+        return cls(markup, tuple(styles))
 
 
-# -- bundle ---------------------------------------------------------------
+@dataclass(frozen=True)
+class Chapter:
+    """A group of closely-related sections, under an optional heading."""
+
+    sections: tuple[Section, ...]
+    title: str | None = None
+
+    @classmethod
+    def of_artifacts(cls, artifacts: Iterable[Artifact], *, title: str | None = None) -> Chapter:
+        """A chapter with one section per artifact, in order."""
+        return cls(tuple(Section.from_artifact(a) for a in artifacts), title)
+
+    @classmethod
+    def of_nodes(
+        cls,
+        graph: Graph,
+        nodes: Iterable[Node],
+        *,
+        incoming: bool = True,
+        outgoing: bool = True,
+        title: str | None = None,
+    ) -> Chapter:
+        """A chapter with one section per node, in the order given."""
+        return cls(
+            tuple(Section.from_node(graph, n, incoming=incoming, outgoing=outgoing) for n in nodes),
+            title,
+        )
+
+    def _body(self, section_divider: str) -> str:
+        head = f"<h2>{html.escape(self.title)}</h2>" if self.title is not None else ""
+        inner = section_divider.join(s.markup for s in self.sections)
+        return f'<section class="binder-chapter">{head}{inner}</section>'
+
+    def _style_blocks(self) -> tuple[str, ...]:
+        return tuple(block for section in self.sections for block in section.styles)
 
 
-def hunt_bundle(graph: Graph) -> dict[str, str]:
-    """The whole output as relative-path -> content (pure; no filesystem access)."""
-    bundle = {"binder.html": game_master_binder(graph)}
-    bundle.update(player_pages(graph))
-    return bundle
+@dataclass(frozen=True)
+class Binder:
+    """A collection of chapters; renders to one standalone HTML document.
 
+    The layout knobs live here, set at construction and tweakable before rendering:
+    ``title`` (the document title), ``chapter_divider`` (between chapters — a page break
+    by default), and ``section_divider`` (between sections within a chapter — a thin rule
+    by default). For the common ungrouped cases use :meth:`of_artifacts` /
+    :meth:`of_nodes`, which wrap everything in a single chapter.
+    """
 
-def write_bundle(bundle: dict[str, str], out_dir: str | Path) -> list[Path]:
-    """Write a :func:`hunt_bundle` to disk under ``out_dir``. The only IO here."""
-    base = Path(out_dir)
-    written: list[Path] = []
-    for rel, content in bundle.items():
-        path = base / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        written.append(path)
-    return written
+    chapters: tuple[Chapter, ...]
+    title: str = "Binder"
+    section_divider: str = RULE
+    chapter_divider: str = PAGE_BREAK
+
+    @classmethod
+    def of_artifacts(
+        cls,
+        artifacts: Iterable[Artifact],
+        *,
+        title: str = "Binder",
+        section_divider: str = RULE,
+        chapter_divider: str = PAGE_BREAK,
+    ) -> Binder:
+        """A binder of one chapter, one section per artifact — the "concatenate these
+        renderings" case (e.g. every ``solution`` artifact in a hunt)."""
+        return cls(
+            (Chapter.of_artifacts(artifacts),),
+            title=title,
+            section_divider=section_divider,
+            chapter_divider=chapter_divider,
+        )
+
+    @classmethod
+    def of_nodes(
+        cls,
+        graph: Graph,
+        nodes: Iterable[Node],
+        *,
+        incoming: bool = True,
+        outgoing: bool = True,
+        title: str = "Binder",
+        section_divider: str = RULE,
+        chapter_divider: str = PAGE_BREAK,
+    ) -> Binder:
+        """A binder of one chapter, one section per node — the "page per node" case.
+
+        Order the nodes however you like; pass ``topological_order(graph)`` for solve
+        order.
+        """
+        return cls(
+            (Chapter.of_nodes(graph, nodes, incoming=incoming, outgoing=outgoing),),
+            title=title,
+            section_divider=section_divider,
+            chapter_divider=chapter_divider,
+        )
+
+    def render(self) -> str:
+        """Assemble the whole document: chapters joined by ``chapter_divider``, every
+        fragment's CSS aggregated and de-duplicated into the ``<head>``."""
+        body = self.chapter_divider.join(c._body(self.section_divider) for c in self.chapters)
+        styles = _dedupe([_BINDER_CSS, *(b for c in self.chapters for b in c._style_blocks())])
+        return html_document(self.title, body, styles)

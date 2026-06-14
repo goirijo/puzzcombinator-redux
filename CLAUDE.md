@@ -14,27 +14,27 @@ hunt — there is no answer-checking anywhere (in a physical hunt, correctness i
 implicit when one puzzle's output is the next one's input). Live
 progress-tracking is a future, separate layer.
 
-## ⚠️ Refactor in progress (bottom-up rebuild, started 2026-06-04)
+## Refactor complete (bottom-up rebuild, 2026-06-04 → 2026-06-14)
 
-We are rebuilding the library **one layer at a time, lowest first**, to keep each
-change small.
+We rebuilt the library **one layer at a time, lowest first**. All phases are done and
+green:
 
-- **Phase 1 — Artifact layer — done.** Minimal single-thing primitives
-  (`text`/`image`/`svg`), a `CompositeArtifact`, the registry envelope helpers, and
-  the single-artifact file writers. See `src/puzzcombinator/artifacts/ARTIFACTS.md`.
-- **Phase 2 — Puzzles + serialization + core hooks — done (green).** The puzzle
-  generators, `serialization/codec.py`, and `core/graph.py`'s duplicate-id check are
-  migrated; the old player/game-master split (and the `Audience` enum) is **gone from
-  the codebase**. A puzzle now emits *all* its pieces — the prompt pieces and the
-  answer key — as one flat `{name: Artifact}` map; which piece reaches a player vs.
-  the answer key is a placement decision. (Further puzzle work may still follow — this
-  layer is migrated and green, not necessarily "finished.")
+- **Phase 1 — Artifact layer.** Minimal single-thing primitives (`text`/`image`/`svg`),
+  a `CompositeArtifact`, the registry envelope helpers, and the single-artifact file
+  writers. See `src/puzzcombinator/artifacts/ARTIFACTS.md`.
+- **Phase 2 — Puzzles + serialization + core hooks.** The puzzle generators,
+  `serialization/codec.py`, and `core/graph.py`'s duplicate-id check; the old
+  player/game-master split (and the `Audience` enum) is **gone from the codebase**. A
+  puzzle emits *all* its pieces — prompt pieces and answer key — as one flat
+  `{name: Artifact}` map; which piece goes where is a placement decision.
+- **Phase 3 — The binder.** `rendering/binder.py` was rebuilt as composable
+  `Section`/`Chapter`/`Binder` primitives (see "Output / the binder" below). The old
+  `game_master_binder`/`player_pages`/`hunt_bundle` and the player-vs-answer-key routing
+  question are **gone** — a binder is now just whatever collection of renderings the
+  designer assembles.
 
-**Only `rendering/binder.py` remains stale** — the **last** layer to migrate (plus
-its skipped tests in `tests/rendering/test_binder.py` + `tests/test_e2e.py`, and the
-`examples/hunts/mock_hunt/` example). It must not constrain the layers below it —
-break it freely. Everything else is green: `pytest` is **159 passed / 10 skipped**,
-`ruff` + `mypy` clean (the 10 skips are the stale binder + e2e tests).
+`pytest` is **171 passed / 0 skipped**, `ruff` + `mypy` clean. (Pre-existing lint/format
+drift in `examples/hunts/jgg_hunt/hunt.py` — the user's WIP hunt — is out of scope.)
 
 ## The core model (artifact-on-edge, rearchitected 2026-06-04)
 
@@ -113,7 +113,7 @@ you place on the outgoing edge.
   styles} and the `Artifact` ABC, incl. `render()` + `native()`), `presets.py` (fragment
   factories), `export.py` (the agnostic single-artifact file writers: `html_document`,
   `write_html`, `write_artifact`, `write_artifacts` — all need only the ABC), `binder.py`
-  (the whole-hunt output layer — **STALE, the last layer still to migrate**).
+  (composable `Section`/`Chapter`/`Binder` — compose many renderings into one document).
   Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
 - **`app/`** — the **GUI editor layer** (new top layer; the "GUI = producer" half of
   the seam rule). `layout.py` (pure, tested layered-DAG node positions via
@@ -128,23 +128,32 @@ you place on the outgoing edge.
 
 ## Output / the binder
 
-> **Stale — the last layer to migrate.** `binder.py` has not been rebuilt for the
-> current model; **how it routes a piece to a player printable vs. the answer key**
-> (now that nothing tags an artifact) is the open question of its phase, and its
-> tests are skipped. The shape below is the *target*, not what runs.
+A **binder** is **not a fixed thing** — it is just *a collection of renderings that
+logically belong together*, chosen by the designer. There is **no player-vs-answer-key
+routing** and no opinion about what a hunt's output "should" be (that question dissolved
+with the `Audience` enum); you decide what goes in and `rendering/binder.py` gives you
+composition + layout. Pure (renders to a string — write with `Path.write_text`) and
+artifact-agnostic. Three nesting levels, each aggregating the one below, mirroring
+`CompositeArtifact`:
 
-`rendering/binder.py` turns a graph into a **bundle**:
-- `game_master_binder(graph) -> str` — one HTML doc: a page per node (topological
-  order) rendering **all** artifacts on its **incoming and outgoing** edges (so the
-  answer key shows the prompt pieces *and* the revealed answers) + a production
-  checklist.
-- `player_pages(graph) -> dict[path,str]` — one printable per artifact, keyed
-  `players/<artifact.id>.{html,svg}` (which pieces become player files is the routing
-  question above).
-- `hunt_bundle(graph) -> dict[path,str]` (pure) and `write_bundle(bundle, dir)`
-  (the only filesystem I/O).
-The binder holds **no artifact-specific CSS** — each `RenderFragment` carries its
-own `styles`, which the binder aggregates. So a new artifact needs zero binder edits.
+- **`Section`** — one rendered item. `Section.from_artifact(artifact)`, or
+  `Section.from_node(graph, node, *, incoming=True, outgoing=True)` (a node's
+  header + the artifacts on its incoming/outgoing edges, via `required_inputs`/
+  `produced_outputs`).
+- **`Chapter`** — a group of closely-related sections under an optional title.
+  `Chapter.of_artifacts(...)` / `Chapter.of_nodes(graph, nodes, ...)`.
+- **`Binder`** — a collection of chapters rendering to **one standalone HTML document**.
+  Layout knobs are fields: `title`, `chapter_divider` (page break, default) and
+  `section_divider` (thin rule, default), all overridable. `Binder.of_artifacts(...)` /
+  `Binder.of_nodes(graph, nodes, ...)` wrap a single chapter for the ungrouped case.
+
+The two headline uses: `Binder.of_artifacts([p.artifacts("solution") for p in puzzles])`
+(an answer key) and `Binder.of_nodes(graph, topological_order(graph))` (a page-per-node
+walkthrough). Every fragment's `styles` aggregate and **de-duplicate** into one `<head>`
+(a local copy of `CompositeArtifact._dedupe`, since `rendering` must not import
+`artifacts`) — so a new artifact needs **zero binder edits**. See
+`rendering/RENDERING.md` and `examples/hunts/mock_hunt/hunt.py` (builds several binders
+from one graph).
 
 ## Key design rules (don't violate without discussing)
 
@@ -194,37 +203,35 @@ file mirroring the others (payload round-trip + render; for a generator, the
 
 ```bash
 pip install -e ".[dev]"
-pytest                 # 159 passed, 10 skipped (binder + e2e, deferred)
+pytest                 # 171 passed, 0 skipped
 ruff check . && ruff format --check .
 mypy src/puzzcombinator
+python examples/hunts/mock_hunt/hunt.py   # regenerates its out/ (binder.html, solutions.html, …)
 ```
-Everything except the binder is green; the 10 skips are `tests/rendering/test_binder.py`
-and `tests/test_e2e.py`, both awaiting the binder phase. The remaining bar to restore
-once the binder lands: `pytest --cov=puzzcombinator` (100% on `core/`) and
-`python examples/hunts/mock_hunt/hunt.py` regenerating its `out/`.
+All green. (Pre-existing lint/format drift in `examples/hunts/jgg_hunt/hunt.py` — the
+user's WIP hunt — is excluded from the bar; don't touch it without asking.) Still
+worthwhile to restore as a habit: `pytest --cov=puzzcombinator` (100% on `core/`).
 Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics
 used), free-form `action` strings, commit messages end with the Co-Authored-By
 trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 
 ## Current status & likely next steps
 
-**Mid bottom-up refactor (see the banner).** Phases 1–2 are done and green: the
-artifact layer, and the puzzle generators + `serialization/codec.py` +
-`core/graph.py`'s duplicate-id check, with the player/game-master split removed
-entirely (the `Audience` enum is gone). A puzzle emits all its pieces in one
-`{name: Artifact}` map; routing a piece to a player vs. the answer key is a placement
-decision deferred to the binder. Documented across `artifacts/ARTIFACTS.md`,
-`rendering/RENDERING.md`, `puzzles/AUTHORING_PUZZLES.md`, `core/AUTHORING_GRAPHS.md`.
+**Bottom-up refactor complete (see the banner).** All layers are migrated and green —
+artifacts, puzzles + serialization + core, and now the binder. A puzzle emits all its
+pieces in one `{name: Artifact}` map; a binder is whatever collection of renderings the
+designer assembles (no player/answer-key tag — the `Audience` enum is gone). Documented
+across `artifacts/ARTIFACTS.md`, `rendering/RENDERING.md`,
+`puzzles/AUTHORING_PUZZLES.md`, `core/AUTHORING_GRAPHS.md`, and `app/APP.md`.
 
-**Next (and last) phase: the binder.** `rendering/binder.py` is the only stale
-module. Its open design question is **how it routes a piece to a player printable vs.
-the answer key** now that nothing tags an artifact — most likely derived from how/
-where the designer placed it. Migrating it also unskips `tests/rendering/test_binder.py`
-+ `tests/test_e2e.py` (rewrite their assertions to the new routing) and gets
-`examples/hunts/mock_hunt/hunt.py` green end-to-end. The binder must not constrain the
-layers below it — break it freely while finishing lower work.
+Likely next work (the GUI editor is the active frontier): the canvas-interaction
+milestone (node dragging with positions persisted to the `app/canvas.py` sidecar,
+pan/zoom, drawing connections — the natural point to adopt React Flow), and a browser
+file-picker to replace the `PUZZ_GRAPH` env var. Wiring "generate a binder from the
+editor" is now unblocked (the binder is real). The user is **new to frontend** — pace
+GUI work incrementally.
 
-Beyond the refactor (defer unless asked): more puzzle types; the visual hunt-map
+Beyond that (defer unless asked): more puzzle types; the visual hunt-map
 view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
 tracking/monitoring layer (layer 4 — the only place answer-checking would ever
 live). Deferred GUI-readiness: the canvas/views channel (`app/canvas.py`) is defined

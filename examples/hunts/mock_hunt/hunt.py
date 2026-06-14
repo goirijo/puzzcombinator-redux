@@ -4,19 +4,24 @@ Run it:
 
     python examples/hunts/mock_hunt/hunt.py
 
-Writes a full bundle into examples/hunts/mock_hunt/out/:
+Writes several composed binders into examples/hunts/mock_hunt/out/. A "binder" is just
+a collection of renderings the designer chose to put together — there is no fixed
+"the output" — so this example builds a few:
 
-    binder.html   — the game master's document: a page per action (in solve order)
-                    showing what it receives and produces, plus a production
-                    checklist of what to print and stage.
-    players/      — one standalone printable per player-facing artifact.
+    binder.html      — a page per action in solve order, each showing what it receives
+                       and produces (Binder.of_nodes over topological_order).
+    solutions.html   — every puzzle's answer-key piece collected on its own
+                       (Binder.of_artifacts).
+    by_chapter.html  — the same node walk, grouped into chapters (one per hunt branch),
+                       to show chapters + page breaks.
+    players/         — one standalone native file per artifact (write_artifacts).
 
 The hunt is non-linear and uses all four puzzle types, a standalone image artifact,
-and a physical step. A puzzle is a *generator* of artifacts; the designer places its
-player and game-master artifacts on edges. An image has no puzzle behind it, so it is
-built directly as an artifact. The garden branch shows the payoff: the riddle's
-three lines are **scattered** onto three different edges, found at three spots, and
-assembled at the solve. Nodes are pure actions (solve / find / combine / unlock):
+and a physical step. A puzzle is a *generator* of artifacts; the designer places those
+artifacts on edges. An image has no puzzle behind it, so it is built directly as an
+artifact. The garden branch shows the payoff: the riddle's three lines are
+**scattered** onto three different edges, found at three spots, and assembled at the
+solve. Nodes are pure actions (solve / find / combine / unlock):
 
     start
       -> [gate cipher] -> solve gate  (reveals: library, attic AND garden)
@@ -40,31 +45,18 @@ import zlib
 from pathlib import Path
 
 from puzzcombinator import (
-    Artifact,
+    Binder,
     CaesarCipherPuzzle,
+    Chapter,
     CrosswordPuzzle,
     GraphBuilder,
     ImageArtifact,
-    Puzzle,
     R4DecoderPuzzle,
     RiddlePuzzle,
     TextArtifact,
-    hunt_bundle,
-    write_bundle,
+    topological_order,
+    write_artifacts,
 )
-
-
-def staged(puzzle: Puzzle) -> list[Artifact]:
-    """Every piece of a puzzle — player printables plus the game-master answers.
-
-    The common "put this whole puzzle on one edge" case; multi-piece puzzles whose
-    pieces are found in different places (see the riddle below) place their
-    artifacts one at a time instead.
-    """
-    return [
-        *puzzle.artifacts().values(),
-        *puzzle.artifacts(audience=Audience.GAME_MASTER).values(),
-    ]
 
 
 def _demo_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
@@ -107,27 +99,22 @@ riddle = RiddlePuzzle(
     id="riddle",
 )
 # An image is a standalone artifact — there is no puzzle to generate, so the designer
-# builds it directly (unlike the cipher/crossword/grille/riddle above). Make the
-# player picture once (from this hunt's assets/patio.<ext> if present, else a generated
-# placeholder PNG), then derive the game-master twin: the same bytes plus an answer note.
+# builds it directly (unlike the cipher/crossword/grille/riddle above). An ImageArtifact
+# is just the picture; the question that goes with it and its answer are separate text
+# artifacts the designer places on the edge (the prompt) and collects into the answer
+# key (the answer). Make the player picture from this hunt's assets/patio.<ext> if
+# present, else a generated placeholder PNG.
 _assets = Path(__file__).parent / "assets"
 _photo_file = next(_assets.glob("patio.*"), None) if _assets.is_dir() else None
-_prompt = "Which flagstone in this patio is loose?"
 _alt = "the garden patio by the sundial"
 if _photo_file is not None:
-    photo = ImageArtifact.from_file(_photo_file, prompt=_prompt, alt=_alt, id="photo")
+    photo = ImageArtifact.from_file(_photo_file, alt=_alt, id="photo")
 else:
     photo = ImageArtifact.from_bytes(
-        _demo_png(48, 32, (90, 140, 90)), mime="image/png", prompt=_prompt, alt=_alt, id="photo"
+        _demo_png(48, 32, (90, 140, 90)), mime="image/png", alt=_alt, id="photo"
     )
-photo_answer = ImageArtifact(
-    photo.data_uri,
-    prompt=_prompt,
-    answer="the cracked stone right beside the sundial",
-    alt=_alt,
-    audience=Audience.GAME_MASTER,
-    id="photo-answer",
-)
+photo_prompt = TextArtifact("Which flagstone in this patio is loose?", id="patio-prompt")
+photo_answer = TextArtifact("the cracked stone right beside the sundial", id="patio-answer")
 
 # Nodes are pure actions; node() hands back a handle we wire with (no ids to
 # invent). A puzzle's artifacts ride the edge *into* the action that solves them.
@@ -169,15 +156,17 @@ vault = builder.node(
 end = builder.node(label="Treasure")
 
 hunt = (
-    # opening cipher
-    builder.connect(start, solve_gate, *staged(gate))
+    # opening cipher — every piece (player ciphertext + the shift/solution answer key)
+    # rides the edge into the solve; which pieces end up in which binder is decided
+    # later, by what the designer collects, not by a tag on the artifact.
+    builder.connect(start, solve_gate, *gate.artifacts().values())
     # it sends them three places (branch)
     .connect(solve_gate, find_library, TextArtifact("Search the LIBRARY.", id="to-library"))
     .connect(solve_gate, find_attic, TextArtifact("Search the ATTIC.", id="to-attic"))
     .connect(solve_gate, find_garden, TextArtifact("Search the GARDEN.", id="to-garden"))
     # library and attic each yield one whole puzzle on the edge into its solve
-    .connect(find_library, solve_cw, *staged(crossword))
-    .connect(find_attic, solve_grille, *staged(grille))
+    .connect(find_library, solve_cw, *crossword.artifacts().values())
+    .connect(find_attic, solve_grille, *grille.artifacts().values())
     # the garden fans out to three spots, each hiding ONE scattered riddle line
     .connect(find_garden, find_shed, TextArtifact("Check the shed.", id="to-shed"))
     .connect(find_garden, find_planter, TextArtifact("Check the planter.", id="to-planter"))
@@ -192,9 +181,10 @@ hunt = (
         solve_riddle,
         combine,
         TextArtifact("SUNDIAL", id="word-sundial"),
-        riddle.artifacts("answer", audience=Audience.GAME_MASTER),
+        riddle.artifacts("answer"),
     )
-    # combined, they point to the patio; a photo pins the exact spot
+    # combined, they point to the patio; a photo + its question pin the exact spot, and
+    # the answer rides along for the answer key.
     .connect(
         combine,
         examine,
@@ -202,6 +192,7 @@ hunt = (
             "By the SUNDIAL, pace the ROAD to its FIFTH STEP. Study the photo.", id="to-patio"
         ),
         photo,
+        photo_prompt,
         photo_answer,
     )
     # examine -> a physical step -> the prize
@@ -214,5 +205,55 @@ hunt = (
 
 if __name__ == "__main__":
     out_dir = Path(__file__).parent / "out"
-    for path in write_bundle(hunt_bundle(hunt), out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. A page-per-node walkthrough in solve order.
+    walkthrough = Binder.of_nodes(hunt, topological_order(hunt), title="Mock Hunt — walkthrough")
+
+    # 2. The answer key: every puzzle's solution piece collected on its own. Just a
+    #    different choice of what to put together — the same model, no special tag.
+    answers = Binder.of_artifacts(
+        [
+            gate.artifacts("solution"),
+            crossword.artifacts("solution"),
+            grille.artifacts("solution_text"),
+            riddle.artifacts("answer"),
+            photo_answer,
+        ],
+        title="Mock Hunt — answer key",
+    )
+
+    # 3. The same walk, hand-grouped into chapters (one per hunt branch) to show chapters
+    #    and the page break between them.
+    def _nodes(*handles: str) -> list:
+        return [hunt.node(h) for h in handles]
+
+    by_chapter = Binder(
+        (
+            Chapter.of_nodes(hunt, _nodes(start, solve_gate), title="Opening"),
+            Chapter.of_nodes(hunt, _nodes(find_library, solve_cw), title="Library branch"),
+            Chapter.of_nodes(hunt, _nodes(find_attic, solve_grille), title="Attic branch"),
+            Chapter.of_nodes(
+                hunt,
+                _nodes(find_garden, find_shed, find_planter, find_birdbath, solve_riddle),
+                title="Garden branch",
+            ),
+            Chapter.of_nodes(hunt, _nodes(combine, examine, vault, end), title="Finale"),
+        ),
+        title="Mock Hunt — by branch",
+    )
+
+    for name, binder in (
+        ("binder.html", walkthrough),
+        ("solutions.html", answers),
+        ("by_chapter.html", by_chapter),
+    ):
+        path = out_dir / name
+        _ = path.write_text(binder.render(), encoding="utf-8")
+        print(f"wrote {path}")
+
+    # 4. One standalone native file per artifact (dedup by id; the same piece may ride
+    #    several edges).
+    pieces = {a.id: a for edge in hunt.edges.values() for a in edge.content}
+    for path in write_artifacts(pieces, out_dir / "players"):
         print(f"wrote {path}")

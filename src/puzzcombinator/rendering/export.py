@@ -1,7 +1,7 @@
 """Write a single artifact (or a whole bag) to a file — the inspection/output helpers.
 
-The *binder* (:mod:`puzzcombinator.rendering.binder`) turns a whole hunt graph into a
-bundle; these turn **one artifact** into **one file** — for eyeballing a piece while you
+The *binder* (:mod:`puzzcombinator.rendering.binder`) composes many renderings into one
+document; these turn **one artifact** into **one file** — for eyeballing a piece while you
 build it, or exporting it on its own. Two complementary views:
 
 - :func:`write_html` renders *any* artifact via
@@ -33,7 +33,6 @@ from pathlib import Path
 from puzzcombinator.rendering.fragment import Artifact
 
 
-# TODO: Is this really a function we want to be public?
 def html_document(title: str, body: str, styles: str = "") -> str:
     """Wrap body markup + CSS in a minimal standalone HTML document (pure, no I/O).
 

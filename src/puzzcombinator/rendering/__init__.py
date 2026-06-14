@@ -1,13 +1,8 @@
-"""Rendering: format-neutral fragments and the hunt-materials binder."""
+"""Rendering: format-neutral fragments and the composable binder."""
 
 from __future__ import annotations
 
-from puzzcombinator.rendering.binder import (
-    game_master_binder,
-    hunt_bundle,
-    player_pages,
-    write_bundle,
-)
+from puzzcombinator.rendering.binder import Binder, Chapter, Section
 from puzzcombinator.rendering.export import (
     html_document,
     write_artifact,
@@ -18,13 +13,12 @@ from puzzcombinator.rendering.fragment import Artifact, RenderFragment
 
 __all__ = [
     "Artifact",
+    "Binder",
+    "Chapter",
     "RenderFragment",
-    "game_master_binder",
+    "Section",
     "html_document",
-    "hunt_bundle",
-    "player_pages",
     "write_artifact",
     "write_artifacts",
-    "write_bundle",
     "write_html",
 ]

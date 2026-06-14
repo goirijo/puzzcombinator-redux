@@ -1,115 +1,194 @@
-"""Binder + puzzle integration tests — DEFERRED until the upper layers migrate.
+"""Tests for the composable binder: Section / Chapter / Binder.
 
-These exercise the **not-yet-migrated** stack: the `puzzles/` generators
-(`CaesarCipherPuzzle`, `R4DecoderPuzzle`) and the `binder` (`game_master_binder`,
-`player_pages`, `hunt_bundle`, `write_bundle`), all of which still assume the
-pre-refactor `audience`-on-artifact model. They fail today by design — see CLAUDE.md
-"Current status & likely next steps" (next phases: puzzles, then the binder, where the
-open question is how player-vs-game-master routing is re-derived without
-`artifact.audience`).
-
-The whole module is skipped so it doesn't hard-fail the suite. Unskip — and likely
-relocate the puzzle-only cases to `tests/puzzles/` — as those phases land. The genuine
-fragment-layer test that used to share this file now lives in `test_fragment.py`.
+A binder is just *a collection of renderings that logically belong together* — the
+designer chooses what goes in. These exercise the two headline cases (a list of
+artifacts; a page per node) plus the composition mechanics: chapter grouping, the
+two-level dividers, HTML escaping, and the cross-document CSS de-duplication that lets
+each artifact carry its own styles.
 """
 
 from __future__ import annotations
 
-import pytest
-
 from puzzcombinator import (
+    Binder,
     CaesarCipherPuzzle,
-    Graph,
-    game_master_binder,
-    hunt_bundle,
-    player_pages,
-    write_bundle,
-)
-
-pytestmark = pytest.mark.skip(
-    reason="Awaits the puzzles + binder migration to the audience-free model; see CLAUDE.md."
+    Chapter,
+    CrosswordPuzzle,
+    GraphBuilder,
+    Section,
+    TextArtifact,
+    topological_order,
 )
 
 
-def test_player_artifact_shows_ciphertext_not_answer() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
-    fragment = puzzle.artifacts("cipher").render()
-    assert fragment.kind == "html"
-    assert puzzle.ciphertext in fragment.markup
-    assert "FOUNTAIN" not in fragment.markup
+def _cipher() -> CaesarCipherPuzzle:
+    return CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
 
 
-def test_game_master_artifact_shows_solution() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="FOUNTAIN", shift=3, id="c1")
-    fragment = puzzle.artifacts("solution").render()
-    assert "FOUNTAIN" in fragment.markup
+def _crossword() -> CrosswordPuzzle:
+    return CrosswordPuzzle(
+        solution=["STAR", "H##A", "O##I", "PLOD"],
+        across={1: "Celestial body", 3: "Walk heavily"},
+        down={1: "Place to buy things", 2: "Sudden attack"},
+        highlight=[(0, 3), (2, 0), (0, 2), (3, 3)],
+        id="cw",
+    )
 
 
-def test_artifacts_carry_their_own_styles() -> None:
-    # The cipher's styling rides on its fragment, not in the binder.
-    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
-    assert ".ciphertext" in puzzle.artifacts("cipher").render().styles
+# -- Section --------------------------------------------------------------
 
 
-def test_single_piece_puzzle_emits_one_named_artifact() -> None:
-    puzzle = CaesarCipherPuzzle.from_plaintext(plaintext="HI", shift=1, id="c1")
-    artifacts = puzzle.artifacts()
-    assert list(artifacts) == ["cipher"]
-    assert artifacts["cipher"].render().kind == "html"
-    assert artifacts["cipher"].id == "c1-cipher"
+def test_section_from_artifact_wraps_markup_and_keeps_styles() -> None:
+    artifact = _cipher().artifacts("cipher")
+    section = Section.from_artifact(artifact)
+    assert 'class="binder-section"' in section.markup
+    assert 'data-id="c1-cipher"' in section.markup
+    assert artifact.render().markup in section.markup
+    # the artifact's own CSS is carried, not yet joined
+    assert section.styles == (artifact.render().styles,)
 
 
-def test_game_master_binder_walks_nodes_and_includes_answers(cipher_hunt: Graph) -> None:
-    binder = game_master_binder(cipher_hunt)
-    assert "<!DOCTYPE html>" in binder
-    assert "Master Binder" in binder
-    assert "FOUNTAIN" in binder  # solution shown to the game master
-    assert "hide under the doormat" in binder  # node notes
-    assert "Go to the fountain." in binder  # revealed downstream clue
-    assert "Production checklist" in binder
-
-
-def test_player_pages_omit_answers(cipher_hunt: Graph) -> None:
-    pages = player_pages(cipher_hunt)
-    assert "players/c1-cipher.html" in pages
-    page = pages["players/c1-cipher.html"]
-    assert "IRXQWDLQ" in page  # the ciphertext (FOUNTAIN shifted by 3)
-    assert "FOUNTAIN" not in page  # but not the solution
-    assert ".ciphertext" in page  # the cipher's own CSS made it into the page head
-
-
-def test_multi_piece_puzzle_svg_player_pages() -> None:
-    from puzzcombinator import GraphBuilder, R4DecoderPuzzle
-
-    r4 = R4DecoderPuzzle.from_message("HELLO", seed=1, id="grille")
+def test_section_from_node_shows_header_notes_and_both_sides() -> None:
     builder = GraphBuilder()
-    find = builder.node("find", action="find")
-    solve = builder.node("solve", action="solve")
-    graph = builder.connect(find, solve, *r4.artifacts().values()).build()
-    pages = player_pages(graph)
-    # Two player sheets, one per piece; the game-master "solution" makes no file.
-    assert set(pages) == {"players/grille-grid.svg", "players/grille-grille.svg"}
-    assert pages["players/grille-grid.svg"].startswith("<svg")
-    # The binder renders the game-master pieces (incl. the decoded message).
-    assert "HELLO" in game_master_binder(graph)
+    a = builder.node(label="Welcome")
+    b = builder.node(action="solve", label="Caesar gate", notes="leave on the bench")
+    c = builder.node(label="Treasure")
+    graph = (
+        builder.connect(a, b, TextArtifact("decode me", id="in"))
+        .connect(b, c, TextArtifact("go to the fountain", id="out"))
+        .build()
+    )
+    section = Section.from_node(graph, graph.node(b))
+    assert "Caesar gate" in section.markup
+    assert "solve" in section.markup
+    assert "leave on the bench" in section.markup  # notes
+    assert "Receives" in section.markup and "decode me" in section.markup
+    assert "Produces" in section.markup and "go to the fountain" in section.markup
 
 
-def test_binder_without_artifacts_has_no_checklist() -> None:
-    from puzzcombinator import GraphBuilder, TextArtifact
-
+def test_section_from_node_can_omit_a_side() -> None:
     builder = GraphBuilder()
-    a = builder.node("a")
-    b = builder.node("b")
-    graph = builder.connect(a, b, TextArtifact("go")).build()
-    binder = game_master_binder(graph)
-    assert "Production checklist" not in binder
+    a = builder.node(label="start")
+    b = builder.node(action="solve")
+    c = builder.node(label="end")
+    graph = (
+        builder.connect(a, b, TextArtifact("decode me", id="in"))
+        .connect(b, c, TextArtifact("go to the fountain", id="out"))
+        .build()
+    )
+    section = Section.from_node(graph, graph.node(b), outgoing=False)
+    assert "Receives" in section.markup
+    assert "Produces" not in section.markup
+    assert "go to the fountain" not in section.markup
 
 
-def test_hunt_bundle_and_write(cipher_hunt: Graph, tmp_path) -> None:
-    bundle = hunt_bundle(cipher_hunt)
-    assert "binder.html" in bundle
-    assert any(p.startswith("players/") for p in bundle)
-    written = write_bundle(bundle, tmp_path)
-    assert (tmp_path / "binder.html").read_text()
-    assert (tmp_path / "players" / "c1-cipher.html").exists()
-    assert len(written) == len(bundle)
+def test_section_from_node_escapes_text() -> None:
+    builder = GraphBuilder()
+    a = builder.node(label="<script>alert(1)</script>")
+    b = builder.node(label="end")
+    graph = builder.connect(a, b, TextArtifact("hi")).build()
+    section = Section.from_node(graph, graph.node(a))
+    assert "<script>" not in section.markup
+    assert "&lt;script&gt;" in section.markup
+
+
+# -- Chapter --------------------------------------------------------------
+
+
+def test_chapter_of_artifacts_makes_one_section_each_with_title() -> None:
+    chapter = Chapter.of_artifacts(
+        [_cipher().artifacts("cipher"), _crossword().artifacts("crossword")],
+        title="Player puzzles",
+    )
+    assert len(chapter.sections) == 2
+    body = chapter._body(section_divider="")
+    assert "<h2>Player puzzles</h2>" in body
+    assert 'class="binder-chapter"' in body
+
+
+def test_chapter_without_title_has_no_heading() -> None:
+    chapter = Chapter.of_artifacts([_cipher().artifacts("cipher")])
+    assert "<h2>" not in chapter._body(section_divider="")
+
+
+# -- Binder: use case 1 (a collection of artifacts) -----------------------
+
+
+def test_binder_of_artifacts_shows_every_solution() -> None:
+    binder = Binder.of_artifacts(
+        [_cipher().artifacts("solution"), _crossword().artifacts("solution")],
+        title="Answer key",
+    )
+    html = binder.render()
+    assert "<!DOCTYPE html>" in html
+    assert "<title>Answer key</title>" in html
+    assert "FOUNTAIN" in html  # cipher solution
+    assert "ROAD" in html  # crossword hidden word
+
+
+# -- Binder: use case 2 (a page per node) ---------------------------------
+
+
+def test_binder_of_nodes_pages_in_topological_order() -> None:
+    cipher = _cipher()
+    builder = GraphBuilder()
+    start = builder.node("start", label="Welcome")
+    solve = builder.node("solve", action="solve", notes="leave on the bench")
+    end = builder.node("end", label="Treasure")
+    graph = (
+        builder.connect(start, solve, *cipher.artifacts().values())
+        .connect(solve, end, TextArtifact("Go to the fountain."))
+        .build()
+    )
+    html = Binder.of_nodes(graph, topological_order(graph)).render()
+    assert "Welcome" in html and "Treasure" in html
+    assert "leave on the bench" in html  # node notes
+    assert "Go to the fountain." in html  # produced clue
+    assert "FOUNTAIN" in html  # the solution piece placed on the edge is shown
+    # solve order: Welcome's page precedes Treasure's
+    assert html.index("Welcome") < html.index("Treasure")
+
+
+# -- Binder: composition mechanics ----------------------------------------
+
+
+def test_binder_breaks_between_chapters_and_rules_within() -> None:
+    from puzzcombinator.rendering.binder import PAGE_BREAK, RULE
+
+    cipher = _cipher()
+    binder = Binder(
+        (
+            Chapter.of_artifacts([cipher.artifacts("cipher"), cipher.artifacts("shift")]),
+            Chapter.of_artifacts([cipher.artifacts("solution")]),
+        )
+    )
+    html = binder.render()
+    assert PAGE_BREAK in html  # page break element between the two chapters
+    assert RULE in html  # thin rule between the two sections of chapter 1
+
+
+def test_each_artifact_css_appears_once() -> None:
+    # Two cipher pieces carry the same CSS block; the head must hold it a single time.
+    cipher = _cipher()
+    block = cipher.artifacts("cipher").render().styles
+    assert block  # the cipher carries CSS, so this test is meaningful
+    html = Binder.of_artifacts([cipher.artifacts("cipher"), cipher.artifacts("solution")]).render()
+    assert html.count(block) == 1
+
+
+def test_dividers_are_customizable() -> None:
+    cipher = _cipher()
+    binder = Binder(
+        (
+            Chapter.of_artifacts([cipher.artifacts("cipher"), cipher.artifacts("shift")]),
+            Chapter.of_artifacts([cipher.artifacts("solution")]),
+        ),
+        chapter_divider="<!--CHAP-->",
+        section_divider="<!--SECT-->",
+    )
+    from puzzcombinator.rendering.binder import PAGE_BREAK
+
+    html = binder.render()
+    assert "<!--CHAP-->" in html  # between the two chapters
+    assert "<!--SECT-->" in html  # between the two sections of chapter 1
+    assert PAGE_BREAK not in html  # the default page-break element was replaced

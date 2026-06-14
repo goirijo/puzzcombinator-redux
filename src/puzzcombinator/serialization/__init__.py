@@ -40,6 +40,7 @@ __all__ = [
 
 _YAML_HINT = "YAML support requires the 'yaml' extra: pip install puzzcombinator[yaml]"
 
+
 def to_json(doc: HuntDocument, *, indent: int | None = 2) -> str:
     """Serialize a hunt document to a JSON string (a saved hunt file)."""
     return json.dumps(document_to_dict(doc), indent=indent, ensure_ascii=False)
