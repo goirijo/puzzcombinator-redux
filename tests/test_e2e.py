@@ -39,7 +39,7 @@ def test_full_flow() -> None:
     assert reloaded == graph
 
     # Solve order respects the chain.
-    assert [n.id for n in topological_order(reloaded)] == ["start", "solve", "end"]
+    assert topological_order(reloaded) == ["start", "solve", "end"]
 
     # The solve action's output (the revealed clue) flows on its outgoing edge.
     assert [a.text for a in produced_outputs(reloaded, "solve")] == ["Go to the fountain."]

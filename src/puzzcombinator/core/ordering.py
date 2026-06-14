@@ -10,15 +10,15 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
 
-from puzzcombinator.core.graph import Graph, Node
+from puzzcombinator.core.graph import Graph
 from puzzcombinator.errors import GraphError
 
 if TYPE_CHECKING:
     from puzzcombinator.rendering.fragment import Artifact
 
 
-def topological_order(graph: Graph, start: str | None = None) -> list[Node]:
-    """Return nodes in a valid solve order (Kahn-style topological sort).
+def topological_order(graph: Graph, start: str | None = None) -> list[str]:
+    """Return node **ids** in a valid solve order (Kahn-style topological sort).
 
     A node is emitted only once **all** of its incoming edges' sources have been
     emitted — this gives both branching and merge-gating (e.g. a node fed by two
@@ -26,6 +26,11 @@ def topological_order(graph: Graph, start: str | None = None) -> list[Node]:
     so the order is deterministic regardless of edge-insertion order. If ``start``
     is given it is preferred as the first seed. Raises :class:`GraphError` on a
     cycle.
+
+    Ids — not :class:`Node` objects — are the currency every author-facing query
+    deals in (the same handles :meth:`GraphBuilder.node` hands back and
+    :func:`required_inputs`/:func:`produced_outputs` take). Materialize a node
+    with :meth:`Graph.node` when you actually need its fields.
     """
     remaining: dict[str, int] = dict.fromkeys(graph.nodes, 0)
     for edge in graph.edges.values():
@@ -37,10 +42,10 @@ def topological_order(graph: Graph, start: str | None = None) -> list[Node]:
         seeds.insert(0, start)
 
     queue: deque[str] = deque(seeds)
-    order: list[Node] = []
+    order: list[str] = []
     while queue:
         node_id = queue.popleft()
-        order.append(graph.nodes[node_id])
+        order.append(node_id)
         newly_ready: list[str] = []
         for edge in graph.outgoing(node_id):
             remaining[edge.target] -= 1

@@ -59,23 +59,23 @@ def layered_layout(graph: Graph) -> dict[str, NodePosition]:
     :class:`~puzzcombinator.errors.GraphError` on a cycle (via
     :func:`topological_order`). The empty graph yields an empty map.
     """
-    order = topological_order(graph)  # topological; predecessors come first
+    order = topological_order(graph)  # topological ids; predecessors come first
 
     # 1. Layer = longest path (in edges) from any start node. Safe to read each
     #    predecessor's layer because topological order visits it first.
     layer: dict[str, int] = {}
-    for node in order:
-        incoming = graph.incoming(node.id)
-        layer[node.id] = max((layer[e.source] for e in incoming), default=-1) + 1
+    for node_id in order:
+        incoming = graph.incoming(node_id)
+        layer[node_id] = max((layer[e.source] for e in incoming), default=-1) + 1
 
     # 2. Row = the node's position among others sharing its layer, in topo order.
     next_row: dict[int, int] = {}
     positions: dict[str, NodePosition] = {}
-    for node in order:
-        lyr = layer[node.id]
+    for node_id in order:
+        lyr = layer[node_id]
         row = next_row.get(lyr, 0)
         next_row[lyr] = row + 1
-        positions[node.id] = NodePosition(
+        positions[node_id] = NodePosition(
             layer=lyr,
             row=row,
             x=MARGIN_X + lyr * COLUMN_WIDTH,

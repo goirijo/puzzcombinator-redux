@@ -119,7 +119,7 @@ and it **returns the new node's id** — the handle you pass to `connect`:
 
 > **Don't encode start/end as a node property** — there is no such property. Just
 > leave the first node with nothing wired in and the last with nothing wired out;
-> `start_nodes()` / `end_nodes()` derive them from the wiring (step 5).
+> `start_node_ids()` / `end_node_ids()` derive them from the wiring (step 5).
 
 ---
 
@@ -297,8 +297,8 @@ On build the graph:
    - a **cycle** — a hunt must flow forward; a loop back to an earlier action is
      rejected with the offending node ids.
 
-There is no separate "set the start" call: after `build`, `start_nodes()` and
-`end_nodes()` read the entry and exit points straight off the topology.
+There is no separate "set the start" call: after `build`, `start_node_ids()` and
+`end_node_ids()` read the entry and exit points straight off the topology.
 
 > **A node must exist before an edge names it.** Every `connect` endpoint must be a
 > handle from a `node()` you already called. The common slip is referencing a node
@@ -315,13 +315,13 @@ exported from the top-level package):
 ```python
 from puzzcombinator import topological_order
 
-hunt.start_nodes()                 # [Node(...)]   — derived entry points
-hunt.end_nodes()                   # [Node(...)]   — derived exits
+hunt.start_node_ids()              # ['start', ...]  — derived entry points (ids)
+hunt.end_node_ids()                # ['end', ...]    — derived exits (ids)
 hunt.incoming(combine)             # the three edges feeding the merge
 hunt.outgoing(solve_gate)          # the three branch edges
 
-for node in topological_order(hunt):
-    print(node.label)              # a valid solve order, merges gated correctly
+for node_id in topological_order(hunt):     # a valid solve order, merges gated correctly
+    print(hunt.node(node_id).label)         # ids in, materialize a Node when you need it
 ```
 
 `topological_order(graph, start=None)` is a Kahn-style topological sort: a node
@@ -329,6 +329,12 @@ is emitted only once **all** its incoming sources have been emitted (the merge
 gating from step 4), and ties break by node id so the order is **deterministic**
 regardless of how you inserted edges. Pass `start=` to prefer a particular seed
 first. It raises `GraphError` if the graph somehow contains a cycle.
+
+It returns node **ids**, not `Node` objects — ids are the one currency every
+author-facing query speaks (the handles `node()` hands back, what `connect`,
+`required_inputs`, and `produced_outputs` take). Feed the result straight to
+`Binder.of_nodes` / `Chapter.of_nodes`; call `graph.node(id)` only when you
+actually need a node's fields.
 
 This ordering is exactly what the binder walks to lay out the game-master pages,
 so eyeballing it is a quick sanity check that your hunt flows the way you intended.
@@ -412,8 +418,8 @@ schema migration. Malformed input raises `SerializationError`.
    incoming edges (gated in solve order). Scatter one puzzle's pieces by placing
    each `puzzle.artifacts(name)` on a different edge into the merge.
 6. `.build()` — wires and validates (dangling edges, cycles → `GraphError`).
-7. `topological_order` / `start_nodes` / `end_nodes` / `incoming` / `outgoing`
-   / `required_inputs` / `produced_outputs` to inspect.
+7. `topological_order` / `start_node_ids` / `end_node_ids` / `incoming` / `outgoing`
+   / `required_inputs` / `produced_outputs` to inspect (all id-based).
 8. `write_bundle(hunt_bundle(graph), dir)` for materials; `graph_to_dict` /
    `graph_from_dict` to round-trip one graph, `to_json` / `from_json` (on a
    `HuntDocument`) to persist a whole hunt file.

@@ -13,9 +13,9 @@ def test_incoming_and_outgoing(converging_hunt: Graph) -> None:
     assert start_out == {"A", "B"}
 
 
-def test_start_and_end_nodes(converging_hunt: Graph) -> None:
-    assert {n.id for n in converging_hunt.start_nodes()} == {"start"}
-    assert {n.id for n in converging_hunt.end_nodes()} == {"end"}
+def test_start_and_end_node_ids(converging_hunt: Graph) -> None:
+    assert set(converging_hunt.start_node_ids()) == {"start"}
+    assert set(converging_hunt.end_node_ids()) == {"end"}
 
 
 def test_wiring_is_deterministic(converging_hunt: Graph) -> None:

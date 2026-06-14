@@ -79,9 +79,10 @@ you place on the outgoing edge.
 ## Package map (`src/puzzcombinator/`)
 
 - **`core/`** — `graph.py` (Node, Edge, Graph), `builder.py` (`GraphBuilder`),
-  `ordering.py` (`topological_order` topo sort w/ branch+merge gating,
-  `required_inputs`, `produced_outputs` — both return `list[Artifact]`). Stdlib
-  only; artifact-agnostic (references only the `Artifact` ABC, for typing).
+  `ordering.py` (`topological_order` topo sort w/ branch+merge gating — returns node
+  **ids** (`list[str]`), the universal handle; `required_inputs`, `produced_outputs` —
+  both return `list[Artifact]`). Stdlib only; artifact-agnostic (references only the
+  `Artifact` ABC, for typing).
 - **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`, `svg.py`), the
   composite (`composite.py`), and the registry (`registry.py`). Each artifact declares
   its own native file form via `native()` (the `Artifact` ABC default serves an svg-kind
@@ -137,15 +138,16 @@ artifact-agnostic. Three nesting levels, each aggregating the one below, mirrori
 `CompositeArtifact`:
 
 - **`Section`** — one rendered item. `Section.from_artifact(artifact)`, or
-  `Section.from_node(graph, node, *, incoming=True, outgoing=True)` (a node's
+  `Section.from_node(graph, node_id, *, incoming=True, outgoing=True)` (a node's
   header + the artifacts on its incoming/outgoing edges, via `required_inputs`/
-  `produced_outputs`).
+  `produced_outputs`). Node-facing binder methods take **ids** (the same handle
+  `node()`/`topological_order` give back) and materialize via `graph.node` internally.
 - **`Chapter`** — a group of closely-related sections under an optional title.
-  `Chapter.of_artifacts(...)` / `Chapter.of_nodes(graph, nodes, ...)`.
+  `Chapter.of_artifacts(...)` / `Chapter.of_nodes(graph, node_ids, ...)`.
 - **`Binder`** — a collection of chapters rendering to **one standalone HTML document**.
   Layout knobs are fields: `title`, `chapter_divider` (page break, default) and
   `section_divider` (thin rule, default), all overridable. `Binder.of_artifacts(...)` /
-  `Binder.of_nodes(graph, nodes, ...)` wrap a single chapter for the ungrouped case.
+  `Binder.of_nodes(graph, node_ids, ...)` wrap a single chapter for the ungrouped case.
 
 The two headline uses: `Binder.of_artifacts([p.artifacts("solution") for p in puzzles])`
 (an answer key) and `Binder.of_nodes(graph, topological_order(graph))` (a page-per-node

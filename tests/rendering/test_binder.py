@@ -58,7 +58,7 @@ def test_section_from_node_shows_header_notes_and_both_sides() -> None:
         .connect(b, c, TextArtifact("go to the fountain", id="out"))
         .build()
     )
-    section = Section.from_node(graph, graph.node(b))
+    section = Section.from_node(graph, b)
     assert "Caesar gate" in section.markup
     assert "solve" in section.markup
     assert "leave on the bench" in section.markup  # notes
@@ -76,7 +76,7 @@ def test_section_from_node_can_omit_a_side() -> None:
         .connect(b, c, TextArtifact("go to the fountain", id="out"))
         .build()
     )
-    section = Section.from_node(graph, graph.node(b), outgoing=False)
+    section = Section.from_node(graph, b, outgoing=False)
     assert "Receives" in section.markup
     assert "Produces" not in section.markup
     assert "go to the fountain" not in section.markup
@@ -87,7 +87,7 @@ def test_section_from_node_escapes_text() -> None:
     a = builder.node(label="<script>alert(1)</script>")
     b = builder.node(label="end")
     graph = builder.connect(a, b, TextArtifact("hi")).build()
-    section = Section.from_node(graph, graph.node(a))
+    section = Section.from_node(graph, a)
     assert "<script>" not in section.markup
     assert "&lt;script&gt;" in section.markup
 

@@ -224,21 +224,19 @@ if __name__ == "__main__":
     )
 
     # 3. The same walk, hand-grouped into chapters (one per hunt branch) to show chapters
-    #    and the page break between them.
-    def _nodes(*handles: str) -> list:
-        return [hunt.node(h) for h in handles]
-
+    #    and the page break between them. The node handles are already ids, so they go
+    #    straight into of_nodes — no Node materialization needed.
     by_chapter = Binder(
         (
-            Chapter.of_nodes(hunt, _nodes(start, solve_gate), title="Opening"),
-            Chapter.of_nodes(hunt, _nodes(find_library, solve_cw), title="Library branch"),
-            Chapter.of_nodes(hunt, _nodes(find_attic, solve_grille), title="Attic branch"),
+            Chapter.of_nodes(hunt, [start, solve_gate], title="Opening"),
+            Chapter.of_nodes(hunt, [find_library, solve_cw], title="Library branch"),
+            Chapter.of_nodes(hunt, [find_attic, solve_grille], title="Attic branch"),
             Chapter.of_nodes(
                 hunt,
-                _nodes(find_garden, find_shed, find_planter, find_birdbath, solve_riddle),
+                [find_garden, find_shed, find_planter, find_birdbath, solve_riddle],
                 title="Garden branch",
             ),
-            Chapter.of_nodes(hunt, _nodes(combine, examine, vault, end), title="Finale"),
+            Chapter.of_nodes(hunt, [combine, examine, vault, end], title="Finale"),
         ),
         title="Mock Hunt — by branch",
     )

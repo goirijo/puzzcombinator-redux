@@ -11,12 +11,12 @@ from puzzcombinator import (
 )
 
 
-def _index(order: list, node_id: str) -> int:
-    return [n.id for n in order].index(node_id)
+def _index(order: list[str], node_id: str) -> int:
+    return order.index(node_id)
 
 
 def test_linear_order(cipher_hunt: Graph) -> None:
-    order = [n.id for n in topological_order(cipher_hunt)]
+    order = topological_order(cipher_hunt)
     assert order == ["start", "solve", "end"]
 
 
@@ -40,7 +40,7 @@ def test_order_is_insertion_independent(flip: bool) -> None:
     else:
         builder.connect(start, a).connect(start, b)
         builder.connect(a, merge).connect(b, merge)
-    order = [n.id for n in topological_order(builder.build())]
+    order = topological_order(builder.build())
     assert order == ["start", "A", "B", "merge"]
 
 
@@ -50,8 +50,8 @@ def test_start_argument_is_preferred_seed() -> None:
     builder.node("x")
     builder.node("y")
     graph = builder.build()
-    assert [n.id for n in topological_order(graph, start="y")][0] == "y"
-    assert [n.id for n in topological_order(graph, start="x")][0] == "x"
+    assert topological_order(graph, start="y")[0] == "y"
+    assert topological_order(graph, start="x")[0] == "x"
 
 
 def test_cycle_raises() -> None:

@@ -31,7 +31,7 @@ import html
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from puzzcombinator.core.graph import Graph, Node
+from puzzcombinator.core.graph import Graph
 from puzzcombinator.core.ordering import produced_outputs, required_inputs
 from puzzcombinator.rendering.export import html_document
 from puzzcombinator.rendering.fragment import Artifact
@@ -109,14 +109,18 @@ class Section:
 
     @classmethod
     def from_node(
-        cls, graph: Graph, node: Node, *, incoming: bool = True, outgoing: bool = True
+        cls, graph: Graph, node_id: str, *, incoming: bool = True, outgoing: bool = True
     ) -> Section:
         """A section for one node: its header (label/action/notes) plus the artifacts on
         its incoming and/or outgoing edges.
 
-        ``incoming``/``outgoing`` select which side(s) to include — e.g. ``outgoing=False``
-        for a sheet that shows only what each action hands the player.
+        ``node_id`` is the node's id — the handle :meth:`GraphBuilder.node` hands back
+        and :func:`topological_order` returns; the node is materialized internally via
+        :meth:`Graph.node`. ``incoming``/``outgoing`` select which side(s) to include —
+        e.g. ``outgoing=False`` for a sheet that shows only what each action hands the
+        player.
         """
+        node = graph.node(node_id)
         action = (
             f' <span class="binder-action">{html.escape(node.action)}</span>' if node.action else ""
         )
@@ -157,15 +161,22 @@ class Chapter:
     def of_nodes(
         cls,
         graph: Graph,
-        nodes: Iterable[Node],
+        node_ids: Iterable[str],
         *,
         incoming: bool = True,
         outgoing: bool = True,
         title: str | None = None,
     ) -> Chapter:
-        """A chapter with one section per node, in the order given."""
+        """A chapter with one section per node id, in the order given.
+
+        ``node_ids`` are the handles you collected while building (or got from
+        :func:`topological_order`); each is resolved via :meth:`Graph.node`.
+        """
         return cls(
-            tuple(Section.from_node(graph, n, incoming=incoming, outgoing=outgoing) for n in nodes),
+            tuple(
+                Section.from_node(graph, nid, incoming=incoming, outgoing=outgoing)
+                for nid in node_ids
+            ),
             title,
         )
 
@@ -216,7 +227,7 @@ class Binder:
     def of_nodes(
         cls,
         graph: Graph,
-        nodes: Iterable[Node],
+        node_ids: Iterable[str],
         *,
         incoming: bool = True,
         outgoing: bool = True,
@@ -224,13 +235,13 @@ class Binder:
         section_divider: str = RULE,
         chapter_divider: str = PAGE_BREAK,
     ) -> Binder:
-        """A binder of one chapter, one section per node — the "page per node" case.
+        """A binder of one chapter, one section per node id — the "page per node" case.
 
-        Order the nodes however you like; pass ``topological_order(graph)`` for solve
+        Order the ids however you like; pass ``topological_order(graph)`` for solve
         order.
         """
         return cls(
-            (Chapter.of_nodes(graph, nodes, incoming=incoming, outgoing=outgoing),),
+            (Chapter.of_nodes(graph, node_ids, incoming=incoming, outgoing=outgoing),),
             title=title,
             section_divider=section_divider,
             chapter_divider=chapter_divider,

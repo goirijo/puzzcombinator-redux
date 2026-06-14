@@ -161,10 +161,14 @@ class Graph:
         """Edges leaving ``node_id`` (its outputs)."""
         return [self.edges[eid] for eid in self.nodes[node_id].outgoing_edge_ids]
 
-    def start_nodes(self) -> list[Node]:
-        """Nodes with no incoming edges (the hunt's entry points)."""
-        return [n for n in self.nodes.values() if not n.incoming_edge_ids]
+    def start_node_ids(self) -> list[str]:
+        """Ids of nodes with no incoming edges (the hunt's entry points).
 
-    def end_nodes(self) -> list[Node]:
-        """Nodes with no outgoing edges (the hunt's terminal points)."""
-        return [n for n in self.nodes.values() if not n.outgoing_edge_ids]
+        Returns ids, not :class:`Node` objects — ids are the currency every
+        query speaks; call :meth:`node` to materialize one.
+        """
+        return [nid for nid, n in self.nodes.items() if not n.incoming_edge_ids]
+
+    def end_node_ids(self) -> list[str]:
+        """Ids of nodes with no outgoing edges (the hunt's terminal points)."""
+        return [nid for nid, n in self.nodes.items() if not n.outgoing_edge_ids]

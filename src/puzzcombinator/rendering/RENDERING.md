@@ -116,18 +116,20 @@ Three nesting levels, each a renderable that aggregates the one below — the sa
 `CompositeArtifact`, one layer up:
 
 - **`Section`** — one rendered item. `Section.from_artifact(artifact)` wraps a single
-  artifact's render; `Section.from_node(graph, node, *, incoming=True, outgoing=True)`
+  artifact's render; `Section.from_node(graph, node_id, *, incoming=True, outgoing=True)`
   renders a node's header (label / action / notes) plus the artifacts on its incoming
   and/or outgoing edges (reusing `core.ordering.required_inputs` / `produced_outputs`).
+  It takes a node **id** — the same currency `GraphBuilder.node` returns and
+  `topological_order` yields — and materializes the node internally via `Graph.node`.
 - **`Chapter`** — a group of closely-related sections under an optional title. The unit of
   "keep these together." `Chapter.of_artifacts(artifacts, *, title=None)` and
-  `Chapter.of_nodes(graph, nodes, *, …, title=None)` build the common ones.
+  `Chapter.of_nodes(graph, node_ids, *, …, title=None)` build the common ones.
 - **`Binder`** — a collection of chapters that renders to **one standalone HTML document**
   (via `html_document`). The only level that produces a finished document, and where the
   layout knobs live as fields: `title`, `chapter_divider` (a page break by default,
   between chapters) and `section_divider` (a thin rule by default, between sections within
   a chapter). All overridable — pass any HTML string. `Binder.of_artifacts(...)` /
-  `Binder.of_nodes(graph, nodes, …)` wrap everything in one chapter for the ungrouped case.
+  `Binder.of_nodes(graph, node_ids, …)` wrap everything in one chapter for the ungrouped case.
 
 ```python
 # A page per node, in solve order:
@@ -136,7 +138,8 @@ Binder.of_nodes(graph, topological_order(graph), title="Walkthrough").render()
 # An answer key — just a different collection, no special tag:
 Binder.of_artifacts([p.artifacts("solution") for p in puzzles], title="Answers").render()
 
-# Grouped by hand — chapters get a page break, sections within a thin rule:
+# Grouped by hand — chapters get a page break, sections within a thin rule.
+# branch_a / branch_b are lists of node ids (the handles node() handed back):
 Binder((Chapter.of_nodes(graph, branch_a, title="Branch A"),
         Chapter.of_nodes(graph, branch_b, title="Branch B"))).render()
 ```

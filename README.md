@@ -77,8 +77,8 @@ b.connect(start, solve, *cipher.artifacts().values())
 b.connect(solve, end, TextArtifact("Go to the fountain."))
 graph = b.build()
 
-for node in topological_order(graph):
-    print(node.id, node.action)
+for node_id in topological_order(graph):   # returns node ids, the universal handle
+    print(node_id, graph.node(node_id).action)
 
 # The artifacts this action produces flow on its outgoing edge (use the handle).
 assert [a.text for a in produced_outputs(graph, solve)] == ["Go to the fountain."]
