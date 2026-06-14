@@ -100,8 +100,8 @@ class GraphBuilder:
     def _auto_node_id(self) -> str:
         """A unique ``n1``/``n2``/… id, skipping any explicitly-taken id."""
         while True:
-            self._node_seq += 1
             candidate = f"n{self._node_seq}"
+            self._node_seq += 1
             if candidate not in self._nodes:
                 return candidate
 
