@@ -10,6 +10,10 @@ canvas-state channel) is documented in
 server and the `/api/graph` shape. **This doc is the frontend code: what's here, how it's
 organized, and how to add a feature.**
 
+For how the UI should *look and behave* — the interface design worked out before the code —
+see [`design/DESIGN.md`](design/DESIGN.md) and the per-feature specs alongside it. (This doc
+describes the code that exists; `design/` describes what we intend to build and why.)
+
 ## What's actually in here (and what isn't)
 
 A frontend directory looks alarming the first time, but **git tracks ~18 small text
