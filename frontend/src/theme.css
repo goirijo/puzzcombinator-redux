@@ -1,0 +1,51 @@
+/* The swappable theme. Every color/size the editor uses is a CSS variable here, so
+ * reskinning (light/dark, a custom theme) means replacing this :root block alone —
+ * no component edits. Components reference these variables via class names and never
+ * hardcode a value. This is the foundation for the theming feature on the roadmap. */
+
+:root {
+  --node-bg: #ffffff;
+  --node-text: #1a1a1a;
+  --node-radius: 8px;
+  --node-pad: 8px 12px;
+  --node-min-width: 120px;
+
+  --role-start: #2e7d32;
+  --role-end: #c62828;
+  --role-middle: #37474f;
+
+  --action-font-size: 11px;
+}
+
+.hunt-node {
+  background: var(--node-bg);
+  color: var(--node-text);
+  border: 2px solid var(--role-middle);
+  border-radius: var(--node-radius);
+  padding: var(--node-pad);
+  min-width: var(--node-min-width);
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+
+.hunt-node[data-role='start'] {
+  border-color: var(--role-start);
+}
+.hunt-node[data-role='end'] {
+  border-color: var(--role-end);
+}
+
+.hunt-node__label {
+  font-weight: 600;
+}
+
+.hunt-node__action {
+  font-size: var(--action-font-size);
+  color: var(--role-middle);
+}
+.hunt-node[data-role='start'] .hunt-node__action {
+  color: var(--role-start);
+}
+.hunt-node[data-role='end'] .hunt-node__action {
+  color: var(--role-end);
+}

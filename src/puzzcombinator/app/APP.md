@@ -8,9 +8,11 @@ and writes a whole hunt back via `to_json` (a saved hunt file is a `HuntDocument
 **never modifies** `core/`, `serialization/`, `rendering/`, `puzzles/`, or
 `artifacts/` — it only imports them.
 
-> Started 2026-06-13, built bottom-up like the rest of the library. Read-only
-> visualization, in-browser node editing, and **persistence (`PUT /api/graph` + a Save
-> control)** are done. See the "Status & roadmap" section at the end.
+> Started 2026-06-13, built bottom-up like the rest of the library. The frontend was
+> **migrated from vanilla SVG to React + React Flow (Vite, TypeScript) on 2026-06-18**;
+> the Python backend + JSON seam were unchanged. The current React app is read-only
+> visualization (drag / pan / zoom); selection, editing, and save are being re-ported.
+> See the "Status & roadmap" section at the end.
 
 ### Two channels: hunt data vs. canvas state
 
@@ -62,9 +64,10 @@ Three small modules. They depend downward (on `core` + `serialization`, and on
     hunt JSON file — a hunt document — loaded via `serialization.from_json` and drawn as
     its `.main` graph; otherwise the built-in demo graph is used (and saving is
     disabled — nowhere to write).
-  - Everything else is served as static files from `static/` (the page, JS, CSS),
-    mounted at `/`. The page and the API share one origin, so the browser's
-    same-origin rule is satisfied and **no CORS config is needed**.
+  - The app is **API-only** — it no longer serves the page. In development the React/Vite
+    UI runs on `http://localhost:5173` and **proxies** `/api/*` to this app on `:8000`, so
+    the browser still sees one origin and **no CORS config is needed**. (Serving a built
+    `frontend/dist` from FastAPI is a deployment concern, deferred.)
 
 - **`demo.py` — a built-in sample hunt.** `build_demo_graph()` assembles a small
   branch-and-merge hunt with `GraphBuilder`, so the page always has something
@@ -92,61 +95,62 @@ browser has no graph-selection concept yet, so it gets the one graph it draws. `
 `Graph`/`Puzzle` objects — only this JSON. That decoupling is what lets the view be
 replaced without touching the model.
 
-## Frontend (`static/`, vanilla — no build step)
+## Frontend (`frontend/`, React + Vite + TypeScript)
 
-Plain HTML + CSS + ES-module JavaScript, loaded straight by the browser (no
-npm/bundler). The split mirrors the backend principle: **pure helpers vs. the one
-file that holds state and does I/O.**
+The UI is a **React + React Flow** app built with **Vite**, in TypeScript, living in the
+repo-root `frontend/` directory (kept out of the Python `src/`). It replaced the original
+zero-build vanilla SVG frontend on 2026-06-18; React Flow gives node drag / pan / zoom /
+connection-drawing for free, and the JSON seam meant the swap touched no Python. The file
+split mirrors the backend principle — **pure data/view modules vs. the one file that holds
+state and does I/O:**
 
-- **`index.html`** — the page. One `<svg id="canvas">` (with an arrowhead `<marker>`
-  in `<defs>`, an `#edge-layer` and a `#node-layer` group) and an `<aside id="inspector">`
-  side panel. Loads `app.js` as `type="module"`.
+- **`src/api.ts`** — the seam, in TypeScript. The DTO interfaces mirroring the
+  `GET /api/graph` JSON (`ArtifactDTO`, `NodeDTO`, `EdgeDTO`, `NodePositionDTO`,
+  `GraphResponseDTO`) plus the `fetchGraph()` call. The single place the backend response
+  shape is written down; the compiler flags drift between seam and UI.
 
-- **`render.js` — pure-ish drawing helpers.** `createNode(node, pos, role)` and
-  `createEdge(edge, fromPos, toPos)` take plain data and return an SVG DOM element;
-  `NODE_WIDTH`/`NODE_HEIGHT` are exported. No fetching, no global state, no event
-  wiring — they only build elements (and tag each node group with `data-node-id` so
-  clicks can be traced back). Easy to read, easy to replace.
+- **`src/adapt.ts` — the pure adapter.** `toFlow(res)` maps the seam DTOs to React Flow's
+  `{nodes, edges}`. No React, no fetch, no state — the TS analog of the serialization
+  layer's `*_to_dict`, and unit-testable in isolation. Defines the **view-model types**
+  (prefix `Hunt`, deliberately not `DTO`): `HuntNodeData`/`HuntFlowNode`,
+  `HuntEdgeData`/`HuntFlowEdge`. Node **role** (start/end/middle) is derived from topology,
+  the same rule the model uses. Edge artifacts ride `data.content`.
 
-- **`inspector.js` — a pure view function.** `inspectorHtml(node, incoming, outgoing)`
-  returns the side-panel markup as a string (read-only id + editable `label`/`action`/
-  `notes` fields tagged with `data-field`, plus the artifacts on the incoming/outgoing
-  edges). String in, string out — no DOM, no fetch. This is the piece that translates
-  most directly into a component if the frontend ever moves to a framework. It escapes
-  the designer's text before inserting it into HTML.
+- **`src/HuntNode.tsx` — the pure node component.** Renders one node's box from its `data`;
+  carries **no style values** (only class names + a `data-role` attribute) and the two
+  React Flow `Handle`s edges attach to. The direct analog of a framework component.
 
-- **`app.js` — the glue: the *only* stateful, I/O file.** Fetches `/api/graph`, keeps
-  the working copy in one `state = { graph, layout, selectedId, dirty }` object, and
-  wires interaction: drawing the graph, click-to-select (one delegated listener on the
-  node layer), live editing (one delegated `input` listener on the inspector that
-  updates `state.graph`, redraws just the edited node via `redrawNode`, and marks the
-  graph dirty), and **saving** (the Save button `PUT`s `state.graph` back; a small
-  indicator shows unsaved/saving/saved). Node **role** (start/end/middle) is derived
-  from the topology, the same rule the model uses.
+- **`src/App.tsx` — the glue: the *only* stateful, I/O file.** Fetches `/api/graph` on
+  mount, runs it through `toFlow`, holds it via `useNodesState`/`useEdgesState`, and renders
+  `<ReactFlow>` with `<Background>` + `<Controls>`. (Currently read-only display + drag/pan/
+  zoom; selection, inspector, and save are the next slice.)
 
-- **`style.css`** — layout (canvas + inspector panes), node/edge styling, start/end
-  colors, the selected-node highlight, and the inspector form fields. No
-  artifact-specific knowledge.
+- **`src/theme.css`** — every color/size as a `:root` CSS variable (the swappable theme —
+  reskinning means replacing this block alone). **`src/index.css`** — structural reset only
+  (full-viewport canvas). Components never hardcode style values.
 
 ### Data flow in one line
 
 `server` builds/loads a `Graph` → `graph_to_dict` + `layered_layout` → JSON over `GET
-/api/graph` → `app.js` stores it in `state` and asks `render.js`/`inspector.js` to
-turn it into SVG + panel markup; on Save, `app.js` `PUT`s the edited block back and
-`server` writes it to the `PUZZ_GRAPH` file as a `HuntDocument`.
+/api/graph` → `App.tsx` fetches it, `adapt.ts` maps it to React Flow nodes/edges, and
+`<ReactFlow>` draws them (with `HuntNode` per node). (Editing + save: the next milestone.)
 
 ## Running it
 
+Two processes in development — the API and the UI dev server:
+
 ```bash
-pip install -e ".[gui]"                                   # fastapi + uvicorn
-python -m uvicorn puzzcombinator.app.server:app --reload  # serves on http://127.0.0.1:8000
+pip install -e ".[gui]"                                   # fastapi + uvicorn (backend)
+python -m uvicorn puzzcombinator.app.server:app --reload  # API on http://127.0.0.1:8000
 # draw a real hunt instead of the demo:
 PUZZ_GRAPH=/path/to/hunt.json python -m uvicorn puzzcombinator.app.server:app --reload
+
+cd frontend && npm install && npm run dev                 # UI on http://127.0.0.1:5173
 ```
 
-Use `python -m uvicorn …` (not bare `uvicorn`) so it works regardless of whether the
-console script is on `PATH`. Open the page only after the "Uvicorn running on …" line;
-Ctrl+C stops it.
+Use `python -m uvicorn …` (not bare `uvicorn`) so it works regardless of `PATH`. Open
+**http://127.0.0.1:5173** (Vite proxies `/api` to `:8000`); Ctrl+C stops each. `npm run
+build` (`tsc -b && vite build`) is the type-check + production-bundle gate.
 
 ## Tests
 
@@ -154,13 +158,13 @@ In `tests/app/`:
 - **`test_layout.py`** — the pure layout function (linear / branch+merge / disconnected
   / empty). This is the component we trust most, because it has no I/O.
 - **`test_server.py`** — the real routes via FastAPI's in-process `TestClient` (GET
-  response shape, layout coordinates, the page served at `/`, `PUZZ_GRAPH` override, and
-  the `PUT` save→reload round-trip + its demo-mode rejection).
+  response shape, layout coordinates, `PUZZ_GRAPH` override, and the `PUT` save→reload
+  round-trip + its demo-mode rejection).
 
-The frontend has no automated tests (no build/test toolchain by choice); the pure
-helpers (`render.js`, `inspector.js`) are kept side-effect-free so they *could* be
-tested later, but for now the browser behavior is verified by hand. `node --check` on
-the `.js` files is a cheap parse guard.
+The frontend has no automated tests yet. `npm run build` (`tsc -b && vite build`)
+type-checks every file and is the cheap correctness gate; the pure `adapt.ts` is the
+natural first thing to add a unit test for (e.g. Vitest) since it's side-effect-free.
+React Flow behavior is verified by hand in the browser.
 
 ## Layering rules (don't violate without discussing)
 
@@ -170,23 +174,27 @@ the `.js` files is a cheap parse guard.
 - **The JSON seam is the contract.** Anything the browser needs goes through the
   `GET`/`PUT /api/graph` shapes. Don't invent a side channel.
 - **Hard logic in Python, thin browser.** New computed structure (layout, validation,
-  ordering hints) belongs in a pure Python function with a test — not in JS.
-- **No build step on the frontend** (current choice). Keep `render.js`/`inspector.js`
-  pure and `app.js` the single home of state + I/O, so the view stays swappable.
+  ordering hints) belongs in a pure Python function with a test — not in TS.
+- **Pure modules vs. one stateful file.** Keep `api.ts`/`adapt.ts`/`HuntNode.tsx` pure
+  (data + view, no I/O) and `App.tsx` the single home of state + I/O, so the view stays
+  swappable. Components hold no style values — colors/sizes live in `theme.css` `:root`
+  variables; names follow the `DTO` (seam) / `Hunt` (view) conventions.
 
 ## Status & roadmap
 
-- **Done:** read-only graph visualization (nodes laid out by solve order, labeled
-  arrow edges, start/end coloring); click-to-select with a node inspector; in-browser
-  editing of `label`/`action`/`notes` with live canvas redraw; **persisting edits** via
-  `PUT /api/graph` + a Save control with a dirty/saved indicator.
-- **Next:** the canvas-interaction milestone — manual node dragging (positions persisted
-  to the canvas/views sidecar, shape already defined in `canvas.py`), pan/zoom, and
-  drawing connections. Dragging / connecting / pan-zoom is exactly what a node-editor
-  library (React Flow) provides, so it's the natural point to adopt one — the backend
-  and seam wouldn't change.
-- **Later (deferred):** creating/deleting nodes, an artifact/puzzle palette, editing
-  artifact payloads, multiple graphs/views (the format already anticipates both).
+- **Done (vanilla, pre-migration):** click-to-select + node inspector, in-browser editing
+  of `label`/`action`/`notes`, and persistence via `PUT /api/graph` + a Save control. The
+  backend for all of this still exists; only the *UI* for it was dropped in the React swap
+  and is being re-ported.
+- **Done (React):** read-only graph visualization (server-laid-out nodes, labeled arrow
+  edges, start/end coloring) with React Flow's built-in **drag / pan / zoom**.
+- **Next:** re-port the editing UI in React — click-to-select + an inspector panel for
+  `label`/`action`/`notes`, then wire Save back to the existing `PUT /api/graph`.
+- **Then:** persist manual drag positions to the canvas/views sidecar (shape defined in
+  `canvas.py`; positions override `layered_layout`), drag-to-connect, create/delete nodes.
+- **Later (deferred):** an artifact/puzzle palette, editing artifact payloads, rendering
+  artifact HTML in-panel, generating a binder from the editor, multiple graphs/views (the
+  format already anticipates both).
 
 ## UX ideas & wishlist (a living backlog)
 

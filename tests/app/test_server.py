@@ -27,12 +27,6 @@ def test_api_graph_layout_entries_have_coordinates() -> None:
     assert {"layer", "row", "x", "y"} <= set(start)
 
 
-def test_index_page_is_served_at_root() -> None:
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "<svg" in response.text
-
-
 def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:
     # Point PUZZ_GRAPH at a serialized two-node hunt document and confirm it's drawn
     # instead of the demo.

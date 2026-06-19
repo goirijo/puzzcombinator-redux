@@ -1,0 +1,17 @@
+/* Minimal reset: the editor is a full-viewport canvas, so html/body/#root all fill
+ * the screen. Theme colors live in theme.css, not here. */
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The React Flow canvas needs a sized parent to fill; this is structural layout,
+ * not a themeable value, so it lives here rather than in theme.css. */
+.editor-canvas {
+  width: 100%;
+  height: 100%;
+}

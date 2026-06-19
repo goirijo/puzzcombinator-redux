@@ -1,24 +1,28 @@
-"""The FastAPI app: serve the editor page, the graph it draws, and save edits back.
+"""The FastAPI app: serve the graph the editor draws and save edits back.
 
 Deliberately thin — every interesting decision lives in :mod:`layout` and the
-serialization layer. Three jobs:
+serialization layer. The app is **API-only**; the editor UI is the React/Vite app in
+``frontend/`` (see ``app/APP.md``). Two jobs:
 
 * ``GET /api/graph`` returns the drawn graph's own envelope
   (``{schema_version, graph: {nodes, edges}}``) plus a ``layout`` map of node positions.
 * ``PUT /api/graph`` writes an edited graph back to the ``PUZZ_GRAPH`` file as a hunt
   document (a saved hunt file is a whole document, even when it holds one graph).
-* everything else is served as static files from ``static/`` (the page, JS, CSS).
 
-The page and the API share one origin (``http://localhost:8000``), so the browser's
-same-origin rule is satisfied and we need no CORS configuration.
+In development the UI runs on Vite's dev server (``http://localhost:5173``) and proxies
+``/api/*`` to this app (``http://localhost:8000``), so the browser sees one origin and
+no CORS configuration is needed. (Serving a production ``frontend/dist`` build from here
+is a deployment concern, deferred until then.)
 
 Which graph is drawn: set the ``PUZZ_GRAPH`` environment variable to a serialized
 hunt JSON file (as written by ``serialization.to_json``) to draw — and save — a real
 hunt; otherwise the built-in demo graph is used (and saving is disabled, since there
-is nowhere to write). Run with::
+is nowhere to write). Run the backend with::
 
     python -m uvicorn puzzcombinator.app.server:app --reload
     PUZZ_GRAPH=/path/to/hunt.json python -m uvicorn puzzcombinator.app.server:app --reload
+
+and the UI with ``npm run dev`` in ``frontend/``.
 """
 
 from __future__ import annotations
@@ -29,7 +33,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
 
 from puzzcombinator.app.demo import build_demo_graph
 from puzzcombinator.app.layout import layered_layout
@@ -38,8 +41,6 @@ from puzzcombinator.core.graph import Graph
 from puzzcombinator.errors import GraphError, SerializationError
 from puzzcombinator.serialization import from_json, graph_from_dict, graph_to_dict, to_json
 from puzzcombinator.serialization.schema import KEY_GRAPH, KEY_SCHEMA_VERSION, SCHEMA_VERSION
-
-_STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _graph_path() -> str | None:
@@ -88,8 +89,3 @@ def save_graph(graph_block: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=f"invalid graph: {exc}") from exc
     Path(path).write_text(to_json(HuntDocument.single(graph)), encoding="utf-8")
     return {"saved": True}
-
-
-# Mounted last so the API routes above take precedence. ``html=True`` serves
-# ``index.html`` at "/".
-app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
