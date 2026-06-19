@@ -84,7 +84,7 @@ for node_id in topological_order(graph):   # returns node ids, the universal han
 assert [a.text for a in produced_outputs(graph, solve)] == ["Go to the fountain."]
 
 # A graph round-trips losslessly through its own JSON slice. (To save a whole hunt
-# to a file, wrap it: to_json(HuntDocument.single(graph)) — see AUTHORING_GRAPHS.md.)
+# to a file, wrap it: to_json(HuntDocument.single(graph)) — see core/GRAPHS.md.)
 restored = graph_from_dict(graph_to_dict(graph))
 assert restored == graph
 

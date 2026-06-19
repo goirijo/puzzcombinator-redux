@@ -11,8 +11,8 @@ them. If a detail here ever contradicts a per-layer doc, the per-layer doc wins.
 | Layer | Detailed doc |
 | --- | --- |
 | Artifacts | [`src/puzzcombinator/artifacts/ARTIFACTS.md`](src/puzzcombinator/artifacts/ARTIFACTS.md) |
-| Puzzles | [`src/puzzcombinator/puzzles/AUTHORING_PUZZLES.md`](src/puzzcombinator/puzzles/AUTHORING_PUZZLES.md) |
-| Core graph | [`src/puzzcombinator/core/AUTHORING_GRAPHS.md`](src/puzzcombinator/core/AUTHORING_GRAPHS.md) |
+| Puzzles | [`src/puzzcombinator/puzzles/PUZZLES.md`](src/puzzcombinator/puzzles/PUZZLES.md) |
+| Core graph | [`src/puzzcombinator/core/GRAPHS.md`](src/puzzcombinator/core/GRAPHS.md) |
 | Rendering / binder | [`src/puzzcombinator/rendering/RENDERING.md`](src/puzzcombinator/rendering/RENDERING.md) |
 | Editor (GUI) | [`src/puzzcombinator/app/APP.md`](src/puzzcombinator/app/APP.md) |
 
@@ -152,5 +152,5 @@ Python: the seam absorbed the change.
 - **Loose I/O coupling.** A puzzle's answer is *not* auto-linked to an outgoing edge; the
   designer places the answer artifact by hand.
 
-For how to add a new artifact or puzzle type, see `ARTIFACTS.md` and `AUTHORING_PUZZLES.md`
+For how to add a new artifact or puzzle type, see `ARTIFACTS.md` and `PUZZLES.md`
 — by design it touches only that layer.

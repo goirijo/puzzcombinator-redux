@@ -414,4 +414,4 @@ that boundary.
 ---
 
 *Next: composing artifacts into a hunt — building the graph, and what nodes and edges
-mean. See [`../core/AUTHORING_GRAPHS.md`](../core/AUTHORING_GRAPHS.md).*
+mean. See [`../core/GRAPHS.md`](../core/GRAPHS.md).*

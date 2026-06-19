@@ -13,6 +13,10 @@ and writes a whole hunt back via `to_json` (a saved hunt file is a `HuntDocument
 > the Python backend + JSON seam were unchanged. The current React app is read-only
 > visualization (drag / pan / zoom); selection, editing, and save are being re-ported.
 > See the "Status & roadmap" section at the end.
+>
+> **This doc covers the Python backend and the seam it serves.** The React frontend's code
+> — file map, conventions, and how to add a feature — lives in its own doc at
+> [`../../../frontend/FRONTEND.md`](../../../frontend/FRONTEND.md).
 
 ### Two channels: hunt data vs. canvas state
 
@@ -95,62 +99,33 @@ browser has no graph-selection concept yet, so it gets the one graph it draws. `
 `Graph`/`Puzzle` objects — only this JSON. That decoupling is what lets the view be
 replaced without touching the model.
 
-## Frontend (`frontend/`, React + Vite + TypeScript)
+## The frontend
 
-The UI is a **React + React Flow** app built with **Vite**, in TypeScript, living in the
-repo-root `frontend/` directory (kept out of the Python `src/`). It replaced the original
-zero-build vanilla SVG frontend on 2026-06-18; React Flow gives node drag / pan / zoom /
-connection-drawing for free, and the JSON seam meant the swap touched no Python. The file
-split mirrors the backend principle — **pure data/view modules vs. the one file that holds
-state and does I/O:**
-
-- **`src/api.ts`** — the seam, in TypeScript. The DTO interfaces mirroring the
-  `GET /api/graph` JSON (`ArtifactDTO`, `NodeDTO`, `EdgeDTO`, `NodePositionDTO`,
-  `GraphResponseDTO`) plus the `fetchGraph()` call. The single place the backend response
-  shape is written down; the compiler flags drift between seam and UI.
-
-- **`src/adapt.ts` — the pure adapter.** `toFlow(res)` maps the seam DTOs to React Flow's
-  `{nodes, edges}`. No React, no fetch, no state — the TS analog of the serialization
-  layer's `*_to_dict`, and unit-testable in isolation. Defines the **view-model types**
-  (prefix `Hunt`, deliberately not `DTO`): `HuntNodeData`/`HuntFlowNode`,
-  `HuntEdgeData`/`HuntFlowEdge`. Node **role** (start/end/middle) is derived from topology,
-  the same rule the model uses. Edge artifacts ride `data.content`.
-
-- **`src/HuntNode.tsx` — the pure node component.** Renders one node's box from its `data`;
-  carries **no style values** (only class names + a `data-role` attribute) and the two
-  React Flow `Handle`s edges attach to. The direct analog of a framework component.
-
-- **`src/App.tsx` — the glue: the *only* stateful, I/O file.** Fetches `/api/graph` on
-  mount, runs it through `toFlow`, holds it via `useNodesState`/`useEdgesState`, and renders
-  `<ReactFlow>` with `<Background>` + `<Controls>`. (Currently read-only display + drag/pan/
-  zoom; selection, inspector, and save are the next slice.)
-
-- **`src/theme.css`** — every color/size as a `:root` CSS variable (the swappable theme —
-  reskinning means replacing this block alone). **`src/index.css`** — structural reset only
-  (full-viewport canvas). Components never hardcode style values.
+The React/Vite/TypeScript UI that consumes this seam lives in
+**[`frontend/`](../../../frontend/FRONTEND.md)** and is documented there — its file map, the
+pure-modules-vs-one-stateful-file structure, the `DTO`/`Hunt` naming + styling conventions,
+and how to add a feature. From the backend's side all that matters is the contract above: the
+UI `GET`s the graph envelope and `PUT`s an edited `{nodes, edges}` block back.
 
 ### Data flow in one line
 
 `server` builds/loads a `Graph` → `graph_to_dict` + `layered_layout` → JSON over `GET
-/api/graph` → `App.tsx` fetches it, `adapt.ts` maps it to React Flow nodes/edges, and
-`<ReactFlow>` draws them (with `HuntNode` per node). (Editing + save: the next milestone.)
+/api/graph` → the frontend draws it; on Save the frontend `PUT`s the edited block back and
+`server` writes it to the `PUZZ_GRAPH` file as a `HuntDocument`.
 
-## Running it
-
-Two processes in development — the API and the UI dev server:
+## Running the backend
 
 ```bash
-pip install -e ".[gui]"                                   # fastapi + uvicorn (backend)
+pip install -e ".[gui]"                                   # fastapi + uvicorn
 python -m uvicorn puzzcombinator.app.server:app --reload  # API on http://127.0.0.1:8000
 # draw a real hunt instead of the demo:
 PUZZ_GRAPH=/path/to/hunt.json python -m uvicorn puzzcombinator.app.server:app --reload
-
-cd frontend && npm install && npm run dev                 # UI on http://127.0.0.1:5173
 ```
 
-Use `python -m uvicorn …` (not bare `uvicorn`) so it works regardless of `PATH`. Open
-**http://127.0.0.1:5173** (Vite proxies `/api` to `:8000`); Ctrl+C stops each. `npm run
-build` (`tsc -b && vite build`) is the type-check + production-bundle gate.
+Use `python -m uvicorn …` (not bare `uvicorn`) so it works regardless of `PATH`. This serves
+the **API only**; start the UI separately (`npm run dev` in `frontend/` — see
+[`frontend/FRONTEND.md`](../../../frontend/FRONTEND.md)) and open **http://127.0.0.1:5173**,
+which proxies `/api` to this app.
 
 ## Tests
 
@@ -161,10 +136,7 @@ In `tests/app/`:
   response shape, layout coordinates, `PUZZ_GRAPH` override, and the `PUT` save→reload
   round-trip + its demo-mode rejection).
 
-The frontend has no automated tests yet. `npm run build` (`tsc -b && vite build`)
-type-checks every file and is the cheap correctness gate; the pure `adapt.ts` is the
-natural first thing to add a unit test for (e.g. Vitest) since it's side-effect-free.
-React Flow behavior is verified by hand in the browser.
+Frontend testing is covered in [`frontend/FRONTEND.md`](../../../frontend/FRONTEND.md).
 
 ## Layering rules (don't violate without discussing)
 
@@ -175,10 +147,19 @@ React Flow behavior is verified by hand in the browser.
   `GET`/`PUT /api/graph` shapes. Don't invent a side channel.
 - **Hard logic in Python, thin browser.** New computed structure (layout, validation,
   ordering hints) belongs in a pure Python function with a test — not in TS.
-- **Pure modules vs. one stateful file.** Keep `api.ts`/`adapt.ts`/`HuntNode.tsx` pure
-  (data + view, no I/O) and `App.tsx` the single home of state + I/O, so the view stays
-  swappable. Components hold no style values — colors/sizes live in `theme.css` `:root`
-  variables; names follow the `DTO` (seam) / `Hunt` (view) conventions.
+- **Frontend layering** — the UI's own rules (pure modules vs. one stateful file, no inline
+  styles, `DTO`/`Hunt` naming) live in [`frontend/FRONTEND.md`](../../../frontend/FRONTEND.md).
+
+## Adding to the backend
+
+- **A new computed structure the UI needs** (validation, an ordering hint, a richer layout):
+  write it as a **pure function with a test** — like `layout.py` — and expose it through the
+  existing `GET /api/graph` response, not a side channel.
+- **A new endpoint** (list hunts, a binder export, …): add a route to `server.py`, but
+  reconstruct/serialize through the `serialization` layer (never hand-roll JSON) and keep the
+  route thin — the real work belongs in a tested module below it.
+- **Touch no lower layer.** If a change pushes you to edit `core`/`serialization`/`rendering`,
+  that's a signal to rethink the seam, not to reach down.
 
 ## Status & roadmap
 

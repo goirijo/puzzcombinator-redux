@@ -41,8 +41,8 @@ drift in `examples/hunts/jgg_hunt/hunt.py` — the user's WIP hunt — is out of
 The model (artifact-on-edge graph), the layered stack + its strict downward dependency
 direction, and the **generated → stored → displayed** data lifecycle all live in
 **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — read it once to orient. Per-layer detail is in
-the package docs it links to (`artifacts/ARTIFACTS.md`, `puzzles/AUTHORING_PUZZLES.md`,
-`core/AUTHORING_GRAPHS.md`, `rendering/RENDERING.md`, `app/APP.md`). That is the canonical
+the package docs it links to (`artifacts/ARTIFACTS.md`, `puzzles/PUZZLES.md`,
+`core/GRAPHS.md`, `rendering/RENDERING.md`, `app/APP.md`). That is the canonical
 architecture reference; this file is the agent quickstart + current status.
 
 A few practical facts for *writing code here* that the architecture doc doesn't dwell on:
@@ -156,7 +156,7 @@ artifacts, puzzles + serialization + core, and now the binder. A puzzle emits al
 pieces in one `{name: Artifact}` map; a binder is whatever collection of renderings the
 designer assembles (no player/answer-key tag — the `Audience` enum is gone). Documented
 across `artifacts/ARTIFACTS.md`, `rendering/RENDERING.md`,
-`puzzles/AUTHORING_PUZZLES.md`, `core/AUTHORING_GRAPHS.md`, and `app/APP.md`.
+`puzzles/PUZZLES.md`, `core/GRAPHS.md`, and `app/APP.md`.
 
 Likely next work (the GUI editor is the active frontier): the canvas-interaction
 milestone (node dragging with positions persisted to the `app/canvas.py` sidecar,

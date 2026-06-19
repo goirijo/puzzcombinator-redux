@@ -1,6 +1,6 @@
 # Authoring a hunt graph
 
-The companion guide, [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md),
+The companion guide, [`PUZZLES.md`](../puzzles/PUZZLES.md),
 showed how to build a single self-contained puzzle. This one is the next layer
 up: **composing puzzles — and the steps between them — into a whole hunt.** You
 will lay out the path players take, hang puzzles on it, branch it so several
@@ -33,7 +33,7 @@ Three types carry the whole model (`core/graph.py`):
 | **`Artifact`** | a serializable **thing that renders** (a clue, a cipher, a grid) | one piece of what a step hands to the next |
 
 A **`Puzzle`** is an authoring-time *generator* of artifacts (see
-[`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)); it is not part of the
+[`PUZZLES.md`](../puzzles/PUZZLES.md)); it is not part of the
 graph — you place the artifacts it emits.
 
 The shape of the whole thing follows from a few rules:
@@ -432,5 +432,5 @@ are decoupled on purpose.
 
 *See [`examples/hunts/mock_hunt/hunt.py`](../../../examples/hunts/mock_hunt/hunt.py) for all of
 the above assembled into one working hunt — four puzzle types, the image artifact, a
-three-way branch and merge, and a physical step — and [`AUTHORING_PUZZLES.md`](../puzzles/AUTHORING_PUZZLES.md)
+three-way branch and merge, and a physical step — and [`PUZZLES.md`](../puzzles/PUZZLES.md)
 for building the puzzles that ride the edges.*
