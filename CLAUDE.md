@@ -36,96 +36,28 @@ green:
 `pytest` is **171 passed / 0 skipped**, `ruff` + `mypy` clean. (Pre-existing lint/format
 drift in `examples/hunts/jgg_hunt/hunt.py` — the user's WIP hunt — is out of scope.)
 
-## The core model (artifact-on-edge, rearchitected 2026-06-04)
+## Architecture — the model and the layer map
 
-A hunt is a **directed graph of actions**, and the graph is the **flow of
-artifacts**:
-- **`Edge`** carries `content: tuple[Artifact, ...]` — the artifacts flowing from
-  one action to the next. There is no `Content` wrapper and no `text`/`data`/`puzzle`
-  fields anymore.
-- **`Artifact`** (in `rendering/fragment.py`) is the universal **thing that
-  renders** carried on edges: a registry-backed, serializable renderable. **Its
-  primitives, composite, custom-type recipe, and
-  serialization are documented in full in `src/puzzcombinator/artifacts/ARTIFACTS.md`
-  — read that for the artifact layer; the bullet here only covers how artifacts ride
-  the graph.**
-- **`Puzzle`** (in `puzzles/base.py`) is an authoring-time **generator**, *not*
-  stored on edges and *not* serialized. `puzzle.artifacts(name=None)` returns a
-  `{name: Artifact}` map (or one artifact by name) — *all* the pieces the puzzle is
-  made of, prompt and answer key alike. The designer places those artifacts on edges.
-  A multi-piece puzzle (riddle lines + full text, R4's blanks/grille/grid/text,
-  cipher's ciphertext/shift/solution) is just a generator that emits several
-  artifacts — placeable together or **scattered** across edges and assembled at a
-  merge.
-- **`Node`** is a **pure action** with a free-form **`action`** string
-  (`"solve"`/`"find"`/`"move"`/…). **No `payload`, no `kind` enum.** Start/end are
-  derived from topology (no incoming / no outgoing edges). The model is
-  **stateless** — no player state, ever.
-- **Ids are internal, not author-supplied.** `GraphBuilder.node(...)` returns a
-  **handle** (the node id) you pass to `connect` — no fluent `.node().node()`
-  chaining (connect still returns self). Omitted node ids auto-generate (`n1`, `n2`,
-  …). Artifact ids default to `{type_name}-{uuid}`; a puzzle prefixes its emitted
-  artifacts as `{puzzle.id}-{name}` so pass an explicit puzzle/artifact id only for
-  readable `players/` filenames. The same artifact may be **reused** on several
-  edges (one piece used in multiple places); `Graph.assemble` only rejects a
-  repeated id *within a single edge*.
+The model (artifact-on-edge graph), the layered stack + its strict downward dependency
+direction, and the **generated → stored → displayed** data lifecycle all live in
+**[`ARCHITECTURE.md`](ARCHITECTURE.md)** — read it once to orient. Per-layer detail is in
+the package docs it links to (`artifacts/ARTIFACTS.md`, `puzzles/AUTHORING_PUZZLES.md`,
+`core/AUTHORING_GRAPHS.md`, `rendering/RENDERING.md`, `app/APP.md`). That is the canonical
+architecture reference; this file is the agent quickstart + current status.
 
-Authoring: `connect(source, target, *artifacts)`. Example —
-`connect(start, solve, *cipher.artifacts().values())`, then
-`connect(solve, find, TextArtifact("go to the kitchen"))`. The artifacts ride the
-edges *into* the action that consumes them; a puzzle's answer is a separate artifact
-you place on the outgoing edge.
+A few practical facts for *writing code here* that the architecture doc doesn't dwell on:
 
-## Package map (`src/puzzcombinator/`)
-
-- **`core/`** — `graph.py` (Node, Edge, Graph), `builder.py` (`GraphBuilder`),
-  `ordering.py` (`topological_order` topo sort w/ branch+merge gating — returns node
-  **ids** (`list[str]`), the universal handle; `required_inputs`, `produced_outputs` —
-  both return `list[Artifact]`). Stdlib only; artifact-agnostic (references only the
-  `Artifact` ABC, for typing).
-- **`artifacts/`** — the **orphan** artifacts (`text.py`, `image.py`, `svg.py`), the
-  composite (`composite.py`), and the registry (`registry.py`). Each artifact declares
-  its own native file form via `native()` (the `Artifact` ABC default serves an svg-kind
-  render as `.svg`; `text`/`image` override). Depends only on `rendering` + `errors`, so
-  `puzzles/` builds on top of it without a cycle. **Fully documented in
-  `artifacts/ARTIFACTS.md`** — go there for the types, the custom-type recipe, and
-  serialization.
-- **`puzzles/`** — `base.py` (`Puzzle` generator ABC) and the puzzle types, each
-  pairing a `Puzzle` generator with its `Artifact` subclass(es): `cipher.py`,
-  `crossword.py`, `r4.py`, `riddle.py`. Depends on `artifacts` + `rendering` +
-  `errors`. (An artifact with no puzzle logic — text, image, a future lat/long — is
-  an *orphan* and lives in `artifacts/`, not here.)
-- **`serialization/`** — `codec.py` (the only place that knows the on-disk shape;
-  **compositional** — each level serializes its own slice, no type-switching: a `Graph`
-  via `graph_to_dict`/`graph_from_dict` (`{schema_version, graph:{nodes,edges}}`), a
-  `HuntDocument` via `document_to_dict`/`document_from_dict`
-  (`{schema_version, graphs:{id:…}}`); the document reuses the graph slice; each edge's
-  content is a list of artifacts round-tripped via the registry as `{type,id,name,payload}`),
-  `__init__.py` (`to_json`/`from_json` + lazy `to_yaml`/`from_yaml` — these operate on a
-  **`HuntDocument`**, since a saved hunt *file* is a whole document), `schema.py`
-  (`SCHEMA_VERSION = "3"`; version dispatch + migration scaffold in
-  `codec._assert_current_version`). The interchange seam for a future GUI/monitoring
-  layer. Keystone invariant: `*_from_dict(*_to_dict(x)) == x`. The envelope is
-  **additive** — new top-level keys (more graphs, floating artifacts, geo-coords) need no
-  migration; `schema_version` bumps only for non-additive changes. **Canvas/visualization
-  state (node x/y, views) is a SEPARATE channel — see `app/canvas.py` — never in
-  `HuntDocument`.**
-- **`rendering/`** — `fragment.py` (`RenderFragment` {markup, kind html|svg,
-  styles} and the `Artifact` ABC, incl. `render()` + `native()`), `presets.py` (fragment
-  factories), `export.py` (the agnostic single-artifact file writers: `html_document`,
-  `write_html`, `write_artifact`, `write_artifacts` — all need only the ABC), `binder.py`
-  (composable `Section`/`Chapter`/`Binder` — compose many renderings into one document).
-  Artifact-agnostic. **Documented in `rendering/RENDERING.md`.**
-- **`app/`** — the **GUI editor layer** (new top layer; the "GUI = producer" half of
-  the seam rule). `layout.py` (pure, tested layered-DAG node positions via
-  `topological_order`), `canvas.py` (the **canvas/views channel** shape —
-  `CanvasDocument`/`View`/`Position`, the separate "where it's drawn" data; defined, not
-  yet persisted), `server.py` (thin FastAPI: `GET /api/graph` = `graph_to_dict` + layout;
-  `PUT /api/graph` writes the edited graph back to the `PUZZ_GRAPH` file as a
-  `HuntDocument`; serves `static/`), `demo.py` (a built-in sample graph), and `static/`
-  (vanilla HTML/CSS/SVG, no build step — `render.js`/`inspector.js` pure, `app.js` the
-  sole state + I/O, incl. the Save control). Consumes/produces the serialization seam
-  only; imports lower layers, modifies none. **Documented in `app/APP.md`.**
+- **Authoring call:** `connect(source, target, *artifacts)`. Example —
+  `connect(start, solve, *cipher.artifacts().values())`, then
+  `connect(solve, find, TextArtifact("go to the kitchen"))`. Artifacts ride the edges
+  *into* the action that consumes them; a puzzle's answer is a separate artifact you place
+  on the outgoing edge.
+- **Ids are internal, auto-generated.** `GraphBuilder.node(...)` returns a *handle* (the
+  node id) you pass to `connect` (no fluent chaining; `connect` returns self). Omitted node
+  ids auto-generate (`n1`, `n2`, …); artifact ids default to `{type_name}-{uuid}`, and a
+  puzzle prefixes its pieces `{puzzle.id}-{name}` — pass an explicit id only for readable
+  filenames. The same artifact may be reused on several edges; only a repeated id *within a
+  single edge* is rejected.
 
 ## Output / the binder
 
