@@ -9,12 +9,10 @@
   --node-radius: 8px;
   --node-pad: 8px 12px;
   --node-min-width: 120px;
-
-  --role-start: #2e7d32;
-  --role-end: #c62828;
-  --role-middle: #37474f;
+  --node-border: #37474f;
 
   --action-font-size: 11px;
+  --action-color: #37474f;
 
   /* --- Shell chrome (rail / tabs / panel) --------------------------------- */
   --shell-bg: #f4f5f7;
@@ -47,19 +45,12 @@
 .hunt-node {
   background: var(--node-bg);
   color: var(--node-text);
-  border: 2px solid var(--role-middle);
+  border: 2px solid var(--node-border);
   border-radius: var(--node-radius);
   padding: var(--node-pad);
   min-width: var(--node-min-width);
   text-align: center;
   font-family: system-ui, sans-serif;
-}
-
-.hunt-node[data-role='start'] {
-  border-color: var(--role-start);
-}
-.hunt-node[data-role='end'] {
-  border-color: var(--role-end);
 }
 
 .hunt-node__label {
@@ -68,11 +59,5 @@
 
 .hunt-node__action {
   font-size: var(--action-font-size);
-  color: var(--role-middle);
-}
-.hunt-node[data-role='start'] .hunt-node__action {
-  color: var(--role-start);
-}
-.hunt-node[data-role='end'] .hunt-node__action {
-  color: var(--role-end);
+  color: var(--action-color);
 }

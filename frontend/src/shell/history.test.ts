@@ -8,7 +8,7 @@ function node(over: Partial<HuntFlowNode> = {}): HuntFlowNode {
     id: 'n1',
     type: 'hunt',
     position: { x: 10, y: 20 },
-    data: { label: 'L', action: 'a', notes: '', role: 'middle' },
+    data: { label: 'L', action: 'a', notes: '' },
     ...over,
   }
 }
@@ -30,7 +30,7 @@ describe('graphSignature', () => {
 
   it('changes when an editable field changes', () => {
     const before = state([node()])
-    const after = state([node({ data: { label: 'L2', action: 'a', notes: '', role: 'middle' } })])
+    const after = state([node({ data: { label: 'L2', action: 'a', notes: '' } })])
     expect(graphSignature(before)).not.toBe(graphSignature(after))
   })
 

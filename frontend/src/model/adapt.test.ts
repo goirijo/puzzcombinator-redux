@@ -39,13 +39,6 @@ describe('toFlow', () => {
     expect(toFlow(noLayout).nodes[0].position).toEqual({ x: 0, y: 0 })
   })
 
-  it('derives role from topology: start (no incoming), middle, end (no outgoing)', () => {
-    const byId = new Map(toFlow(SAMPLE).nodes.map((n) => [n.id, n.data.role]))
-    expect(byId.get('n1')).toBe('start')
-    expect(byId.get('n2')).toBe('middle')
-    expect(byId.get('n3')).toBe('end')
-  })
-
   it('coalesces null label/action/notes to empty string (so inputs stay controlled)', () => {
     const n1 = toFlow(SAMPLE).nodes.find((n) => n.id === 'n1')!
     // n1 has null action and notes, and a real label.

@@ -7,9 +7,6 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import type { ArtifactDTO, EdgeDTO, GraphResponseDTO, NodeDTO } from './api'
 
-/** Where a node sits in the flow, derived from topology (matches the model's rule). */
-export type Role = 'start' | 'end' | 'middle'
-
 /** The editable, persisted fields of a node — mirrors `NodeDTO` minus the id. */
 export interface NodeFields {
   label: string
@@ -17,9 +14,8 @@ export interface NodeFields {
   notes: string
 }
 
-/** The data our custom node component renders: the persisted fields + a derived role. */
+/** The data our custom node component renders: the persisted fields. */
 export interface HuntNodeData extends NodeFields {
-  role: Role
   [key: string]: unknown
 }
 
@@ -46,26 +42,11 @@ export interface View {
   graphId: string
 }
 
-/** Classify each node: no incoming edge = start, no outgoing = end, else middle. */
-function rolesByNode(graph: GraphResponseDTO['graph']): Map<string, Role> {
-  const hasIncoming = new Set(graph.edges.map((e) => e.target))
-  const hasOutgoing = new Set(graph.edges.map((e) => e.source))
-  const roles = new Map<string, Role>()
-  for (const n of graph.nodes) {
-    if (!hasIncoming.has(n.id)) roles.set(n.id, 'start')
-    else if (!hasOutgoing.has(n.id)) roles.set(n.id, 'end')
-    else roles.set(n.id, 'middle')
-  }
-  return roles
-}
-
 /** Convert a `GET /api/graph` response into React Flow nodes + edges. */
 export function toFlow(res: GraphResponseDTO): {
   nodes: HuntFlowNode[]
   edges: HuntFlowEdge[]
 } {
-  const roles = rolesByNode(res.graph)
-
   const nodes: HuntFlowNode[] = res.graph.nodes.map((n) => ({
     id: n.id,
     type: 'hunt',
@@ -77,7 +58,6 @@ export function toFlow(res: GraphResponseDTO): {
       label: n.label ?? '',
       action: n.action ?? '',
       notes: n.notes ?? '',
-      role: roles.get(n.id) ?? 'middle',
     },
   }))
 
@@ -95,10 +75,9 @@ export function toFlow(res: GraphResponseDTO): {
 
 /**
  * The inverse of `toFlow`: React Flow nodes + edges back into the `{nodes, edges}` block
- * that `PUT /api/graph` expects. Pure — the natural first unit-test target. The derived
- * `role` is dropped (the backend recomputes it from topology); only the persisted fields
- * survive. Empty strings map back to `null` (the inverse of `toFlow`'s `?? ''`), so a node
- * with no note round-trips as `null` rather than being rewritten to `""`.
+ * that `PUT /api/graph` expects. Pure — the natural first unit-test target. Empty strings
+ * map back to `null` (the inverse of `toFlow`'s `?? ''`), so a node with no note
+ * round-trips as `null` rather than being rewritten to `""`.
  */
 export function fromFlow(
   nodes: HuntFlowNode[],

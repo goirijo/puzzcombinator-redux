@@ -158,16 +158,15 @@ designer assembles (no player/answer-key tag — the `Audience` enum is gone). D
 across `artifacts/ARTIFACTS.md`, `rendering/RENDERING.md`,
 `puzzles/PUZZLES.md`, `core/GRAPHS.md`, and `app/APP.md`.
 
-Likely next work (the GUI editor is the active frontier): the canvas-interaction
-milestone (node dragging with positions persisted to the `app/canvas.py` sidecar,
-pan/zoom, drawing connections — the natural point to adopt React Flow), and a browser
+**The long-term plan lives in [`ROADMAP.md`](ROADMAP.md)** — read it for the full,
+grouped backlog. It is a *tracking* doc, not a work queue: nothing there enters
+development until a prompt makes it the explicit subject (the `build-only-whats-asked`
+rule). New "nice to have" ideas get parked there, not coded speculatively.
+
+In short, the GUI editor is the active frontier: the canvas-interaction milestone (node
+dragging with positions persisted to the `app/canvas.py` sidecar, pan/zoom, drawing
+connections — React Flow), persisting UI state alongside the graph, and a browser
 file-picker to replace the `PUZZ_GRAPH` env var. Wiring "generate a binder from the
 editor" is now unblocked (the binder is real). The user is **new to frontend** — pace
-GUI work incrementally.
-
-Beyond that (defer unless asked): more puzzle types; the visual hunt-map
-view (V1) / `action`-filtered subgraph binder views; GUI authoring layer; the
-tracking/monitoring layer (layer 4 — the only place answer-checking would ever
-live). Deferred GUI-readiness: the canvas/views channel (`app/canvas.py`) is defined
-but positions aren't persisted yet (arrives with the drag/React-Flow milestone);
-per-puzzle parameter metadata in the serialized format is still open.
+GUI work incrementally. Later layers (more puzzle types, GUI authoring, the
+tracking/monitoring layer where answer-checking would live) stay deferred unless asked.
