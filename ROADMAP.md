@@ -45,8 +45,6 @@ which is the active frontier.
   a separate rail command → make an *individual* artifact.
 - **Artifact preview.** Clicking an artifact renders its HTML preview.
 - **Grouping artifacts** on the canvas (the model already has `CompositeArtifact`).
-- **Edge labels as counts.** Show a number (count of artifacts on the edge) instead of
-  the joined artifact names.
 
 ## Views & the binder
 

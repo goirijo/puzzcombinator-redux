@@ -47,9 +47,9 @@ describe('toFlow', () => {
     expect(n1.data.notes).toBe('')
   })
 
-  it('labels edges with their artifact names, undefined when empty', () => {
+  it('labels edges with their artifact count, undefined when empty', () => {
     const edges = toFlow(SAMPLE).edges
-    expect(edges.find((e) => e.id === 'e1')!.label).toBe('clue')
+    expect(edges.find((e) => e.id === 'e1')!.label).toBe('1')
     expect(edges.find((e) => e.id === 'e2')!.label).toBeUndefined()
     expect(edges.find((e) => e.id === 'e1')!.data!.content).toHaveLength(1)
   })

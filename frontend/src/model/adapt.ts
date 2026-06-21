@@ -65,7 +65,9 @@ export function toFlow(res: GraphResponseDTO): {
     id: e.id,
     source: e.source,
     target: e.target,
-    label: e.content.map((a) => a.name).join(', ') || undefined,
+    // Show the artifact count, not the joined names — names get long and overlap the
+    // edge; the count stays legible and the full list lives in the inspector.
+    label: e.content.length ? String(e.content.length) : undefined,
     markerEnd: { type: MarkerType.ArrowClosed },
     data: { content: e.content },
   }))
