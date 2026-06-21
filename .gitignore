@@ -33,3 +33,9 @@ examples/**/*.html
 examples/**/*.svg
 examples/**/*_out/
 examples/**/out/
+
+# Scratch / verification artifacts (test hunt files, screenshots, server logs).
+# Lives in-repo so nothing is ever written outside the project; contents are ignored
+# but the folder is kept via .gitkeep.
+/tmp/*
+!/tmp/.gitkeep

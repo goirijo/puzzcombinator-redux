@@ -15,6 +15,33 @@
   --role-middle: #37474f;
 
   --action-font-size: 11px;
+
+  /* --- Shell chrome (rail / tabs / panel) --------------------------------- */
+  --shell-bg: #f4f5f7;
+  --shell-surface: #ffffff;
+  --shell-border: #d6d9de;
+  --shell-text: #1a1a1a;
+  --shell-muted: #6b7280;
+  --shell-accent: #2563eb;
+  --shell-accent-text: #ffffff;
+
+  --rail-width: 132px;
+  --rail-width-collapsed: 40px;
+  --rail-bg: #2b2f36;
+  --rail-text: #d7dbe0;
+  --rail-active-bg: #3c434d;
+
+  --menubar-height: 38px;
+  --menubar-bg: #21242a;
+  --menubar-text: #e7eaee;
+  --menubar-muted: #9aa3ad;
+
+  --tab-bar-height: 34px;
+
+  --panel-min-width: 220px;
+  --resize-handle-width: 6px;
+
+  --font-ui: system-ui, sans-serif;
 }
 
 .hunt-node {

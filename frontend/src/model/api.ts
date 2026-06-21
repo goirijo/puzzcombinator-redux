@@ -13,9 +13,12 @@ export interface ArtifactDTO {
 
 export interface NodeDTO {
   id: string
-  action: string
-  label: string
-  notes: string
+  // The backend's Node fields default to None, so the wire value can be null for a node
+  // with no action/label/notes. `toFlow` coalesces these to '' for the editor; `fromFlow`
+  // maps '' back to null on save (see adapt.ts).
+  action: string | null
+  label: string | null
+  notes: string | null
 }
 
 export interface EdgeDTO {
@@ -48,4 +51,25 @@ export async function fetchGraph(): Promise<GraphResponseDTO> {
   const res = await fetch('/api/graph')
   if (!res.ok) throw new Error(`GET /api/graph failed: ${res.status}`)
   return res.json() as Promise<GraphResponseDTO>
+}
+
+/**
+ * Persist an edited graph: `PUT /api/graph` with the bare `{nodes, edges}` block (the
+ * server wraps it in the schema envelope). The backend returns **409 in demo mode** (no
+ * `PUZZ_GRAPH` file to write to) and **422** on an invalid graph — we surface that detail
+ * rather than swallow it, so the UI can show why a save didn't take.
+ */
+export async function saveGraph(graph: GraphResponseDTO['graph']): Promise<void> {
+  const res = await fetch('/api/graph', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(graph),
+  })
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b: { detail?: string }) => b.detail)
+      .catch(() => undefined)
+    throw new Error(detail ?? `PUT /api/graph failed: ${res.status}`)
+  }
 }

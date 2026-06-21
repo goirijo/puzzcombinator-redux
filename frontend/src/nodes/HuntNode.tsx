@@ -4,13 +4,13 @@
 // we lay out left→right (layer = column), so target is on the left, source on the right.
 
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { HuntFlowNode } from './adapt'
+import type { HuntFlowNode } from '../model/adapt'
 
-export function HuntNode({ data }: NodeProps<HuntFlowNode>) {
+export function HuntNode({ id, data }: NodeProps<HuntFlowNode>) {
   return (
     <div className="hunt-node" data-role={data.role}>
       <Handle type="target" position={Position.Left} />
-      <div className="hunt-node__label">{data.label}</div>
+      <div className="hunt-node__label">{data.label || id}</div>
       <div className="hunt-node__action">{data.action}</div>
       <Handle type="source" position={Position.Right} />
     </div>

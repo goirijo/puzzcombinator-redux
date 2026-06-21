@@ -1,0 +1,291 @@
+/* The shell regions: how the command rail, tab bar, swappable panel, and canvas are laid
+ * out and styled. Structural + component CSS for the chrome only — every color and size is
+ * a variable from theme.css, so the components stay value-free and the theme stays
+ * swappable. Feature panels bring their own rules (see the inspector block at the end). */
+
+/* The whole app is a column: the full-width menu bar on top, the shell row below it. */
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-ui);
+}
+
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--shell-bg);
+  color: var(--shell-text);
+}
+
+/* --- Menu bar (full-width, global actions) -------------------------------- */
+.menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--menubar-height);
+  padding: 0 12px;
+  background: var(--menubar-bg);
+  color: var(--menubar-text);
+  flex: 0 0 var(--menubar-height);
+}
+.menu-bar__title {
+  font-weight: 600;
+}
+.menu-bar__group {
+  display: flex;
+  gap: 4px;
+}
+.menu-bar__spacer {
+  flex: 1;
+}
+.menu-bar__btn {
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.menu-bar__btn:hover:not(:disabled) {
+  background: var(--rail-active-bg);
+}
+.menu-bar__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.menu-bar__status {
+  font-size: 13px;
+}
+.menu-bar__dirty {
+  color: var(--menubar-muted);
+}
+.menu-bar__ok {
+  color: #6ddf8e;
+}
+.menu-bar__err {
+  color: #ff8a8a;
+}
+.menu-bar__save {
+  background: var(--shell-accent);
+  color: var(--shell-accent-text);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  font: inherit;
+  cursor: pointer;
+}
+.menu-bar__save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Everything right of the rail: tabs on top, then the panel+canvas content. */
+.shell__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.shell__content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Command rail --------------------------------------------------------- */
+.command-rail {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--rail-width);
+  width: var(--rail-width);
+  background: var(--rail-bg);
+  color: var(--rail-text);
+  padding: 4px;
+  gap: 2px;
+  box-sizing: border-box;
+}
+.command-rail[data-collapsed='true'] {
+  flex-basis: var(--rail-width-collapsed);
+  width: var(--rail-width-collapsed);
+}
+
+.command-rail__toggle,
+.command-rail__btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.command-rail__toggle {
+  justify-content: center;
+  opacity: 0.7;
+}
+.command-rail__btn:hover {
+  background: var(--rail-active-bg);
+}
+.command-rail__btn[data-active='true'] {
+  background: var(--shell-accent);
+  color: var(--shell-accent-text);
+}
+.command-rail__icon {
+  width: 1.2em;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.command-rail__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Tab bar -------------------------------------------------------------- */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  height: var(--tab-bar-height);
+  background: var(--shell-bg);
+  border-bottom: 1px solid var(--shell-border);
+}
+.tab-bar__tab {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--shell-border);
+  padding: 0 16px;
+  font: inherit;
+  color: var(--shell-muted);
+  cursor: pointer;
+}
+.tab-bar__tab[data-active='true'] {
+  background: var(--shell-surface);
+  color: var(--shell-text);
+  font-weight: 600;
+}
+
+/* --- Panel region --------------------------------------------------------- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--shell-surface);
+  border-right: 1px solid var(--shell-border);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--shell-border);
+  font-weight: 600;
+}
+.panel__close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--shell-muted);
+  cursor: pointer;
+}
+.panel__body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+.panel__placeholder {
+  color: var(--shell-muted);
+  font-style: italic;
+}
+
+/* The draggable divider between panel and canvas (react-resizable-panels). */
+.resize-handle {
+  width: var(--resize-handle-width);
+  background: var(--shell-border);
+  cursor: col-resize;
+}
+.resize-handle:hover,
+.resize-handle[data-resize-handle-active] {
+  background: var(--shell-accent);
+}
+
+/* --- GRAPH inspector panel ------------------------------------------------ */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.inspector__empty,
+.inspector__none {
+  color: var(--shell-muted);
+  font-style: italic;
+  margin: 0;
+}
+.inspector__heading {
+  margin: 0 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--shell-muted);
+}
+.inspector__edge-ends {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.field {
+  display: block;
+  margin-bottom: 8px;
+}
+.field__label {
+  display: block;
+  font-size: 12px;
+  color: var(--shell-muted);
+  margin-bottom: 2px;
+}
+.field__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--shell-border);
+  border-radius: 4px;
+  font: inherit;
+}
+.field__input--area {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.related {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.related__edge {
+  border-left: 2px solid var(--shell-border);
+  padding-left: 8px;
+  margin-bottom: 6px;
+}
+.related__node {
+  font-weight: 600;
+}
+.related__artifacts {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+.related__type {
+  color: var(--shell-muted);
+  font-size: 11px;
+}
