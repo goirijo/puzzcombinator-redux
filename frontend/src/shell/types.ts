@@ -2,7 +2,7 @@
 // (rather than scattered through components) is what lets a new panel "fill a slot": it
 // receives `PanelProps` and nothing else, and never reaches into shell internals.
 
-import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/adapt'
+import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/flow'
 
 /** What is currently selected on the canvas — the datum the canvas writes and the GRAPH
  *  panel reads. `null` when nothing is selected. */

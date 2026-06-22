@@ -6,10 +6,10 @@ additively (floating artifacts, geo-coordinates, types not yet invented) as new
 fields without a schema migration. Identity lives here, on the map key, not on the
 ``Graph`` (which stays pure structure with value-equality intact).
 
-This is **only the hunt data**. The canvas/visualization state — where nodes are
-drawn, which view, collapsed/expanded — is a *separate* channel (see
-``app/canvas.py``) and is deliberately kept out of this container so it can never
-affect hunt-data round-trip equality.
+This is **only the hunt data**. The editor's visual state — where nodes are drawn,
+which views and tabs are open — is a *separate* channel living outside the core
+library (in ``visualization``) and is deliberately kept out of this container so it can
+never affect hunt-data round-trip equality. Core stays UI-ignorant.
 """
 
 from __future__ import annotations

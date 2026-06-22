@@ -15,11 +15,20 @@ which is the active frontier.
 
 - **Canvas interaction.** Node dragging with positions persisted, pan/zoom, and drawing
   connections. The natural point to fully lean on React Flow.
-- **Persist UI state, not just the graph.** The saved file should carry two parts: the
-  graph, and the UI/canvas state (node placements, later collapsed/view overrides). This
-  is the `app/canvas.py` sidecar — defined but not yet persisted. (Confirmed previously
-  planned.)
+- **Persist UI state, not just the graph.** *(Done.)* The saved file carries two channels —
+  the graph, and the workspace (views, tabs, node positions, per-tab viewport). `visualization/`
+  owns the workspace model + codec; `app` composes the two into one file. (Vim model: views =
+  buffers, tabs = windows.)
+- **Independent move-undo (the deferred undo split).** Node positions currently ride the graph
+  store, so moving a node and editing a node share **one** undo stack. Lift positions into a
+  second `workspaceStore` (zundo) so moves get their own undo history, separate from edits —
+  then route the undo keybinding by focus (vim-style). The channels already split cleanly at
+  save, so this is additive, not a rewrite. (See the data-flow section of `frontend/FRONTEND.md`.)
 - **Browser file-picker** to replace the `PUZZ_GRAPH` env var.
+- **Empty project by default.** Today a fresh load synthesizes a demo graph plus a default
+  tab/view/auto-layout so there's always something to draw. Once the browser file-picker and
+  in-UI graph creation land, drop that: a new project should start **empty** — no demo graph,
+  no auto-created tab/view — and the designer builds it up from nothing.
 - **Generate a binder from the editor.** Unblocked now that the binder layer is real;
   wire the editor to the existing `Binder.of_artifacts` / `Binder.of_nodes`.
 

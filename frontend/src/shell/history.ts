@@ -3,7 +3,7 @@
 // counts as a meaningful change; `leadingDebounce` decides how a burst of changes collapses
 // into one history step. See store.ts for how zundo's `temporal` middleware uses them.
 
-import type { HuntFlowEdge, HuntFlowNode } from '../model/adapt'
+import type { HuntFlowEdge, HuntFlowNode } from '../model/flow'
 
 /** The slice of state zundo tracks for undo history. */
 export interface TrackedState {

@@ -25,7 +25,7 @@ import {
 import { create } from 'zustand'
 import { temporal } from 'zundo'
 
-import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/adapt'
+import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/flow'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
 
 /** Wait this long after the last change before snapshotting — coalesces typing/dragging. */

@@ -4,7 +4,7 @@
 // (layer = column), so target is on the left, source on the right.
 
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { HuntFlowNode } from '../model/adapt'
+import type { HuntFlowNode } from '../model/flow'
 
 export function HuntNode({ id, data }: NodeProps<HuntFlowNode>) {
   return (

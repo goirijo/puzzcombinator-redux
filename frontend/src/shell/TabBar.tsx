@@ -1,29 +1,30 @@
-// The top tab bar: one tab per view. A view is a particular drawing of a graph; switching
-// the active tab switches what the canvas draws. For now the shell has a single default
-// view, so this renders one tab — but it takes the full view list and an `onSelect`, so
-// multiple views (the VIEW command) drop in without touching this component.
+// The top tab bar: one button per open *tab*. A tab is a window showing a *view* (a drawing
+// of a graph); its label is the view's title. Switching the active tab switches what the
+// viewport draws. Driven entirely by the workspace state handed down from the shell — so
+// creating/closing tabs later is a state change there, not a rewire here.
 
-import type { View } from '../model/adapt'
+import type { TabDTO, ViewDTO } from '../model/workspace'
 
 interface TabBarProps {
-  views: View[]
-  activeViewId: string
-  onSelect: (id: string) => void
+  tabs: TabDTO[]
+  views: Record<string, ViewDTO>
+  activeTabId: string | null
+  onSelect: (tabId: string) => void
 }
 
-export function TabBar({ views, activeViewId, onSelect }: TabBarProps) {
+export function TabBar({ tabs, views, activeTabId, onSelect }: TabBarProps) {
   return (
     <div className="tab-bar" role="tablist">
-      {views.map((view) => (
+      {tabs.map((tab) => (
         <button
-          key={view.id}
+          key={tab.id}
           className="tab-bar__tab"
           role="tab"
-          aria-selected={view.id === activeViewId}
-          data-active={view.id === activeViewId}
-          onClick={() => onSelect(view.id)}
+          aria-selected={tab.id === activeTabId}
+          data-active={tab.id === activeTabId}
+          onClick={() => onSelect(tab.id)}
         >
-          {view.title}
+          {views[tab.view]?.title ?? tab.view}
         </button>
       ))}
     </div>

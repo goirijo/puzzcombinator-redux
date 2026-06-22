@@ -14,6 +14,7 @@ them. If a detail here ever contradicts a per-layer doc, the per-layer doc wins.
 | Puzzles | [`src/puzzcombinator/puzzles/PUZZLES.md`](src/puzzcombinator/puzzles/PUZZLES.md) |
 | Core graph | [`src/puzzcombinator/core/GRAPHS.md`](src/puzzcombinator/core/GRAPHS.md) |
 | Rendering / binder | [`src/puzzcombinator/rendering/RENDERING.md`](src/puzzcombinator/rendering/RENDERING.md) |
+| Visualization | [`src/puzzcombinator/visualization/VISUALIZATION.md`](src/puzzcombinator/visualization/VISUALIZATION.md) |
 | Editor (GUI) | [`src/puzzcombinator/app/APP.md`](src/puzzcombinator/app/APP.md) |
 
 ## What this system is
@@ -53,22 +54,28 @@ Layers depend strictly **downward**. Nothing reaches sideways or up. Three layer
 concrete artifact type, working only through the `Artifact` abstraction + the registry.
 That is what lets you add a new artifact type by touching only its own layer.
 
+A second separation runs alongside that one: **actual hunt data vs. its visual
+representation.** The data layers (`core`/`artifacts`/`puzzles`/`serialization`/
+`rendering`) know nothing about *drawing*; `visualization/` is the deliberate, file-tree-
+visible home for that — node positions (`layout`) and the editor's workspace of views and
+tabs (`workspace`). `app/` composes the two channels into one saved file.
+
 ```
             ┌───────────────────────────── app/ (React editor) ──┐
-            │  consumes + produces the serialization seam         │
+            │  composes + serves the two channels (data + UI)     │
             └─────────────────────────────────────────────────────┘
-   ┌──────────────────┐        ┌───────────────────────────────────┐
-   │  puzzles/        │        │  rendering/  (binders, exporters)  │
-   │  (generators)    │        │  artifact-agnostic                 │
-   └──────────────────┘        └───────────────────────────────────┘
-            │                                   │
-            ▼                                   ▼
-   ┌──────────────────┐        ┌───────────────────────────────────┐
-   │  artifacts/      │        │  serialization/  (model ⇄ JSON)    │
-   │  (the things)    │        │  artifact-agnostic, format-aware   │
-   └──────────────────┘        └───────────────────────────────────┘
-            │                                   │
-            └───────────────┬───────────────────┘
+   ┌──────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+   │  puzzles/        │   │  rendering/  (binders)    │   │  visualization/           │
+   │  (generators)    │   │  artifact-agnostic        │   │  layout + workspace (UI)  │
+   └──────────────────┘   └──────────────────────────┘   └──────────────────────────┘
+            │                          │                              │
+            ▼                          ▼                              │
+   ┌──────────────────┐   ┌──────────────────────────┐               │
+   │  artifacts/      │   │  serialization/ (⇄ JSON)  │               │
+   │  (the things)    │   │  artifact-agnostic        │               │
+   └──────────────────┘   └──────────────────────────┘               │
+            │                          │                              │
+            └───────────────┬──────────┴──────────────────────────────┘
                             ▼
                    ┌──────────────────┐
                    │  core/  (Graph,  │
@@ -79,6 +86,9 @@ That is what lets you add a new artifact type by touching only its own layer.
                    │  agnostic        │
                    └──────────────────┘
 ```
+
+`visualization/` reads `core` (its layout query needs a graph) but is UI state, not hunt
+data — and `core`/`serialization` never learn it exists.
 
 `core` is pure standard-library Python (dataclasses; no pydantic, no heavy deps). Format
 knowledge lives *only* in `serialization`. Any heavy dependency, if ever needed, lives
@@ -112,11 +122,13 @@ Two things make this seam durable:
   geo-coordinates) needs no migration; the schema version bumps only for *non-additive*
   changes.
 - **Two separate channels, never mixed.** *Hunt data* (the graph itself — nodes, edges,
-  artifacts) is the source of truth, owned by `serialization` + `HuntDocument`. *Canvas
-  state* (purely where/how a hunt is *drawn* — node x/y, which view, collapsed nodes) is a
-  separate optional sidecar (`app/canvas.py`), deliberately kept out of `HuntDocument` so
-  visual fiddling can never affect hunt-data equality. A hunt is fully valid with no
-  canvas state; the editor falls back to an auto-layout.
+  artifacts) is the source of truth, owned by `serialization` + `HuntDocument`. *Workspace
+  state* (purely where/how a hunt is *drawn* — node x/y, which views and tabs are open) is
+  a separate channel owned by `visualization/workspace.py`, with its own self-contained
+  codec that references nodes by opaque id and never imports the hunt-data model.
+  `serialization` stays UI-ignorant; the `app` layer composes the two into one saved file
+  (they *could* be two files — the codecs are independent). A hunt is fully valid with no
+  workspace state; the editor falls back to the auto-`layout`.
 
 ### Displayed — `rendering/` and `app/`
 

@@ -1,52 +1,34 @@
-// The seam: types mirroring what `GET /api/graph` returns, plus the one fetch call.
-// This is the TypeScript echo of the Python serialization layer — the single place
-// the shape of the backend response is written down. Everything else works off these
-// types, so the compiler tells us if the seam and the UI drift apart.
+// The seam over HTTP — the frontend analog of the Python `app` layer. It both *transports*
+// (the two fetch calls) and *composes*: the two channels (graph + workspace) each have their
+// own module (graph.ts / workspace.ts), and here we fuse them on load and split them on save,
+// using the `flow.ts` projection. The wire carries both channels as explicit siblings, never
+// mixed — losing `workspace` loses only how things are drawn, never the hunt.
 
-/** One artifact riding an edge (the serialized `{type, id, name, payload}` envelope). */
-export interface ArtifactDTO {
-  type: string
-  id: string
-  name: string
-  payload: Record<string, unknown>
-}
+import type { GraphBlockDTO } from './graph'
+import {
+  toFlowEdges,
+  toFlowNodes,
+  toGraphBlock,
+  toPositions,
+  type HuntFlowEdge,
+  type HuntFlowNode,
+} from './flow'
+import { activeView, type WorkspaceDTO } from './workspace'
 
-export interface NodeDTO {
-  id: string
-  // The backend's Node fields default to None, so the wire value can be null for a node
-  // with no action/label/notes. `toFlow` coalesces these to '' for the editor; `fromFlow`
-  // maps '' back to null on save (see adapt.ts).
-  action: string | null
-  label: string | null
-  notes: string | null
-}
-
-export interface EdgeDTO {
-  id: string
-  source: string
-  target: string
-  content: ArtifactDTO[]
-}
-
-/** A node's server-computed position (from `layered_layout`). */
-export interface NodePositionDTO {
-  layer: number
-  row: number
-  x: number
-  y: number
-}
-
-/** The full `GET /api/graph` envelope: the graph block + the layout map. */
+/** The full `GET /api/graph` envelope: the two channels as explicit siblings. */
 export interface GraphResponseDTO {
   schema_version: string
-  graph: {
-    nodes: NodeDTO[]
-    edges: EdgeDTO[]
-  }
-  layout: Record<string, NodePositionDTO>
+  graph: GraphBlockDTO
+  workspace: WorkspaceDTO
 }
 
-/** Fetch the drawn graph + its layout from the backend. */
+/** The `PUT /api/graph` body: both channels back, the way the backend composes them. */
+export interface SaveRequestDTO {
+  graph: GraphBlockDTO
+  workspace: WorkspaceDTO
+}
+
+/** Fetch the drawn graph + the workspace from the backend. */
 export async function fetchGraph(): Promise<GraphResponseDTO> {
   const res = await fetch('/api/graph')
   if (!res.ok) throw new Error(`GET /api/graph failed: ${res.status}`)
@@ -54,16 +36,15 @@ export async function fetchGraph(): Promise<GraphResponseDTO> {
 }
 
 /**
- * Persist an edited graph: `PUT /api/graph` with the bare `{nodes, edges}` block (the
- * server wraps it in the schema envelope). The backend returns **409 in demo mode** (no
- * `PUZZ_GRAPH` file to write to) and **422** on an invalid graph — we surface that detail
- * rather than swallow it, so the UI can show why a save didn't take.
+ * Persist both channels: `PUT /api/graph` with `{ graph, workspace }`. The backend returns
+ * **409 in demo mode** (no `PUZZ_GRAPH` file to write to) and **422** on an invalid body —
+ * we surface that detail rather than swallow it, so the UI can show why a save didn't take.
  */
-export async function saveGraph(graph: GraphResponseDTO['graph']): Promise<void> {
+export async function saveGraph(body: SaveRequestDTO): Promise<void> {
   const res = await fetch('/api/graph', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(graph),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const detail = await res
@@ -72,4 +53,37 @@ export async function saveGraph(graph: GraphResponseDTO['graph']): Promise<void>
       .catch(() => undefined)
     throw new Error(detail ?? `PUT /api/graph failed: ${res.status}`)
   }
+}
+
+// --- Composition: fuse the two channels on load, split them on save. ---------------------
+// Pure (no fetch/state), so they're unit-testable. The load↔save pair is symmetric: load
+// projects the active view's positions onto the nodes; save reads them back off.
+
+/** Load: project the response's active-view positions onto React Flow nodes. */
+export function toFlowGraph(res: GraphResponseDTO): {
+  nodes: HuntFlowNode[]
+  edges: HuntFlowEdge[]
+} {
+  const active = activeView(res.workspace)
+  return {
+    nodes: toFlowNodes(res.graph.nodes, active?.view.positions ?? {}),
+    edges: toFlowEdges(res.graph.edges),
+  }
+}
+
+/**
+ * Save: split the live editor state back into the two channels. The graph block comes from
+ * the nodes/edges (positions dropped); the active view's positions are refreshed from those
+ * same nodes (positions ride the graph store during editing — this is the split-at-save step).
+ */
+export function buildSaveRequest(
+  nodes: HuntFlowNode[],
+  edges: HuntFlowEdge[],
+  workspace: WorkspaceDTO,
+): SaveRequestDTO {
+  const active = activeView(workspace)
+  const views = active
+    ? { ...workspace.views, [active.id]: { ...active.view, positions: toPositions(nodes) } }
+    : workspace.views
+  return { graph: toGraphBlock(nodes, edges), workspace: { ...workspace, views } }
 }

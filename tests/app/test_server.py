@@ -1,44 +1,61 @@
 """Tests for the FastAPI app — exercises the real routes via the in-process client.
 
-No network and no running server: FastAPI's TestClient calls the app directly.
+No network and no running server: FastAPI's TestClient calls the app directly. These
+focus on the app's distinctive job — **composing** the two channels (hunt data +
+workspace) into one document and splitting them back out.
 """
 
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from puzzcombinator import GraphBuilder, HuntDocument, TextArtifact
 from puzzcombinator.app.server import app
+from puzzcombinator.serialization import to_json
 
 client = TestClient(app)
 
 
-def test_api_graph_returns_graph_envelope_and_layout() -> None:
+def _seed_hunt(tmp_path, monkeypatch, graph) -> None:
+    """Write a graph as a hunt file (hunt data only, no workspace) and point env at it."""
+    path = tmp_path / "hunt.json"
+    path.write_text(to_json(HuntDocument.single(graph)), encoding="utf-8")
+    monkeypatch.setenv("PUZZ_GRAPH", str(path))
+
+
+def test_get_returns_graph_envelope_and_workspace() -> None:
     body = client.get("/api/graph").json()
-    # GET returns the drawn graph's own envelope plus a layout map.
     assert body["schema_version"] == "3"
     assert {n["id"] for n in body["graph"]["nodes"]} >= {"start", "solve", "combine", "end"}
-    assert set(body["layout"]) == {n["id"] for n in body["graph"]["nodes"]}
+    # The UI channel rides alongside as an explicit sibling.
+    ws = body["workspace"]
+    assert set(ws) == {"views", "tabs", "active_tab"}
 
 
-def test_api_graph_layout_entries_have_coordinates() -> None:
-    layout = client.get("/api/graph").json()["layout"]
-    start = layout["start"]
-    assert start["layer"] == 0
-    assert {"layer", "row", "x", "y"} <= set(start)
-
-
-def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:
-    # Point PUZZ_GRAPH at a serialized two-node hunt document and confirm it's drawn
-    # instead of the demo.
-    from puzzcombinator import GraphBuilder, HuntDocument
-    from puzzcombinator.serialization import to_json
-
+def test_get_synthesizes_default_workspace_when_absent(tmp_path, monkeypatch) -> None:
+    # A file with hunt data but no workspace -> the server bootstraps a default: one
+    # auto-arranged view over the graph, one active tab pointing at it.
     b = GraphBuilder()
     b.node("only_start")
     b.node("lonely")
-    path = tmp_path / "hunt.json"
-    path.write_text(to_json(HuntDocument.single(b.build())), encoding="utf-8")
-    monkeypatch.setenv("PUZZ_GRAPH", str(path))
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+
+    ws = client.get("/api/graph").json()["workspace"]
+    assert ws["active_tab"] is not None
+    tab = next(t for t in ws["tabs"] if t["id"] == ws["active_tab"])
+    view = ws["views"][tab["view"]]
+    assert view["graph"] == "main"
+    # Every node has a resolved position, and the tab has a viewport.
+    assert set(view["positions"]) == {"only_start", "lonely"}
+    assert {"x", "y"} <= set(view["positions"]["only_start"])
+    assert {"x", "y", "zoom"} <= set(tab["viewport"])
+
+
+def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:
+    b = GraphBuilder()
+    b.node("only_start")
+    b.node("lonely")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
 
     ids = {n["id"] for n in client.get("/api/graph").json()["graph"]["nodes"]}
     assert ids == {"only_start", "lonely"}
@@ -46,22 +63,19 @@ def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:
 
 def test_put_persists_node_edits(tmp_path, monkeypatch) -> None:
     # Seed a hunt file, edit a node label via PUT, and confirm a fresh GET sees it.
-    from puzzcombinator import GraphBuilder, HuntDocument, TextArtifact
-    from puzzcombinator.serialization import to_json
-
     b = GraphBuilder()
     start = b.node("start", label="Welcome")
     end = b.node("end")
-    graph = b.connect(start, end, TextArtifact("go", id="t1")).build()
-    path = tmp_path / "hunt.json"
-    path.write_text(to_json(HuntDocument.single(graph)), encoding="utf-8")
-    monkeypatch.setenv("PUZZ_GRAPH", str(path))
+    _seed_hunt(tmp_path, monkeypatch, b.connect(start, end, TextArtifact("go", id="t1")).build())
 
-    block = client.get("/api/graph").json()["graph"]
-    for node in block["nodes"]:
+    body = client.get("/api/graph").json()
+    for node in body["graph"]["nodes"]:
         if node["id"] == "start":
             node["label"] = "Edited"
-    response = client.put("/api/graph", json=block)
+    # PUT sends both channels back, symmetrically.
+    response = client.put(
+        "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
+    )
     assert response.status_code == 200
     assert response.json() == {"saved": True}
 
@@ -72,10 +86,45 @@ def test_put_persists_node_edits(tmp_path, monkeypatch) -> None:
     assert reloaded["edges"][0]["content"][0]["id"] == "t1"
 
 
+def test_put_persists_workspace_positions(tmp_path, monkeypatch) -> None:
+    # Move a node and confirm the stored position survives — and is NOT overwritten by
+    # auto-layout on the next GET (stored placement wins).
+    b = GraphBuilder()
+    b.node("start")
+    b.node("end")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+
+    body = client.get("/api/graph").json()
+    ws = body["workspace"]
+    view_id = next(iter(ws["views"]))
+    ws["views"][view_id]["positions"]["start"] = {"x": 999.0, "y": 42.0}
+
+    saved = client.put("/api/graph", json={"graph": body["graph"], "workspace": ws})
+    assert saved.status_code == 200
+
+    reloaded = client.get("/api/graph").json()["workspace"]
+    assert reloaded["views"][view_id]["positions"]["start"] == {"x": 999.0, "y": 42.0}
+
+
 def test_put_in_demo_mode_is_rejected(monkeypatch) -> None:
     # With no PUZZ_GRAPH there is nowhere to save; the server says so rather than
     # silently writing the demo somewhere.
     monkeypatch.delenv("PUZZ_GRAPH", raising=False)
-    block = client.get("/api/graph").json()["graph"]
-    response = client.put("/api/graph", json=block)
+    body = client.get("/api/graph").json()
+    response = client.put(
+        "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
+    )
     assert response.status_code == 409
+
+
+def test_put_rejects_invalid_graph(tmp_path, monkeypatch) -> None:
+    b = GraphBuilder()
+    b.node("start")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+    body = client.get("/api/graph").json()
+    # A dangling edge (target node missing) must be rejected by the serialization layer.
+    body["graph"]["edges"].append({"id": "x", "source": "start", "target": "ghost", "content": []})
+    response = client.put(
+        "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
+    )
+    assert response.status_code == 422

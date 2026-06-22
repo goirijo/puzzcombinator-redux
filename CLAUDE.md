@@ -164,9 +164,9 @@ development until a prompt makes it the explicit subject (the `build-only-whats-
 rule). New "nice to have" ideas get parked there, not coded speculatively.
 
 In short, the GUI editor is the active frontier: the canvas-interaction milestone (node
-dragging with positions persisted to the `app/canvas.py` sidecar, pan/zoom, drawing
-connections — React Flow), persisting UI state alongside the graph, and a browser
-file-picker to replace the `PUZZ_GRAPH` env var. Wiring "generate a binder from the
+dragging with positions persisted to the workspace channel in
+`visualization/workspace.py`, pan/zoom, drawing connections — React Flow), persisting UI
+state alongside the graph, and a browser file-picker to replace the `PUZZ_GRAPH` env var. Wiring "generate a binder from the
 editor" is now unblocked (the binder is real). The user is **new to frontend** — pace
 GUI work incrementally. Later layers (more puzzle types, GUI authoring, the
 tracking/monitoring layer where answer-checking would live) stay deferred unless asked.

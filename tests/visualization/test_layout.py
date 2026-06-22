@@ -7,7 +7,7 @@ this is the first thing we build and the component we can trust most.
 from __future__ import annotations
 
 from puzzcombinator import Graph, GraphBuilder
-from puzzcombinator.app.layout import (
+from puzzcombinator.visualization.layout import (
     COLUMN_WIDTH,
     MARGIN_X,
     MARGIN_Y,

@@ -18,20 +18,25 @@ and writes a whole hunt back via `to_json` (a saved hunt file is a `HuntDocument
 > — file map, conventions, and how to add a feature — lives in its own doc at
 > [`../../../frontend/FRONTEND.md`](../../../frontend/FRONTEND.md).
 
-### Two channels: hunt data vs. canvas state
+### Two channels: hunt data vs. workspace state
 
-The editor deals with **two separate kinds of persisted data**, never mixed:
+The editor deals with **two separate kinds of persisted data**, never mixed, and `app`
+is the layer that **composes them into one saved file**:
 
 - **Hunt data** — the treasure hunt itself (graphs, nodes, edges, artifacts). The
   source of truth, owned by `serialization/` + `core.document.HuntDocument`. A node
   carries **no** position.
-- **Canvas state** — purely *where/how* a hunt is drawn (node positions, which view,
-  collapsed nodes). Its shape lives in **`app/canvas.py`** (`CanvasDocument` / `View` /
-  `Position`) as a *separate optional sidecar*, deliberately kept out of `HuntDocument`
-  so it can never affect hunt-data round-trip equality. A hunt is fully valid with no
-  canvas state — the editor falls back to the auto-arranged `layered_layout`. **Status:
-  shape only** — nothing moves nodes yet, so positions aren't persisted; that arrives
-  with the canvas-interaction (React Flow) milestone.
+- **Workspace state** — purely *where/how* a hunt is drawn (node positions, which views
+  and tabs are open). It lives **outside this layer**, in
+  [`visualization/workspace.py`](../visualization/VISUALIZATION.md) (`Workspace` / `View`
+  / `Tab` / `Position` / `Viewport`), with its own self-contained codec that references
+  nodes by opaque id and never touches the hunt-data model. A hunt is fully valid with no
+  workspace state — the editor falls back to the auto-arranged `layered_layout` (also in
+  `visualization/`).
+
+`app` keeps the channels independent (it hands `graphs` to `serialization` and the
+`workspace` blob to `visualization`, then stitches the two dicts into one file); the
+codecs never see each other, so the file *could* be split in two.
 
 ## The one principle that shapes everything here
 
@@ -44,26 +49,22 @@ don't change, only the view does.
 
 ## Backend (Python)
 
-Three small modules. They depend downward (on `core` + `serialization`, and on
-`puzzles`/`artifacts` only to build the demo) and never reach sideways or up.
+Two small modules. They depend downward (on `core` + `serialization` + `visualization`,
+and on `puzzles`/`artifacts` only to build the demo) and never reach sideways or up. The
+**drawing logic itself is not here** — `layered_layout` and the workspace model live one
+layer down in [`visualization/`](../visualization/VISUALIZATION.md); `app` only imports
+and composes them.
 
-- **`layout.py` — the pure, testable heart.** `layered_layout(graph) -> {node_id:
-  NodePosition}`. A standard layered-DAG layout: a node's **layer** (column / x) is
-  the longest path of edges reaching it from any start node, computed by walking
-  `core.ordering.topological_order` so every predecessor's layer is already known;
-  its **row** (y) is its slot among nodes sharing that layer, in topological order.
-  `NodePosition(layer, row, x, y)` carries both the grid indices and the pixel
-  coordinates. Pixel geometry (`COLUMN_WIDTH`, `ROW_HEIGHT`, `MARGIN_X/Y`) lives here,
-  not in the browser, so positions are fully determined server-side. No I/O, no
-  FastAPI, no SVG — just graph in, positions out.
-
-- **`server.py` — the thin FastAPI app.** Deliberately almost logic-free.
-  - `GET /api/graph` returns the drawn graph's own `graph_to_dict(graph)` envelope with
-    a `"layout"` map (from `layered_layout`) bolted on — see the response shape below.
-  - `PUT /api/graph` takes the edited `{nodes, edges}` block, reconstructs it through
-    `graph_from_dict` (which validates structure + rebuilds artifacts via the registry),
-    and writes it to the `PUZZ_GRAPH` file as a `HuntDocument` (`to_json`). Returns 409
-    in demo mode (no file to save to) and 422 on an invalid graph.
+- **`server.py` — the thin FastAPI app, and the channel-composition layer.** Almost
+  logic-free except for stitching the two channels together.
+  - `GET /api/graph` returns the drawn graph's envelope plus a `workspace` block — the
+    stored views/tabs, or a synthesized default — with every node's position resolved
+    (`visualization.defaults.resolve_workspace`). See the response shape below.
+  - `PUT /api/graph` takes a `{graph, workspace}` body: the `graph` block reconstructs
+    through `graph_from_dict` (which validates structure + rebuilds artifacts via the
+    registry); the `workspace` round-trips through its own codec; the two compose into
+    one `HuntDocument`-shaped file with a sibling `workspace` key. Returns 409 in demo
+    mode (no file to save to) and 422 on an invalid body.
   - Which graph: the `PUZZ_GRAPH` environment variable, if set, points at a serialized
     hunt JSON file — a hunt document — loaded via `serialization.from_json` and drawn as
     its `.main` graph; otherwise the built-in demo graph is used (and saving is
@@ -80,24 +81,30 @@ Three small modules. They depend downward (on `core` + `serialization`, and on
 
 ### The API response shape (the seam the browser reads)
 
-`GET /api/graph` returns the single drawn graph's envelope with one extra key:
+`GET /api/graph` returns the two channels as explicit siblings:
 
 ```jsonc
 {
   "schema_version": "3",
-  "graph": {
+  "graph": {                                                 // hunt data (one graph)
     "nodes": [{ "id", "action", "label", "notes" }],
     "edges": [{ "id", "source", "target", "content": [{ "type", "id", "name", "payload" }] }]
   },
-  "layout": { "<node_id>": { "layer", "row", "x", "y" } }   // added by the server
+  "workspace": {                                             // UI channel (visualization)
+    "views": { "<view_id>": { "graph", "title", "positions": { "<node_id>": {"x","y"} } } },
+    "tabs":  [ { "id", "view", "viewport": {"x","y","zoom"} } ],
+    "active_tab": "<tab_id>"
+  }
 }
 ```
 
-This is the graph-level envelope (`graph_to_dict`), not the document envelope — the
-browser has no graph-selection concept yet, so it gets the one graph it draws. `PUT
-/api/graph` sends just the `graph` block (`{nodes, edges}`) back. The browser never sees
+`graph` is the graph-level envelope's body (`graph_to_dict(graph)[KEY_GRAPH]`), not the
+document map — the browser draws one graph. `PUT /api/graph` sends the same two channels
+back: `{ "graph": { nodes, edges }, "workspace": { … } }`. The browser never sees
 `Graph`/`Puzzle` objects — only this JSON. That decoupling is what lets the view be
-replaced without touching the model.
+replaced without touching the model. The saved **file** is the document form
+(`{schema_version, graphs, workspace}`); `server` is the one place that maps between the
+single-graph wire shape and the document-on-disk shape.
 
 ## The frontend
 
@@ -105,13 +112,14 @@ The React/Vite/TypeScript UI that consumes this seam lives in
 **[`frontend/`](../../../frontend/FRONTEND.md)** and is documented there — its file map, the
 pure-modules-vs-one-stateful-file structure, the `DTO`/`Hunt` naming + styling conventions,
 and how to add a feature. From the backend's side all that matters is the contract above: the
-UI `GET`s the graph envelope and `PUT`s an edited `{nodes, edges}` block back.
+UI `GET`s the `{graph, workspace}` pair and `PUT`s an edited `{graph, workspace}` back.
 
 ### Data flow in one line
 
-`server` builds/loads a `Graph` → `graph_to_dict` + `layered_layout` → JSON over `GET
-/api/graph` → the frontend draws it; on Save the frontend `PUT`s the edited block back and
-`server` writes it to the `PUZZ_GRAPH` file as a `HuntDocument`.
+`server` loads both channels from the `PUZZ_GRAPH` file → graph via `serialization`,
+workspace via `visualization` (default-synthesized + position-resolved if absent) → JSON
+over `GET /api/graph` → the frontend draws it; on Save the frontend `PUT`s both channels
+back and `server` composes them into the one `PUZZ_GRAPH` document.
 
 ## Running the backend
 
@@ -130,11 +138,12 @@ which proxies `/api` to this app.
 ## Tests
 
 In `tests/app/`:
-- **`test_layout.py`** — the pure layout function (linear / branch+merge / disconnected
-  / empty). This is the component we trust most, because it has no I/O.
 - **`test_server.py`** — the real routes via FastAPI's in-process `TestClient` (GET
   response shape, layout coordinates, `PUZZ_GRAPH` override, and the `PUT` save→reload
   round-trip + its demo-mode rejection).
+
+The pure layout + workspace round-trip tests moved with their code, to
+`tests/visualization/` (see [`VISUALIZATION.md`](../visualization/VISUALIZATION.md)).
 
 Frontend testing is covered in [`frontend/FRONTEND.md`](../../../frontend/FRONTEND.md).
 
@@ -171,8 +180,9 @@ Frontend testing is covered in [`frontend/FRONTEND.md`](../../../frontend/FRONTE
   edges, start/end coloring) with React Flow's built-in **drag / pan / zoom**.
 - **Next:** re-port the editing UI in React — click-to-select + an inspector panel for
   `label`/`action`/`notes`, then wire Save back to the existing `PUT /api/graph`.
-- **Then:** persist manual drag positions to the canvas/views sidecar (shape defined in
-  `canvas.py`; positions override `layered_layout`), drag-to-connect, create/delete nodes.
+- **Then:** persist manual drag positions to the workspace channel (shape in
+  `visualization/workspace.py`; positions override `layered_layout`), drag-to-connect,
+  create/delete nodes.
 - **Later (deferred):** an artifact/puzzle palette, editing artifact payloads, rendering
   artifact HTML in-panel, generating a binder from the editor, multiple graphs/views (the
   format already anticipates both).
@@ -185,7 +195,7 @@ actually planned. Add to this freely; promote an item up to the roadmap when it'
 time to build it. Rough grouping, not priority order.
 
 - **Canvas & layout:** pan/zoom, fit-to-screen / reset-view, manual node dragging with
-  positions persisted to the canvas/views sidecar (shape already defined in `canvas.py`;
+  positions persisted to the workspace channel (shape in `visualization/workspace.py`;
   positions override `layered_layout`, which doubles as the auto-relayout/arrange
   button), a minimap for large hunts, collapse/expand a subgraph, geo-coordinates +
   arrange-on-a-map (real-world hunt data, distinct from canvas x/y), multiple named

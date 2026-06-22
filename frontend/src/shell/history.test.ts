@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { HuntFlowEdge, HuntFlowNode } from '../model/adapt'
+import type { HuntFlowEdge, HuntFlowNode } from '../model/flow'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
 
 function node(over: Partial<HuntFlowNode> = {}): HuntFlowNode {

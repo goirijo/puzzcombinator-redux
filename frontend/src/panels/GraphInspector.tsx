@@ -5,7 +5,7 @@
 // here straight from the edge list. A pure view over `PanelProps`: it reads selection +
 // graph and calls back; it owns no state.
 
-import type { HuntFlowEdge } from '../model/adapt'
+import type { HuntFlowEdge } from '../model/flow'
 import type { PanelProps } from '../shell/types'
 
 /** One related edge: the node on its other end plus the artifacts riding it. */
