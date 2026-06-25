@@ -199,6 +199,70 @@ composition (`toFlowGraph` fuses, `buildSaveRequest` splits) — but in memory t
 carries positions for React Flow's sake. (A future split that gives node moves their own undo
 stack is tracked in `ROADMAP.md`.)
 
+## Diagrams
+
+Two pictures of the same thing the prose above describes — the **module map** is the static
+structure (who imports whom, where the channel split lives); the **lifecycle** is the
+dynamic story (the calls a load and a save actually make). They illustrate; the prose stays
+the source of detail. For the full back-to-front path (file → backend → wire → here) see
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md)'s "editor round-trip" diagram.
+
+**Module map — the import structure and the channel split.** `graph.ts` (hunt data) and
+`workspace.ts` (UI state) are independent leaves that never import each other; `flow.ts` is
+the *only* bridge importing both; `api.ts` composes all three behind the two `fetch` calls.
+
+```mermaid
+flowchart TD
+    Shell["Shell.tsx<br/>state + I/O"]
+    api["api.ts<br/>fetch / save seam"]
+    flow["flow.ts<br/>the bridge"]
+    graphDto["graph.ts<br/>channel A"]
+    workspace["workspace.ts<br/>channel B"]
+    graphStore["graphStore.ts<br/>zundo"]
+    Viewport["Viewport.tsx"]
+    nodes["HuntNode.tsx"]
+    commands["commands.ts<br/>+ PanelRegion"]
+    panels["panels/*"]
+
+    Shell --> api & flow & workspace & graphStore & Viewport & commands
+    api --> graphDto & flow & workspace
+    flow --> graphDto & workspace
+    graphStore --> flow
+    Viewport --> flow & workspace & nodes
+    commands --> panels
+```
+
+**Load/save lifecycle — the calls a round-trip makes.** `toFlowGraph` fuses the two channels
+into React Flow nodes on load; `buildSaveRequest` splits them back apart on save.
+
+```mermaid
+sequenceDiagram
+    participant S as Shell
+    participant A as api
+    participant F as flow
+    participant G as store
+    participant B as Backend
+
+    Note over S: mount
+    S->>A: fetchGraph()
+    A->>B: GET /api/graph
+    B-->>A: { graph, workspace }
+    A->>F: toFlowGraph — FUSE
+    F-->>A: HuntFlowNode[] / Edge[]
+    A-->>S: response
+    S->>G: loadGraph(...)
+    S->>S: setWorkspace + clear history
+
+    Note over S,G: editing — one undo step per burst
+    S->>G: updateNode / onNodesChange
+
+    Note over S: Save (Ctrl+S)
+    S->>A: buildSaveRequest — SPLIT
+    A->>B: PUT /api/graph
+    B-->>A: 200 · 409 demo · 422 invalid
+    A-->>S: ok / error
+```
+
 ## Running it (development)
 
 Two processes — the API and this UI:

@@ -60,32 +60,25 @@ representation.** The data layers (`core`/`artifacts`/`puzzles`/`serialization`/
 visible home for that — node positions (`layout`) and the editor's workspace of views and
 tabs (`workspace`). `app/` composes the two channels into one saved file.
 
+```mermaid
+flowchart TD
+    app["app/ — React editor"]
+    puzzles["puzzles/"]
+    rendering["rendering/"]
+    visualization["visualization/<br/>layout + workspace"]
+    artifacts["artifacts/"]
+    serialization["serialization/ ⇄ JSON"]
+    core["core/<br/>Graph · Node · Edge"]
+
+    app --> puzzles & rendering & visualization
+    puzzles --> artifacts --> core
+    rendering --> serialization --> core
+    visualization --> core
 ```
-            ┌───────────────────────────── app/ (React editor) ──┐
-            │  composes + serves the two channels (data + UI)     │
-            └─────────────────────────────────────────────────────┘
-   ┌──────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
-   │  puzzles/        │   │  rendering/  (binders)    │   │  visualization/           │
-   │  (generators)    │   │  artifact-agnostic        │   │  layout + workspace (UI)  │
-   └──────────────────┘   └──────────────────────────┘   └──────────────────────────┘
-            │                          │                              │
-            ▼                          ▼                              │
-   ┌──────────────────┐   ┌──────────────────────────┐               │
-   │  artifacts/      │   │  serialization/ (⇄ JSON)  │               │
-   │  (the things)    │   │  artifact-agnostic        │               │
-   └──────────────────┘   └──────────────────────────┘               │
-            │                          │                              │
-            └───────────────┬──────────┴──────────────────────────────┘
-                            ▼
-                   ┌──────────────────┐
-                   │  core/  (Graph,  │
-                   │  Node, Edge,     │
-                   │  ordering)       │
-                   │  stdlib-only,    │
-                   │  artifact-       │
-                   │  agnostic        │
-                   └──────────────────┘
-```
+
+(Deps point **downward only**. `app/` sits on top, composing the data and UI channels;
+everything bottoms out at `core/`. `core`, `serialization`, and `rendering` are
+*artifact-agnostic*; `core` is *stdlib-only*.)
 
 `visualization/` reads `core` (its layout query needs a graph) but is UI state, not hunt
 data — and `core`/`serialization` never learn it exists.
@@ -144,6 +137,44 @@ Two independent consumers of the model, for two audiences:
   (React + React Flow) draws the graph and edits it. It is the one layer that both
   *consumes* the seam (to draw) and *produces* it (to save) — and it modifies no lower
   layer.
+
+### The editor round-trip — the path one request takes
+
+Tracing a single editor load-then-save makes the two-channel seam concrete: the file holds
+both channels, the `app` layer **splits** them apart to send and merges them back to store,
+and the frontend **fuses** them into React Flow nodes on load / **splits** them again on
+save. The fuse/split points (`toFlowGraph` ⇄ `buildSaveRequest`) are where the two channels
+meet — everywhere else they travel separately. For the frontend-internal detail (module map,
+the four node-ish types, the sequence of calls) see
+[`frontend/FRONTEND.md`](frontend/FRONTEND.md).
+
+```mermaid
+flowchart TB
+    file[("hunt file<br/>{ graphs, workspace }")]
+    server["app/server.py<br/>split / merge"]
+    gcodec["serialization codec"]
+    wcodec["workspace codec<br/>(+ default layout)"]
+    apim["model/api.ts"]
+    flow["model/flow.ts<br/>FUSE ⇄ SPLIT"]
+    store["graphStore<br/>+ Shell state"]
+    view["Viewport · HuntNode<br/>· panels"]
+
+    file --> server
+    server --> gcodec & wcodec
+    gcodec -->|graph| apim
+    wcodec -->|workspace| apim
+    apim -->|"GET /api/graph"| flow
+    flow --> store --> view
+
+    view -.->|edit| store
+    store -.->|save| flow
+    flow -.->|"PUT /api/graph"| apim
+    apim -.-> server -.-> file
+```
+
+(Solid edges = **load** (file → screen); dashed edges = **save** (screen → file). `flow`
+fuses the two channels into React Flow nodes on load and splits them apart on save. The
+graph channel is validated on save; the workspace channel is GUI state and is not.)
 
 ## The rule that ties it together
 
