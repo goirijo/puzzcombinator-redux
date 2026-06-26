@@ -30,6 +30,7 @@
   background: var(--menubar-bg);
   color: var(--menubar-text);
   flex: 0 0 var(--menubar-height);
+  --ghost-hover: var(--rail-active-bg);
 }
 .menu-bar__title {
   font-weight: 600;
@@ -41,21 +42,10 @@
 .menu-bar__spacer {
   flex: 1;
 }
+/* Adds only what differs from .ghost-btn: a reserved-space border and its padding. */
 .menu-bar__btn {
-  background: transparent;
-  color: inherit;
   border: 1px solid transparent;
-  border-radius: 4px;
   padding: 4px 8px;
-  font: inherit;
-  cursor: pointer;
-}
-.menu-bar__btn:hover:not(:disabled) {
-  background: var(--rail-active-bg);
-}
-.menu-bar__btn:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 .menu-bar__status {
   font-size: 13px;
@@ -96,6 +86,31 @@
   min-height: 0;
 }
 
+/* --- Shared ghost button -------------------------------------------------- */
+/* The flat, transparent, inherit-font control used across the chrome (menu actions, rail
+ * commands, view list, "New view"). Defined once; region classes below add only what differs
+ * (padding, border, layout). The hover tint is parameterized via --ghost-hover so a dark region
+ * (rail/menu) and a light one (panel) each supply their own; the selected-item accent is
+ * uniform. Placed before the region classes so their per-region overrides win on conflict. */
+.ghost-btn {
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.ghost-btn:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+.ghost-btn[data-active='true'] {
+  background: var(--shell-accent);
+  color: var(--shell-accent-text);
+}
+.ghost-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* --- Command rail --------------------------------------------------------- */
 .command-rail {
   display: flex;
@@ -107,36 +122,26 @@
   padding: 4px;
   gap: 2px;
   box-sizing: border-box;
+  --ghost-hover: var(--rail-active-bg);
 }
 .command-rail[data-collapsed='true'] {
   flex-basis: var(--rail-width-collapsed);
   width: var(--rail-width-collapsed);
 }
 
+/* Both are .ghost-btn; these add only the rail's flex layout and borderless edge. */
 .command-rail__toggle,
 .command-rail__btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: transparent;
-  color: inherit;
   border: none;
-  border-radius: 4px;
   padding: 8px;
-  font: inherit;
-  cursor: pointer;
   text-align: left;
 }
 .command-rail__toggle {
   justify-content: center;
   opacity: 0.7;
-}
-.command-rail__btn:hover {
-  background: var(--rail-active-bg);
-}
-.command-rail__btn[data-active='true'] {
-  background: var(--shell-accent);
-  color: var(--shell-accent-text);
 }
 .command-rail__icon {
   width: 1.2em;
@@ -181,6 +186,9 @@
   border-right: 1px solid var(--shell-border);
   box-sizing: border-box;
   overflow: hidden;
+  /* Light surface, so ghost buttons here tint with a subtle gray rather than the dark
+   * chrome hover used by the rail/menu. */
+  --ghost-hover: var(--shell-bg);
 }
 .panel__header {
   display: flex;
@@ -288,4 +296,34 @@
 .related__type {
   color: var(--shell-muted);
   font-size: 11px;
+}
+
+/* --- VIEW panel ----------------------------------------------------------- */
+/* The buttons are .ghost-btn; these add only their per-item border and padding. */
+.view-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.view-list__item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  padding: 6px 8px;
+}
+.view-panel__action {
+  border: 1px solid var(--shell-border);
+  padding: 6px 10px;
+}
+/* Side-by-side Horizontal / Vertical buttons, each taking half the row. */
+.view-panel__arrange {
+  display: flex;
+  gap: 6px;
+}
+.view-panel__arrange .view-panel__action {
+  flex: 1;
+  text-align: center;
 }

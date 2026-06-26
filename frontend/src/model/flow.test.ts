@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GraphBlockDTO } from './graph'
-import { toFlowEdges, toFlowNodes, toGraphBlock, toPositions } from './flow'
+import { applyPositions, toFlowEdges, toFlowNodes, toGraphBlock, toPositions } from './flow'
 import type { PositionDTO } from './workspace'
 
 // A small chain: n1 -> n2 -> n3, one artifact on the first edge, and some null fields
@@ -73,6 +73,26 @@ describe('toGraphBlock', () => {
 describe('toPositions', () => {
   it('extracts each node’s current position for the workspace channel', () => {
     expect(toPositions(toFlowNodes(GRAPH.nodes, POSITIONS))).toEqual(POSITIONS)
+  })
+})
+
+describe('applyPositions', () => {
+  it('swaps in new positions while preserving node identity and data', () => {
+    const nodes = toFlowNodes(GRAPH.nodes, POSITIONS)
+    const moved = applyPositions(nodes, { n1: { x: 5, y: 6 } })
+    const n1 = moved.find((n) => n.id === 'n1')!
+    expect(n1.position).toEqual({ x: 5, y: 6 })
+    expect(n1.data).toEqual(nodes.find((n) => n.id === 'n1')!.data) // data untouched
+  })
+
+  it('falls back to 0,0 for nodes absent from the map', () => {
+    const nodes = toFlowNodes(GRAPH.nodes, POSITIONS)
+    expect(applyPositions(nodes, {}).find((n) => n.id === 'n2')!.position).toEqual({ x: 0, y: 0 })
+  })
+
+  it('round-trips with toPositions (apply then read back)', () => {
+    const nodes = toFlowNodes(GRAPH.nodes, POSITIONS)
+    expect(toPositions(applyPositions(nodes, POSITIONS))).toEqual(POSITIONS)
   })
 })
 

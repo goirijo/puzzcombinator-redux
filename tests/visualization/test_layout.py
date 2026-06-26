@@ -78,3 +78,24 @@ def test_disconnected_roots_share_layer_zero() -> None:
 def test_empty_graph_yields_empty_layout() -> None:
     empty = Graph(nodes={}, edges={})
     assert layered_layout(empty) == {}
+
+
+def test_vertical_transposes_the_pixel_axes(cipher_hunt: Graph) -> None:
+    # Same chain as the horizontal pixel test, but vertical: layers now march DOWN
+    # (layer -> y) while siblings would spread across x. The abstract grid is unchanged.
+    pos = layered_layout(cipher_hunt, "vertical")
+    # layer/row are orientation-independent.
+    assert pos["solve"].layer == 1
+    assert {p.row for p in pos.values()} == {0}
+    # Pixels: a linear chain stacks vertically at x == MARGIN_X.
+    assert (pos["start"].x, pos["start"].y) == (MARGIN_X, MARGIN_Y)
+    assert pos["solve"].y == MARGIN_Y + ROW_HEIGHT
+    assert pos["end"].y == MARGIN_Y + 2 * ROW_HEIGHT
+    assert {p.x for p in pos.values()} == {MARGIN_X}
+
+
+def test_vertical_spreads_siblings_across_x(converging_hunt: Graph) -> None:
+    # A and B share a layer; vertically they sit at the same y, spread along x.
+    pos = layered_layout(converging_hunt, "vertical")
+    assert pos["A"].y == pos["B"].y
+    assert abs(pos["A"].x - pos["B"].x) == COLUMN_WIDTH

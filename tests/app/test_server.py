@@ -48,7 +48,7 @@ def test_get_synthesizes_default_workspace_when_absent(tmp_path, monkeypatch) ->
     # Every node has a resolved position, and the tab has a viewport.
     assert set(view["positions"]) == {"only_start", "lonely"}
     assert {"x", "y"} <= set(view["positions"]["only_start"])
-    assert {"x", "y", "zoom"} <= set(tab["viewport"])
+    assert {"x", "y", "zoom"} <= set(view["viewport"])
 
 
 def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:
@@ -115,6 +115,74 @@ def test_put_in_demo_mode_is_rejected(monkeypatch) -> None:
         "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
     )
     assert response.status_code == 409
+
+
+def test_arrange_returns_positions_for_each_node(tmp_path, monkeypatch) -> None:
+    # The editor posts its live graph block; the server replies with a position per node.
+    b = GraphBuilder()
+    start = b.node("start")
+    end = b.node("end")
+    _seed_hunt(tmp_path, monkeypatch, b.connect(start, end, TextArtifact("go", id="t1")).build())
+    graph = client.get("/api/graph").json()["graph"]
+
+    body = client.post("/api/arrange", json={"graph": graph, "orientation": "horizontal"}).json()
+    assert set(body["positions"]) == {"start", "end"}
+    assert {"x", "y"} == set(body["positions"]["start"])
+
+
+def test_arrange_horizontal_and_vertical_differ(tmp_path, monkeypatch) -> None:
+    # Same chain, two orientations: horizontal advances x along the chain, vertical y.
+    b = GraphBuilder()
+    start = b.node("start")
+    end = b.node("end")
+    _seed_hunt(tmp_path, monkeypatch, b.connect(start, end, TextArtifact("go", id="t1")).build())
+    graph = client.get("/api/graph").json()["graph"]
+
+    horiz = client.post("/api/arrange", json={"graph": graph, "orientation": "horizontal"}).json()
+    vert = client.post("/api/arrange", json={"graph": graph, "orientation": "vertical"}).json()
+    # Horizontal: the chain spreads along x (end is to the right, same y as start).
+    assert horiz["positions"]["end"]["x"] > horiz["positions"]["start"]["x"]
+    assert horiz["positions"]["end"]["y"] == horiz["positions"]["start"]["y"]
+    # Vertical: the chain spreads along y (end is below, same x as start).
+    assert vert["positions"]["end"]["y"] > vert["positions"]["start"]["y"]
+    assert vert["positions"]["end"]["x"] == vert["positions"]["start"]["x"]
+
+
+def test_arrange_defaults_to_horizontal(tmp_path, monkeypatch) -> None:
+    b = GraphBuilder()
+    start = b.node("start")
+    end = b.node("end")
+    _seed_hunt(tmp_path, monkeypatch, b.connect(start, end, TextArtifact("go", id="t1")).build())
+    graph = client.get("/api/graph").json()["graph"]
+
+    omitted = client.post("/api/arrange", json={"graph": graph}).json()
+    horiz = client.post("/api/arrange", json={"graph": graph, "orientation": "horizontal"}).json()
+    assert omitted["positions"] == horiz["positions"]
+
+
+def test_arrange_rejects_unknown_orientation(tmp_path, monkeypatch) -> None:
+    b = GraphBuilder()
+    b.node("start")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+    graph = client.get("/api/graph").json()["graph"]
+    response = client.post("/api/arrange", json={"graph": graph, "orientation": "diagonal"})
+    assert response.status_code == 422
+
+
+def test_arrange_rejects_cyclic_graph() -> None:
+    # A 2-node cycle has no topological order — layout must refuse it, not hang.
+    graph = {
+        "nodes": [
+            {"id": "a", "action": None, "label": None, "notes": None},
+            {"id": "b", "action": None, "label": None, "notes": None},
+        ],
+        "edges": [
+            {"id": "e1", "source": "a", "target": "b", "content": []},
+            {"id": "e2", "source": "b", "target": "a", "content": []},
+        ],
+    }
+    response = client.post("/api/arrange", json={"graph": graph, "orientation": "horizontal"})
+    assert response.status_code == 422
 
 
 def test_put_rejects_invalid_graph(tmp_path, monkeypatch) -> None:

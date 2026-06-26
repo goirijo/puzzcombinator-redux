@@ -17,6 +17,12 @@ The layout is a standard **layered DAG** ("Sugiyama-lite"):
 * **Row (within a column / y-axis)** — nodes sharing a layer are stacked top-to-bottom
   in topological order (which is deterministic, ties broken by id), one per row slot.
 
+The same layering can read **horizontally** (the default — layers march rightward, the
+classic left-to-right solve order) or **vertically** (layers march downward, siblings
+spread across). The layer/row computation is identical for both; only the final pixel
+mapping differs, so an orientation is a pure presentation choice over one structural
+result.
+
 Pixel geometry lives here (not in the browser) so positions are fully determined
 server-side and the tests can assert exact coordinates.
 """
@@ -24,9 +30,14 @@ server-side and the tests can assert exact coordinates.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from puzzcombinator.core.graph import Graph
 from puzzcombinator.core.ordering import topological_order
+
+#: Which way the layers march. ``"horizontal"`` lays solve order left-to-right (layer →
+#: x); ``"vertical"`` lays it top-to-bottom (layer → y), with siblings spread across x.
+Orientation = Literal["horizontal", "vertical"]
 
 # Pixel geometry for the drawn graph. Tweak freely — the tests read these constants
 # rather than hard-coding numbers, so changing them here keeps the suite green.
@@ -52,12 +63,19 @@ class NodePosition:
     y: float
 
 
-def layered_layout(graph: Graph) -> dict[str, NodePosition]:
+def layered_layout(
+    graph: Graph, orientation: Orientation = "horizontal"
+) -> dict[str, NodePosition]:
     """Assign each node a layer, a row, and pixel coordinates.
 
-    Pure: depends only on the graph's structure. Raises
+    Pure: depends only on the graph's structure and the chosen ``orientation``. Raises
     :class:`~puzzcombinator.errors.GraphError` on a cycle (via
     :func:`topological_order`). The empty graph yields an empty map.
+
+    ``orientation`` is purely a pixel-mapping choice — the abstract ``layer``/``row`` grid
+    is identical either way. The two orientations are **transposes** of one another:
+    ``"horizontal"`` (default) runs the depth axis (layer) across the screen-x; ``"vertical"``
+    runs it down the screen-y, with siblings spreading across instead.
     """
     order = topological_order(graph)  # topological ids; predecessors come first
 
@@ -75,10 +93,13 @@ def layered_layout(graph: Graph) -> dict[str, NodePosition]:
         lyr = layer[node_id]
         row = next_row.get(lyr, 0)
         next_row[lyr] = row + 1
+        # Vertical is the horizontal grid transposed: swap which grid index drives each
+        # screen axis, then the single pixel formula below serves both orientations.
+        col, line = (row, lyr) if orientation == "vertical" else (lyr, row)
         positions[node_id] = NodePosition(
             layer=lyr,
             row=row,
-            x=MARGIN_X + lyr * COLUMN_WIDTH,
-            y=MARGIN_Y + row * ROW_HEIGHT,
+            x=MARGIN_X + col * COLUMN_WIDTH,
+            y=MARGIN_Y + line * ROW_HEIGHT,
         )
     return positions

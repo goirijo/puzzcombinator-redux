@@ -59,6 +59,9 @@ export function toFlowEdges(edges: EdgeDTO[]): HuntFlowEdge[] {
     id: e.id,
     source: e.source,
     target: e.target,
+    // "floating": the edge attaches to whichever node sides face each other, recomputed from
+    // live positions (edges/FloatingEdge) — so the graph isn't pinned to a left→right shape.
+    type: 'floating',
     // Show the artifact count, not the joined names — names get long and overlap the edge;
     // the count stays legible and the full list lives in the inspector.
     label: e.content.length ? String(e.content.length) : undefined,
@@ -93,4 +96,20 @@ export function toGraphBlock(nodes: HuntFlowNode[], edges: HuntFlowEdge[]): Grap
 /** The workspace half of the save: pull each node's current position out for the view. */
 export function toPositions(nodes: HuntFlowNode[]): Record<string, PositionDTO> {
   return Object.fromEntries(nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]))
+}
+
+/**
+ * Re-place existing flow nodes from a positions map — keep each node's identity and data,
+ * swap only its `position` (same 0,0 fallback as `toFlowNodes`). The inverse of `toPositions`.
+ * Used when switching views or auto-arranging: both hand back a fresh `{node_id: {x, y}}` map
+ * to drop onto the live nodes.
+ */
+export function applyPositions(
+  nodes: HuntFlowNode[],
+  positions: Record<string, PositionDTO>,
+): HuntFlowNode[] {
+  return nodes.map((n) => ({
+    ...n,
+    position: { x: positions[n.id]?.x ?? 0, y: positions[n.id]?.y ?? 0 },
+  }))
 }

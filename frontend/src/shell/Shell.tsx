@@ -17,13 +17,14 @@ import { useStore } from 'zustand'
 
 import { buildSaveRequest, fetchGraph, saveGraph, toFlowGraph } from '../model/api'
 import type { HuntFlowEdge, HuntFlowNode } from '../model/flow'
-import { activeView, type WorkspaceDTO } from '../model/workspace'
+import { activeView } from '../model/workspace'
 import { CommandRail } from './CommandRail'
 import { MenuBar } from './MenuBar'
 import { PanelRegion } from './PanelRegion'
 import { TabBar } from './TabBar'
 import { Viewport } from './Viewport'
 import { useGraphStore } from './graphStore'
+import { useWorkspaceStore } from './workspaceStore'
 import type { CommandId } from './commands'
 import type { SaveState, Selection } from './types'
 import './shell.css'
@@ -42,19 +43,24 @@ export function Shell() {
   const canUndo = useStore(useGraphStore.temporal, (s) => s.pastStates.length > 0)
   const canRedo = useStore(useGraphStore.temporal, (s) => s.futureStates.length > 0)
 
+  // The workspace channel (views/tabs/active tab) lives in its own store now (so panels can
+  // subscribe to it directly); the active view's switch/create logic lives there too.
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
+  const selectTab = useWorkspaceStore((s) => s.selectTab)
+  const setActiveViewport = useWorkspaceStore((s) => s.setActiveViewport)
+
   // Non-undoable UI state.
   const [selection, setSelection] = useState<Selection>(null)
   const [activeCommandId, setActiveCommandId] = useState<CommandId | null>('graph')
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' })
   // The serialized save payload as of the last load/save; null until first load. Drives `isDirty`.
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
-  // The workspace channel (views/tabs/active tab) — plain UI state for now.
-  const [workspace, setWorkspace] = useState<WorkspaceDTO | null>(null)
 
   useEffect(() => {
     fetchGraph()
       .then((res) => {
-        setWorkspace(res.workspace)
+        loadWorkspace(res.workspace)
         const { nodes: n, edges: e } = toFlowGraph(res)
         loadGraph(n, e)
         // The initial load shouldn't be undoable, and is the clean baseline.
@@ -62,7 +68,7 @@ export function Shell() {
         setSavedSnapshot(JSON.stringify(buildSaveRequest(n, e, res.workspace)))
       })
       .catch((err) => console.error('failed to load graph', err))
-  }, [loadGraph])
+  }, [loadGraph, loadWorkspace])
 
   const handleSelectionChange = useCallback(
     ({ nodes: sn, edges: se }: OnSelectionChangeParams<HuntFlowNode, HuntFlowEdge>) => {
@@ -90,13 +96,6 @@ export function Shell() {
 
   const onUndo = useCallback(() => useGraphStore.temporal.getState().undo(), [])
   const onRedo = useCallback(() => useGraphStore.temporal.getState().redo(), [])
-
-  // Switch the active tab. Creating multiple views/tabs is deferred; with one tab this just
-  // records the active tab. (When several views can exist, switching must also re-project the
-  // new view's positions onto the nodes — added with that feature.)
-  const onSelectTab = useCallback((tabId: string) => {
-    setWorkspace((ws) => (ws ? { ...ws, active_tab: tabId } : ws))
-  }, [])
 
   // Keyboard shortcuts: Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z (or Ctrl/⌘+Y) redo.
   useEffect(() => {
@@ -149,7 +148,7 @@ export function Shell() {
             tabs={workspace?.tabs ?? []}
             views={workspace?.views ?? {}}
             activeTabId={workspace?.active_tab ?? null}
-            onSelect={onSelectTab}
+            onSelect={selectTab}
           />
           <div className="shell__content">
             {/* String sizes are percentages of the group; numbers would be pixels. */}
@@ -173,7 +172,9 @@ export function Shell() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onSelectionChange={handleSelectionChange}
-                  view={active?.view}
+                  activeViewId={active?.id}
+                  viewport={active?.view.viewport}
+                  onViewportChange={setActiveViewport}
                 />
               </Panel>
             </Group>

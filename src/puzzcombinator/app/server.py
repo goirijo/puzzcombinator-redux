@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast, get_args
 
 from fastapi import FastAPI, HTTPException
 
@@ -52,12 +52,17 @@ from puzzcombinator.serialization.schema import (
     SCHEMA_VERSION,
 )
 from puzzcombinator.visualization.defaults import resolve_workspace
+from puzzcombinator.visualization.layout import Orientation, layered_layout
 from puzzcombinator.visualization.workspace import workspace_from_dict, workspace_to_dict
 
 #: The top-level key under which the UI channel is composed alongside ``graphs``. The
 #: composition is the app layer's job, so the joining key is owned here — not in either
 #: channel's codec.
 KEY_WORKSPACE = "workspace"
+
+#: The layout orientations the arrange endpoint accepts — derived from the ``Orientation``
+#: Literal itself, so there is one source of truth for the allowed values.
+_ORIENTATIONS: frozenset[str] = frozenset(get_args(Orientation))
 
 
 def _graph_path() -> str | None:
@@ -124,3 +129,25 @@ def save_graph(body: dict[str, Any]) -> dict[str, Any]:
     }
     Path(path).write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"saved": True}
+
+
+@app.post("/api/arrange")
+def arrange(body: dict[str, Any]) -> dict[str, Any]:
+    """Auto-layout the *live* graph and return fresh positions for the editor to apply.
+
+    Stateless and file-independent: the editor sends its current (possibly unsaved)
+    ``graph`` block plus an ``orientation`` (default ``"horizontal"``), and gets back a
+    ``{node_id: {x, y}}`` map shaped exactly like a view's ``positions`` — so the browser
+    applies it directly without touching the saved file. Layout stays the single tested
+    source of truth in :func:`~puzzcombinator.visualization.layout.layered_layout`.
+    Returns 422 on an invalid graph (e.g. a cycle) or an unknown orientation.
+    """
+    orientation = body.get("orientation", "horizontal")
+    if orientation not in _ORIENTATIONS:
+        raise HTTPException(status_code=422, detail=f"unknown orientation: {orientation!r}")
+    try:
+        graph = graph_from_dict({KEY_SCHEMA_VERSION: SCHEMA_VERSION, KEY_GRAPH: body[KEY_GRAPH]})
+        positions = layered_layout(graph, cast(Orientation, orientation))
+    except (GraphError, SerializationError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=f"cannot arrange: {exc}") from exc
+    return {"positions": {nid: {"x": p.x, "y": p.y} for nid, p in positions.items()}}

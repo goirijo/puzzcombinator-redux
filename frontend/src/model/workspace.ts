@@ -14,25 +14,36 @@ export interface PositionDTO {
   y: number
 }
 
-/** A tab's pan/zoom framing of its view (React Flow's viewport). */
+/** A view's pan/zoom framing of its graph (React Flow's viewport). */
 export interface ViewportDTO {
   x: number
   y: number
   zoom: number
 }
 
-/** A view (a *buffer*): an arrangement of one graph — its node positions and a title. */
+/** React Flow's identity viewport — a view still at this is treated as "auto-fit me". */
+export const IDENTITY_VIEWPORT: ViewportDTO = { x: 0, y: 0, zoom: 1 }
+
+/** True when a view has never been framed (still at the identity viewport). */
+export function isIdentityViewport(vp: ViewportDTO): boolean {
+  return vp.x === 0 && vp.y === 0 && vp.zoom === 1
+}
+
+/**
+ * A view (a *buffer*): an arrangement of one graph — node positions, a title, and the saved
+ * pan/zoom framing (so two views of one graph can each remember their own camera).
+ */
 export interface ViewDTO {
   graph: string
   title: string
   positions: Record<string, PositionDTO>
+  viewport: ViewportDTO
 }
 
-/** A tab (a *window*): a display slot referencing a view by id, with its own viewport. */
+/** A tab (a *window*): a display slot referencing a view by id. */
 export interface TabDTO {
   id: string
   view: string
-  viewport: ViewportDTO
 }
 
 /**
@@ -53,8 +64,38 @@ export interface WorkspaceDTO {
  * is active, or when the active tab points at a missing view. Pure query over the workspace.
  */
 export function activeView(ws: WorkspaceDTO): { id: string; view: ViewDTO } | undefined {
-  const tab = ws.tabs.find((t) => t.id === ws.active_tab)
+  const tab = activeTab(ws)
   if (!tab) return undefined
   const view = ws.views[tab.view]
   return view ? { id: tab.view, view } : undefined
+}
+
+// --- Mutations (pure: workspace in, new workspace out) ------------------------------------
+// Every view-state change goes through one of these, so the panel/orchestrator never
+// hand-mutate the DTO. They are the CRUD seam — rename/delete slot in here later the same way.
+
+/** The tab the workspace currently shows — or `undefined` when none is active. Pure query. */
+export function activeTab(ws: WorkspaceDTO): TabDTO | undefined {
+  return ws.tabs.find((t) => t.id === ws.active_tab)
+}
+
+/** Point the active tab at a different view. Immutable; a no-op when no tab is active. */
+export function setActiveTabView(ws: WorkspaceDTO, viewId: string): WorkspaceDTO {
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) => (t.id === ws.active_tab ? { ...t, view: viewId } : t)),
+  }
+}
+
+/**
+ * Add a view and return the new workspace plus the freshly generated view id. It does **not**
+ * switch any tab to the new view — selecting is the orchestrator's call, so "create then land
+ * on it" stays two explicit steps. The id is random so views never collide.
+ */
+export function createView(
+  ws: WorkspaceDTO,
+  view: ViewDTO,
+): { workspace: WorkspaceDTO; viewId: string } {
+  const viewId = `view-${crypto.randomUUID().slice(0, 8)}`
+  return { workspace: { ...ws, views: { ...ws.views, [viewId]: view } }, viewId }
 }

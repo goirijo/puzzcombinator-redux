@@ -22,10 +22,7 @@ from __future__ import annotations
 from puzzcombinator.core.document import DEFAULT_GRAPH_ID
 from puzzcombinator.core.graph import Graph
 from puzzcombinator.visualization.layout import layered_layout
-from puzzcombinator.visualization.workspace import Position, Tab, View, Viewport, Workspace
-
-#: The framing a freshly-opened tab starts at (React Flow's identity viewport).
-DEFAULT_VIEWPORT = Viewport(x=0.0, y=0.0, zoom=1.0)
+from puzzcombinator.visualization.workspace import Position, Tab, View, Workspace
 
 
 def _auto_positions(graph: Graph) -> dict[str, Position]:
@@ -44,7 +41,7 @@ def default_workspace(graphs: dict[str, Graph], main_id: str = DEFAULT_GRAPH_ID)
         for gid, g in graphs.items()
     }
     main_view = _view_id(main_id if main_id in graphs else next(iter(graphs)))
-    tab = Tab(id="tab-1", view=main_view, viewport=DEFAULT_VIEWPORT)
+    tab = Tab(id="tab-1", view=main_view)
     return Workspace(views=views, tabs=[tab], active_tab=tab.id)
 
 

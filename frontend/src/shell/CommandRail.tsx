@@ -17,7 +17,7 @@ export function CommandRail({ activeCommandId, onSelect }: CommandRailProps) {
   return (
     <nav className="command-rail" data-collapsed={collapsed}>
       <button
-        className="command-rail__toggle"
+        className="ghost-btn command-rail__toggle"
         onClick={() => setCollapsed((c) => !c)}
         title={collapsed ? 'Expand rail' : 'Collapse rail'}
       >
@@ -26,7 +26,7 @@ export function CommandRail({ activeCommandId, onSelect }: CommandRailProps) {
       {COMMANDS.map((cmd) => (
         <button
           key={cmd.id}
-          className="command-rail__btn"
+          className="ghost-btn command-rail__btn"
           data-active={cmd.id === activeCommandId}
           title={cmd.label}
           onClick={() => onSelect(cmd.id)}

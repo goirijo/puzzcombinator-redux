@@ -13,7 +13,10 @@ import {
   type HuntFlowEdge,
   type HuntFlowNode,
 } from './flow'
-import { activeView, type WorkspaceDTO } from './workspace'
+import { activeView, type PositionDTO, type WorkspaceDTO } from './workspace'
+
+/** The auto-arrange orientations the backend accepts (echoes its `Orientation` Literal). */
+export type Orientation = 'horizontal' | 'vertical'
 
 /** The full `GET /api/graph` envelope: the two channels as explicit siblings. */
 export interface GraphResponseDTO {
@@ -53,6 +56,33 @@ export async function saveGraph(body: SaveRequestDTO): Promise<void> {
       .catch(() => undefined)
     throw new Error(detail ?? `PUT /api/graph failed: ${res.status}`)
   }
+}
+
+/**
+ * Auto-layout the live graph: `POST /api/arrange` with the current `{ nodes, edges }` and an
+ * orientation, returning a `{node_id: {x, y}}` positions map shaped exactly like a view's
+ * `positions` (apply it straight onto the nodes). The graph travels in the request because the
+ * editor's copy may be unsaved; layout itself is the backend's single source of truth. Surfaces
+ * the server's 422 detail (e.g. a cycle) the same way `saveGraph` does.
+ */
+export async function requestArrange(
+  graph: GraphBlockDTO,
+  orientation: Orientation,
+): Promise<Record<string, PositionDTO>> {
+  const res = await fetch('/api/arrange', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ graph, orientation }),
+  })
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b: { detail?: string }) => b.detail)
+      .catch(() => undefined)
+    throw new Error(detail ?? `POST /api/arrange failed: ${res.status}`)
+  }
+  const body = (await res.json()) as { positions: Record<string, PositionDTO> }
+  return body.positions
 }
 
 // --- Composition: fuse the two channels on load, split them on save. ---------------------

@@ -1,0 +1,93 @@
+// The VIEW command's panel: list the workspace's views, switch the active tab to one, create a
+// new view from the current arrangement, and auto-arrange the graph. Unlike GraphInspector this
+// panel takes no PanelProps — it subscribes to the workspace store directly and reads exactly the
+// slice it needs. View-management's position-lifecycle logic lives in the store's actions
+// (selectView/createView); this component just names the intent.
+//
+// Auto-arrange is the one action with I/O: layout is the backend's job, so the handler hits the
+// `/api/arrange` seam (model/api.ts) then drops the returned positions onto the live nodes via the
+// graph store — applied normally (undoable), since a re-layout is a deliberate edit. This mirrors
+// Shell.tsx's fetch/save: the component owns the I/O, the store owns the state.
+
+import { useState } from 'react'
+
+import { requestArrange, type Orientation } from '../model/api'
+import { toGraphBlock } from '../model/flow'
+import { activeView } from '../model/workspace'
+import { useGraphStore } from '../shell/graphStore'
+import { useWorkspaceStore } from '../shell/workspaceStore'
+
+export function ViewPanel() {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const selectView = useWorkspaceStore((s) => s.selectView)
+  const createView = useWorkspaceStore((s) => s.createView)
+  // Disable the arrange buttons mid-request; a failed layout (e.g. a cycle) is rare and logged,
+  // matching how Shell.tsx surfaces a failed load.
+  const [arranging, setArranging] = useState(false)
+
+  async function onArrange(orientation: Orientation) {
+    const { nodes, edges, setNodePositions } = useGraphStore.getState()
+    setArranging(true)
+    try {
+      const positions = await requestArrange(toGraphBlock(nodes, edges), orientation)
+      setNodePositions(positions)
+    } catch (err) {
+      console.error('failed to arrange', err)
+    } finally {
+      setArranging(false)
+    }
+  }
+
+  if (!workspace) return <p className="inspector__empty">Loading…</p>
+
+  const activeId = activeView(workspace)?.id
+  const views = Object.entries(workspace.views)
+
+  return (
+    <div className="view-panel">
+      <section className="view-panel__section">
+        <h3 className="inspector__heading">Views</h3>
+        <ul className="view-list">
+          {views.map(([id, view]) => (
+            <li key={id}>
+              <button
+                type="button"
+                className="ghost-btn view-list__item"
+                data-active={id === activeId}
+                aria-current={id === activeId}
+                onClick={() => selectView(id)}
+              >
+                {view.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="ghost-btn view-panel__action" onClick={createView}>
+          + New view
+        </button>
+      </section>
+
+      <section className="view-panel__section">
+        <h3 className="inspector__heading">Auto-arrange</h3>
+        <div className="view-panel__arrange">
+          <button
+            type="button"
+            className="ghost-btn view-panel__action"
+            disabled={arranging}
+            onClick={() => void onArrange('horizontal')}
+          >
+            Horizontal
+          </button>
+          <button
+            type="button"
+            className="ghost-btn view-panel__action"
+            disabled={arranging}
+            onClick={() => void onArrange('vertical')}
+          >
+            Vertical
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}

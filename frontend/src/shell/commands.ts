@@ -8,6 +8,7 @@ import type { FC } from 'react'
 
 import { GraphInspector } from '../panels/GraphInspector'
 import { PlaceholderPanel } from '../panels/PlaceholderPanel'
+import { ViewPanel } from '../panels/ViewPanel'
 import type { PanelProps } from './types'
 
 /** The commands from the design (`frontend/design/ideas.txt`). */
@@ -28,10 +29,12 @@ export interface CommandDescriptor {
   Panel: FC<PanelProps>
 }
 
-// Only GRAPH has a real panel in this first increment; the rest open a placeholder, so the
-// rail already matches the design and "build the feature" is swapping its `Panel` here.
+// GRAPH and VIEW have real panels; the rest open a placeholder, so the rail already matches the
+// design and "build the feature" is swapping its `Panel` here. A panel may take PanelProps
+// (GraphInspector) or subscribe to stores directly and ignore them (ViewPanel) — both satisfy
+// `FC<PanelProps>`, so the registry stays uniform either way.
 export const COMMANDS: CommandDescriptor[] = [
-  { id: 'view', label: 'View', icon: '▤', Panel: PlaceholderPanel },
+  { id: 'view', label: 'View', icon: '▤', Panel: ViewPanel },
   { id: 'graph', label: 'Graph', icon: '◆', Panel: GraphInspector },
   { id: 'puzzle', label: 'Puzzle', icon: '✦', Panel: PlaceholderPanel },
   { id: 'saveload', label: 'Save / Load', icon: '🖫', Panel: PlaceholderPanel },

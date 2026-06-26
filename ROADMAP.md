@@ -19,11 +19,18 @@ which is the active frontier.
   the graph, and the workspace (views, tabs, node positions, per-tab viewport). `visualization/`
   owns the workspace model + codec; `app` composes the two into one file. (Vim model: views =
   buffers, tabs = windows.)
-- **Independent move-undo (the deferred undo split).** Node positions currently ride the graph
-  store, so moving a node and editing a node share **one** undo stack. Lift positions into a
-  second `workspaceStore` (zundo) so moves get their own undo history, separate from edits —
-  then route the undo keybinding by focus (vim-style). The channels already split cleanly at
-  save, so this is additive, not a rewrite. (See the data-flow section of `frontend/FRONTEND.md`.)
+- **Per-view / independent move-undo (the deferred undo split).** Node positions ride the
+  graph store *during editing*, so (a) moving a node and editing a node share **one** undo
+  stack, and (b) that stack's snapshots carry per-view positions while positions are the one
+  per-view thing — so undoing after a view switch would clobber the current view with another
+  view's snapshot. **Interim fix (shipped):** the undo history is cleared on every view switch
+  (`workspaceStore.resetHistory`), scoping undo to "since you arrived at this view" — no
+  cross-view corruption, at the cost of undo not surviving a switch (the data itself is never
+  lost). **The real fix:** lift positions out of the undoable graph store into the
+  `workspaceStore` (per view, with their own history), making React Flow nodes a projection of
+  shared hunt-data + active-view positions, and route the undo keybinding by focus (vim-style).
+  The persisted format already separates the two channels, so this is additive and **in-memory
+  only — no data migration**, not a rewrite. (See the data-flow section of `frontend/FRONTEND.md`.)
 - **Browser file-picker** to replace the `PUZZ_GRAPH` env var.
 - **Empty project by default.** Today a fresh load synthesizes a demo graph plus a default
   tab/view/auto-layout so there's always something to draw. Once the browser file-picker and
@@ -34,8 +41,17 @@ which is the active frontier.
 
 ## Canvas & nodes
 
-- **Edge directionality.** Today handles attach only left (target) / right (source).
-  Consider allowing top/bottom attachment.
+- **Edge attachment & drawing connections.** *(Floating edges shipped.)* Edges attach to
+  whichever node sides face each other, recomputed from live geometry (`edges/FloatingEdge`),
+  and re-aim as nodes move — the graph isn't pinned to a shape (see the
+  [[graph-no-imposed-shape]] principle). **Interim state:** nodes show four discrete `source`
+  handles + `ConnectionMode.Loose` (Viewport). These are only the minimum React Flow needs to
+  *render* an edge — a finished edge ignores them and floats — but manual wiring isn't built, so
+  the four dots don't connect anything yet. They're left visible as-is (no point polishing an
+  interim look). **Decided design for when drawing connections lands:** drop the four dots for a
+  *single invisible handle covering the whole node* (React Flow's "Easy Connect" pattern) +
+  `ConnectionMode.Loose`, so a designer starts a drag from anywhere on a node and the resulting
+  edge floats like every other edge. Part of the near-term **Canvas interaction** milestone.
 - **Node creation.** A way to create new nodes (and artifacts — see below) from the UI.
 - **Custom node coloring.** Author-chosen colors per node. (Note: an earlier *automatic*
   start/middle/end role-coloring was rejected — coloring should be explicit author intent,

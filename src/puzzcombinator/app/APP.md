@@ -65,6 +65,11 @@ and composes them.
     registry); the `workspace` round-trips through its own codec; the two compose into
     one `HuntDocument`-shaped file with a sibling `workspace` key. Returns 409 in demo
     mode (no file to save to) and 422 on an invalid body.
+  - `POST /api/arrange` takes a `{graph, orientation}` body and returns a
+    `{positions: {node_id: {x, y}}}` map from `visualization.layout.layered_layout` —
+    auto-layout for the *live* (possibly unsaved) graph, so the editor can re-arrange
+    without writing the file. `orientation` is `"horizontal"` (default) or `"vertical"`;
+    422 on an unknown orientation or an un-layoutable graph (e.g. a cycle).
   - Which graph: the `PUZZ_GRAPH` environment variable, if set, points at a serialized
     hunt JSON file — a hunt document — loaded via `serialization.from_json` and drawn as
     its `.main` graph; otherwise the built-in demo graph is used (and saving is

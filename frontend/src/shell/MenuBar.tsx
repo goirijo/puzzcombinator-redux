@@ -31,11 +31,16 @@ export function MenuBar({
       <span className="menu-bar__title">{title}</span>
 
       <div className="menu-bar__group">
-        <button className="menu-bar__btn" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl/⌘+Z)">
+        <button
+          className="ghost-btn menu-bar__btn"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/⌘+Z)"
+        >
           ↶ Undo
         </button>
         <button
-          className="menu-bar__btn"
+          className="ghost-btn menu-bar__btn"
           onClick={onRedo}
           disabled={!canRedo}
           title="Redo (Ctrl/⌘+Shift+Z)"

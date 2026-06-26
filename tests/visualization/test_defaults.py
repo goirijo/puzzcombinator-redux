@@ -23,7 +23,7 @@ def test_default_workspace_arranges_every_node_with_one_active_tab() -> None:
     view = ws.views[tab.view]
     assert view.graph == "main"
     assert set(view.positions) == {"start", "end"}  # auto-laid-out
-    assert isinstance(tab.viewport, Viewport)
+    assert isinstance(view.viewport, Viewport)
 
 
 def test_resolve_none_synthesizes_default() -> None:
@@ -37,7 +37,7 @@ def test_resolve_keeps_stored_positions_and_fills_missing() -> None:
     graph = _two_node_graph()
     stored = Workspace(
         views={"v1": View(graph="main", title="Main", positions={"start": Position(999.0, 42.0)})},
-        tabs=[Tab(id="t1", view="v1", viewport=Viewport(0.0, 0.0, 1.0))],
+        tabs=[Tab(id="t1", view="v1")],
         active_tab="t1",
     )
     resolved = resolve_workspace(stored, {"main": graph})

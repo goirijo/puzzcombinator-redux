@@ -13,10 +13,12 @@ is a valid fixture, with no graph present).
 The mental model is **vim**:
 
 * A **view** is a *buffer* — a created, persistent arrangement of one graph: node
-  positions and a title. It exists whether or not anything is displaying it.
-* A **tab** is a *window* — a display slot that *references* a view by id and carries
-  its own viewport (pan/zoom). Several tabs may show the same view; closing a tab does
-  not destroy the view.
+  positions, a title, and how the graph is framed (pan/zoom). It exists whether or not
+  anything is displaying it. (Framing lives on the view, not the tab, so two views of a
+  big graph can each remember a different camera — mirroring vim's ``:mkview``, which
+  saves scroll position per view.)
+* A **tab** is a *window* — a display slot that *references* a view by id. Several tabs
+  may show the same view; closing a tab does not destroy the view.
 * The **workspace** is the whole channel: every view, every tab, and the active tab.
 
 On disk the workspace is one top-level entry alongside ``graphs`` in the hunt file (it
@@ -55,11 +57,16 @@ class Position:
 
 @dataclass(frozen=True)
 class Viewport:
-    """A tab's pan/zoom framing of its view (React Flow's viewport)."""
+    """A view's pan/zoom framing of its graph (React Flow's viewport)."""
 
     x: float
     y: float
     zoom: float
+
+
+#: React Flow's identity viewport — the framing a never-framed view starts at. A view
+#: still showing this is treated as "auto-fit me" by the editor.
+IDENTITY_VIEWPORT = Viewport(x=0.0, y=0.0, zoom=1.0)
 
 
 @dataclass
@@ -69,12 +76,14 @@ class View:
     ``graph`` is the id of the graph this view draws. ``title`` is the view's name (a
     tab showing this view displays this title). ``positions`` maps node id →
     :class:`Position` for nodes the designer has placed; nodes absent from the map fall
-    back to auto-layout.
+    back to auto-layout. ``viewport`` is the saved pan/zoom framing (so each view of a
+    graph can remember its own camera).
     """
 
     graph: str
     title: str
     positions: dict[str, Position] = field(default_factory=dict)
+    viewport: Viewport = IDENTITY_VIEWPORT
 
 
 @dataclass
@@ -83,7 +92,6 @@ class Tab:
 
     id: str
     view: str
-    viewport: Viewport
 
 
 @dataclass
@@ -122,16 +130,19 @@ def _view_to_dict(view: View) -> dict[str, Any]:
         KEY_VIEW_GRAPH: view.graph,
         KEY_VIEW_TITLE: view.title,
         KEY_VIEW_POSITIONS: {nid: _position_to_dict(p) for nid, p in view.positions.items()},
+        KEY_VIEWPORT: _viewport_to_dict(view.viewport),
     }
 
 
 def _view_from_dict(data: dict[str, Any]) -> View:
+    raw_viewport = data.get(KEY_VIEWPORT)
     return View(
         graph=data[KEY_VIEW_GRAPH],
         title=data[KEY_VIEW_TITLE],
         positions={
             nid: _position_from_dict(p) for nid, p in data.get(KEY_VIEW_POSITIONS, {}).items()
         },
+        viewport=_viewport_from_dict(raw_viewport) if raw_viewport else IDENTITY_VIEWPORT,
     )
 
 
@@ -139,7 +150,6 @@ def _tab_to_dict(tab: Tab) -> dict[str, Any]:
     return {
         KEY_TAB_ID: tab.id,
         KEY_TAB_VIEW: tab.view,
-        KEY_VIEWPORT: _viewport_to_dict(tab.viewport),
     }
 
 
@@ -147,7 +157,6 @@ def _tab_from_dict(data: dict[str, Any]) -> Tab:
     return Tab(
         id=data[KEY_TAB_ID],
         view=data[KEY_TAB_VIEW],
-        viewport=_viewport_from_dict(data[KEY_VIEWPORT]),
     )
 
 

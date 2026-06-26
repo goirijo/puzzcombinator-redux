@@ -25,7 +25,8 @@ import {
 import { create } from 'zustand'
 import { temporal } from 'zundo'
 
-import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/flow'
+import { applyPositions, type HuntFlowEdge, type HuntFlowNode, type NodeFields } from '../model/flow'
+import type { PositionDTO } from '../model/workspace'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
 
 /** Wait this long after the last change before snapshotting — coalesces typing/dragging. */
@@ -38,6 +39,8 @@ export interface GraphState {
   loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[]) => void
   /** Patch one node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
+  /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
+  setNodePositions: (positions: Record<string, PositionDTO>) => void
   /** React Flow change handlers — apply selection/position/etc. to the store. */
   onNodesChange: OnNodesChange<HuntFlowNode>
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
@@ -55,6 +58,7 @@ export const useGraphStore = create<GraphState>()(
             n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
           ),
         }),
+      setNodePositions: (positions) => set({ nodes: applyPositions(get().nodes, positions) }),
       onNodesChange: (changes) => set({ nodes: applyNodeChanges(changes, get().nodes) }),
       onEdgesChange: (changes) => set({ edges: applyEdgeChanges(changes, get().edges) }),
     }),
