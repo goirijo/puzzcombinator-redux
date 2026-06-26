@@ -29,12 +29,12 @@ def _sample_workspace() -> Workspace:
                 graph="main",
                 title="Main",
                 positions={"start": Position(60.0, 60.0), "end": Position(280.0, 60.0)},
-                viewport=Viewport(-120.0, 40.0, 0.85),
             ),
             "v2": View(graph="main", title="Cellar", positions={}),
         },
+        # Two tabs on the SAME view, framed differently — the whole point of per-tab viewport.
         tabs=[
-            Tab(id="t1", view="v1"),
+            Tab(id="t1", view="v1", viewport=Viewport(-120.0, 40.0, 0.85)),
             Tab(id="t2", view="v1"),
         ],
         active_tab="t1",
@@ -64,10 +64,10 @@ def test_loads_standalone_graphless_json() -> None:
     {
       "views": {
         "v1": { "graph": "main", "title": "Main",
-                "positions": { "start": {"x": 60, "y": 60} },
-                "viewport": {"x": 0, "y": 0, "zoom": 1} }
+                "positions": { "start": {"x": 60, "y": 60} } }
       },
-      "tabs": [ { "id": "t1", "view": "v1" } ],
+      "tabs": [ { "id": "t1", "view": "v1",
+                  "viewport": {"x": 0, "y": 0, "zoom": 1} } ],
       "active_tab": "t1"
     }
     """
@@ -76,19 +76,19 @@ def test_loads_standalone_graphless_json() -> None:
     assert ws.views["v1"].title == "Main"
     assert ws.views["v1"].positions["start"] == Position(60.0, 60.0)
     assert ws.tabs[0].view == "v1"
-    assert ws.views["v1"].viewport == Viewport(0.0, 0.0, 1.0)
+    assert ws.tabs[0].viewport == Viewport(0.0, 0.0, 1.0)
 
 
-def test_view_without_viewport_defaults_to_identity() -> None:
-    # Back-compat / minimal docs: a view dict with no viewport key loads as the identity.
-    text = '{ "views": { "v1": { "graph": "main", "title": "Main" } }, "tabs": [] }'
+def test_tab_without_viewport_defaults_to_identity() -> None:
+    # Back-compat / minimal docs: a tab dict with no viewport key loads as the identity.
+    text = '{ "views": {}, "tabs": [ { "id": "t1", "view": "v1" } ] }'
     ws = workspace_from_json(text)
-    assert ws.views["v1"].viewport == Viewport(0.0, 0.0, 1.0)
+    assert ws.tabs[0].viewport == Viewport(0.0, 0.0, 1.0)
 
 
-def test_view_positions_and_viewport_preserved() -> None:
+def test_positions_and_viewport_preserved() -> None:
     ws = workspace_from_dict(workspace_to_dict(_sample_workspace()))
-    assert ws.views["v1"].positions["end"] == Position(280.0, 60.0)
-    assert ws.views["v1"].viewport == Viewport(-120.0, 40.0, 0.85)
+    assert ws.views["v1"].positions["end"] == Position(280.0, 60.0)  # positions on the view
+    assert ws.tabs[0].viewport == Viewport(-120.0, 40.0, 0.85)  # framing on the tab
     assert ws.views["v2"].positions == {}
-    assert ws.views["v2"].viewport == Viewport(0.0, 0.0, 1.0)  # defaulted
+    assert ws.tabs[1].viewport == Viewport(0.0, 0.0, 1.0)  # defaulted

@@ -30,20 +30,23 @@ export function isIdentityViewport(vp: ViewportDTO): boolean {
 }
 
 /**
- * A view (a *buffer*): an arrangement of one graph — node positions, a title, and the saved
- * pan/zoom framing (so two views of one graph can each remember their own camera).
+ * A view (a *buffer*): an arrangement of one graph — node positions and a title. Framing
+ * (pan/zoom) lives on the tab, not here, so two tabs on one view can be framed differently.
  */
 export interface ViewDTO {
   graph: string
   title: string
   positions: Record<string, PositionDTO>
-  viewport: ViewportDTO
 }
 
-/** A tab (a *window*): a display slot referencing a view by id. */
+/**
+ * A tab (a *window*): a display slot referencing a view by id, carrying its own pan/zoom
+ * framing — per tab, so two tabs on the same view can each zoom into a different part.
+ */
 export interface TabDTO {
   id: string
   view: string
+  viewport: ViewportDTO
 }
 
 /**
@@ -125,4 +128,37 @@ export function deleteView(ws: WorkspaceDTO, viewId: string): WorkspaceDTO {
     views,
     tabs: ws.tabs.map((t) => (t.view === viewId ? { ...t, view: fallback } : t)),
   }
+}
+
+/**
+ * Append a tab (a *window*) onto an existing view and return the new workspace plus the
+ * freshly generated tab id. Like {@link createView} it does **not** make the tab active —
+ * landing on it is the orchestrator's call. The tab carries its own `viewport` so two tabs
+ * on one view can be framed differently. The id is random so tabs never collide.
+ */
+export function createTab(
+  ws: WorkspaceDTO,
+  viewId: string,
+  viewport: ViewportDTO,
+): { workspace: WorkspaceDTO; tabId: string } {
+  const tabId = `tab-${crypto.randomUUID().slice(0, 8)}`
+  return { workspace: { ...ws, tabs: [...ws.tabs, { id: tabId, view: viewId, viewport }] }, tabId }
+}
+
+/**
+ * Remove a tab (a *window*) — its view is left intact (vim: closing a window never destroys
+ * the buffer). Refuses to remove the last tab and is a no-op for a missing id; both return
+ * the input unchanged (referentially), which the store reads as "nothing happened". When the
+ * removed tab was active, the active tab moves to a neighbour (the next tab by position, or
+ * the previous one if it was last).
+ */
+export function deleteTab(ws: WorkspaceDTO, tabId: string): WorkspaceDTO {
+  const index = ws.tabs.findIndex((t) => t.id === tabId)
+  if (index === -1) return ws // unknown id
+  if (ws.tabs.length <= 1) return ws // never remove the last tab
+  const tabs = ws.tabs.filter((t) => t.id !== tabId)
+  if (ws.active_tab !== tabId) return { ...ws, tabs } // closing a background tab: active unchanged
+  // The active tab closed: land on the neighbour that slid into its slot, else the new last.
+  const neighbour = tabs[index] ?? tabs[tabs.length - 1]
+  return { ...ws, tabs, active_tab: neighbour.id }
 }

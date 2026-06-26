@@ -35,6 +35,8 @@
   --menubar-muted: #9aa3ad;
 
   --tab-bar-height: 34px;
+  --tab-width: 180px; /* a tab's preferred width; it shrinks below this only when crowded */
+  --tab-min-width: 48px; /* the floor tabs shrink to before the bar overflows */
 
   --panel-min-width: 220px;
   --resize-handle-width: 6px;

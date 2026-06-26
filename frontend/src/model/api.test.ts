@@ -6,9 +6,9 @@ import type { WorkspaceDTO } from './workspace'
 
 const WS: WorkspaceDTO = {
   views: {
-    v1: { graph: 'main', title: 'Main', positions: { n1: { x: 10, y: 20 } }, viewport: { x: 0, y: 0, zoom: 1 } },
+    v1: { graph: 'main', title: 'Main', positions: { n1: { x: 10, y: 20 } } },
   },
-  tabs: [{ id: 't1', view: 'v1' }],
+  tabs: [{ id: 't1', view: 'v1', viewport: { x: 0, y: 0, zoom: 1 } }],
   active_tab: 't1',
 }
 

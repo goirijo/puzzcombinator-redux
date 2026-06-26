@@ -2,12 +2,13 @@
 // here — the rail/tabs/panel are plain React around it. The component takes the nodes/edges +
 // change handlers from the shell (which owns the state) and reports selection back up.
 //
-// Per-view framing: each view remembers its own pan/zoom. React Flow's camera is imperative,
-// so we (a) RESTORE the active view's viewport whenever the view changes (keyed on its id), and
-// (b) CAPTURE the camera back into the active view on every pan/zoom (onMoveEnd → onViewportChange,
-// the framing analog of dragging a node). A view still at the identity viewport has never been
-// framed, so we auto-fit it instead — and only auto-fit on resize while still unframed, so a
-// remembered camera is never clobbered by a panel-divider drag.
+// Per-tab framing: each tab remembers its own pan/zoom (two tabs on one view can be framed
+// differently). React Flow's camera is imperative, so we (a) RESTORE the active tab's viewport
+// whenever the active tab changes (keyed on its id — the view id can't distinguish two tabs on
+// one view), and (b) CAPTURE the camera back into the active tab on every pan/zoom (onMoveEnd →
+// onViewportChange, the framing analog of dragging a node). A tab still at the identity viewport
+// has never been framed, so we auto-fit it instead — and only auto-fit on resize while still
+// unframed, so a remembered camera is never clobbered by a panel-divider drag.
 
 import { useEffect, useRef } from 'react'
 import {
@@ -40,11 +41,11 @@ interface ViewportProps {
   onNodesChange: OnNodesChange<HuntFlowNode>
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
   onSelectionChange: (params: OnSelectionChangeParams<HuntFlowNode, HuntFlowEdge>) => void
-  /** Id of the active view — changing it triggers a camera restore. */
-  activeViewId?: string
-  /** The active view's saved framing (or undefined before load). */
+  /** Id of the active tab — changing it triggers a camera restore. */
+  activeTabId?: string
+  /** The active tab's saved framing (or undefined before load). */
   viewport?: ViewportDTO
-  /** Report a pan/zoom back so it persists into the active view. */
+  /** Report a pan/zoom back so it persists into the active tab. */
   onViewportChange: (viewport: ViewportDTO) => void
 }
 
@@ -54,7 +55,7 @@ function ViewportInner({
   onNodesChange,
   onEdgesChange,
   onSelectionChange,
-  activeViewId,
+  activeTabId,
   viewport,
   onViewportChange,
 }: ViewportProps) {
@@ -68,7 +69,7 @@ function ViewportInner({
     viewportRef.current = viewport
   })
 
-  // Restore the camera when the active VIEW changes (not on every pan): apply its saved
+  // Restore the camera when the active TAB changes (not on every pan): apply its saved
   // framing, or auto-fit if it has never been framed. rAF lets React Flow measure the new
   // nodes first so fitView/setViewport land correctly.
   useEffect(() => {
@@ -78,7 +79,7 @@ function ViewportInner({
       else void setViewport(vp)
     })
     return () => cancelAnimationFrame(raf)
-  }, [activeViewId, fitView, setViewport])
+  }, [activeTabId, fitView, setViewport])
 
   // The known React Flow gotcha: its container can change size out from under it (dragging the
   // panel divider, collapsing the rail). Re-fit on resize ONLY while the view is unframed; once

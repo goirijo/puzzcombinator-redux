@@ -84,6 +84,21 @@ which is the active frontier.
 - **Status window** surfacing warnings about a bad authoring state (cycles in the graph,
   disjoint/orphaned nodes, etc.). Authoring-only — still no answer-checking.
 
+## Polish & small enhancements
+
+> **Agent note:** low-stakes cosmetic backlog — skip ahead to the next section unless the
+> prompt is specifically about one of these items. Don't spend tokens reading it otherwise.
+
+Non-functional UX niceties — nothing here changes what the editor *can do*, only how
+pleasant it is. Low-stakes, pick up opportunistically.
+
+- **Full tab name on hover.** When a tab's title is truncated (many tabs shrink the width,
+  or a long view name), reveal the full name on hover. Leaning toward a native `title`
+  attribute set only when the label actually overflows (`scrollWidth > clientWidth`,
+  measured on the hover the `TabBar` already handles) — full name when truncated, nothing
+  when it already fits, no custom-tooltip machinery. A themed tooltip is the heavier
+  alternative if the OS one ever feels off.
+
 ## Later layers (defer unless asked)
 
 - **More puzzle types.**

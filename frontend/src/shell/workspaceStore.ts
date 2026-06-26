@@ -14,8 +14,11 @@ import { create } from 'zustand'
 
 import { toPositions } from '../model/flow'
 import {
+  activeTab,
   activeView,
+  createTab as addTab,
   createView as addView,
+  deleteTab as removeTab,
   deleteView as removeView,
   IDENTITY_VIEWPORT,
   renameView as retitleView,
@@ -37,12 +40,25 @@ interface WorkspaceState {
   selectTab: (tabId: string) => void
   /** Create a view seeded from the current arrangement and land on it. */
   createView: () => void
+  /** Open a new tab (window) on the current view, inheriting its framing, and land on it. */
+  createTab: () => void
+  /** Close a tab; if it was active, land on a neighbour. Never closes the last tab. */
+  deleteTab: (tabId: string) => void
   /** Retitle a view (metadata only — no canvas change, not undoable). */
   renameView: (viewId: string, title: string) => void
   /** Delete a view; if it was the one on screen, land the active tab on a survivor. */
   deleteView: (viewId: string) => void
-  /** Record the current pan/zoom into the active view (the camera moved on the canvas). */
+  /** Record the current pan/zoom into the active tab (the camera moved on the canvas). */
   setActiveViewport: (viewport: ViewportDTO) => void
+
+  /** The tab currently being hover-previewed, or null. Transient (not persisted). */
+  previewTabId: string | null
+  /** Live node positions snapshotted at preview start, restored on clear. Transient. */
+  previewRestore: Record<string, PositionDTO> | null
+  /** Preview a tab's arrangement on hover (pass null to revert). Canvas-inert while active. */
+  previewTab: (tabId: string | null) => void
+  /** Revert a hover-preview, restoring the true active arrangement. No-op when not previewing. */
+  clearPreview: () => void
 }
 
 /** Capture the live drag positions back into the view currently shown — before leaving it. */
@@ -73,81 +89,174 @@ function resetHistory(): void {
   useGraphStore.temporal.getState().clear()
 }
 
-export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
-  workspace: null,
+export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
+  // Every action that flushes live positions must first end any hover-preview, or the flush
+  // would capture the *previewed* arrangement and write it into the wrong view. Wrapping the
+  // action keeps that invariant in one place instead of a copy-pasted first line per action —
+  // and makes it impossible to forget when adding the next committing action.
+  function committing<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+    return (...args) => {
+      get().clearPreview()
+      fn(...args)
+    }
+  }
 
-  loadWorkspace: (workspace) => set({ workspace }),
+  return {
+    workspace: null,
 
-  selectView: (viewId) => {
-    const ws = get().workspace
-    if (!ws) return
-    if (activeView(ws)?.id === viewId) return // already showing it
-    const next = setActiveTabView(flushLivePositions(ws), viewId)
-    set({ workspace: next })
-    const target = next.views[viewId]
-    if (target) reprojectNodes(target.positions)
-    resetHistory()
-  },
+    // A fresh load starts with no transient preview in flight.
+    loadWorkspace: (workspace) => set({ workspace, previewTabId: null, previewRestore: null }),
 
-  selectTab: (tabId) => {
-    const ws = get().workspace
-    if (!ws || ws.active_tab === tabId) return
-    const next = { ...flushLivePositions(ws), active_tab: tabId }
-    set({ workspace: next })
-    const target = activeView(next)
-    if (target) reprojectNodes(target.view.positions)
-    resetHistory()
-  },
+    selectView: committing((viewId) => {
+      const ws = get().workspace
+      if (!ws) return
+      if (activeView(ws)?.id === viewId) return // already showing it
+      const next = setActiveTabView(flushLivePositions(ws), viewId)
+      set({ workspace: next })
+      const target = next.views[viewId]
+      if (target) reprojectNodes(target.positions)
+      resetHistory()
+    }),
 
-  createView: () => {
-    const ws = get().workspace
-    if (!ws) return
-    const flushed = flushLivePositions(ws)
-    const current = activeView(flushed)
-    // Seed the new view from the current arrangement so the canvas is already correct —
-    // no re-projection needed (the live nodes already match the new view's positions).
-    const positions = current?.view.positions ?? toPositions(useGraphStore.getState().nodes)
-    const count = Object.keys(flushed.views).length + 1
-    const { workspace: ws2, viewId } = addView(flushed, {
-      graph: current?.view.graph ?? 'main',
-      title: `View ${count}`,
-      positions,
-      // Inherit the current framing so creating a view doesn't jump the camera.
-      viewport: current?.view.viewport ?? IDENTITY_VIEWPORT,
-    })
-    set({ workspace: setActiveTabView(ws2, viewId) })
-    resetHistory()
-  },
-
-  renameView: (viewId, title) => {
-    const ws = get().workspace
-    if (!ws) return
-    set({ workspace: retitleView(ws, viewId, title) })
-  },
-
-  deleteView: (viewId) => {
-    const ws = get().workspace
-    if (!ws) return
-    const wasActive = activeView(ws)?.id === viewId
-    // Deleting the active view discards its arrangement, so don't flush live drags into it.
-    // Deleting any other view keeps the active one on screen — flush so its current drags survive.
-    const base = wasActive ? ws : flushLivePositions(ws)
-    const next = removeView(base, viewId)
-    if (next === base) return // nothing removed (missing id, or the last view)
-    set({ workspace: next })
-    if (wasActive) {
-      // The active tab was repointed to a survivor — show that view's stored arrangement.
+    selectTab: committing((tabId) => {
+      const ws = get().workspace
+      if (!ws || ws.active_tab === tabId) return
+      const next = { ...flushLivePositions(ws), active_tab: tabId }
+      set({ workspace: next })
       const target = activeView(next)
       if (target) reprojectNodes(target.view.positions)
       resetHistory()
-    }
-  },
+    }),
 
-  setActiveViewport: (viewport) => {
-    const ws = get().workspace
-    if (!ws) return
-    const active = activeView(ws)
-    if (!active) return
-    set({ workspace: { ...ws, views: { ...ws.views, [active.id]: { ...active.view, viewport } } } })
-  },
-}))
+    createView: committing(() => {
+      const ws = get().workspace
+      if (!ws) return
+      const flushed = flushLivePositions(ws)
+      const current = activeView(flushed)
+      // Seed the new view from the current arrangement so the canvas is already correct —
+      // no re-projection needed (the live nodes already match the new view's positions).
+      const positions = current?.view.positions ?? toPositions(useGraphStore.getState().nodes)
+      const count = Object.keys(flushed.views).length + 1
+      const { workspace: ws2, viewId } = addView(flushed, {
+        graph: current?.view.graph ?? 'main',
+        title: `View ${count}`,
+        positions,
+      })
+      // Repoint the active tab at the new view; the tab keeps its own framing, so the
+      // (current-seeded) view shows with the current camera — no jump.
+      set({ workspace: setActiveTabView(ws2, viewId) })
+      resetHistory()
+    }),
+
+    renameView: (viewId, title) => {
+      const ws = get().workspace
+      if (!ws) return
+      set({ workspace: retitleView(ws, viewId, title) })
+    },
+
+    deleteView: committing((viewId) => {
+      const ws = get().workspace
+      if (!ws) return
+      const wasActive = activeView(ws)?.id === viewId
+      // Deleting the active view discards its arrangement, so don't flush live drags into it.
+      // Deleting any other view keeps the active one on screen — flush so its drags survive.
+      const base = wasActive ? ws : flushLivePositions(ws)
+      const next = removeView(base, viewId)
+      if (next === base) return // nothing removed (missing id, or the last view)
+      set({ workspace: next })
+      if (wasActive) {
+        // The active tab was repointed to a survivor — show that view's stored arrangement.
+        const target = activeView(next)
+        if (target) reprojectNodes(target.view.positions)
+        resetHistory()
+      }
+    }),
+
+    createTab: committing(() => {
+      const ws = get().workspace
+      if (!ws) return
+      const flushed = flushLivePositions(ws)
+      const current = activeTab(flushed)
+      // A new window on the CURRENT view, inheriting its framing (opens where you are).
+      const viewId = current?.view ?? Object.keys(flushed.views)[0]
+      if (!viewId) return
+      const { workspace: ws2, tabId } = addTab(flushed, viewId, current?.viewport ?? IDENTITY_VIEWPORT)
+      // Same view → live nodes already correct, so no reproject; just land on the new tab.
+      set({ workspace: { ...ws2, active_tab: tabId } })
+      resetHistory()
+    }),
+
+    deleteTab: committing((tabId) => {
+      const ws = get().workspace
+      if (!ws) return
+      if (ws.active_tab !== tabId) {
+        // Closing a background tab: the canvas doesn't change — no flush/reproject/history reset.
+        const next = removeTab(ws, tabId)
+        if (next !== ws) set({ workspace: next })
+        return
+      }
+      // Closing the active tab: preserve its live drags, then land on the neighbour.
+      const deletedView = activeTab(ws)?.view
+      const flushed = flushLivePositions(ws)
+      const next = removeTab(flushed, tabId)
+      if (next === flushed) return // refused (last tab)
+      set({ workspace: next })
+      // Reproject only when the neighbour shows a different view (same view → nodes already right).
+      const target = activeView(next)
+      if (target && target.id !== deletedView) reprojectNodes(target.view.positions)
+      resetHistory()
+    }),
+
+    setActiveViewport: (viewport) => {
+      const ws = get().workspace
+      if (!ws) return
+      // While previewing, the camera on screen is the hovered tab's — don't persist it into
+      // the active tab. A real pan only happens on the active tab (preview is canvas-inert).
+      if (get().previewTabId !== null) return
+      const tab = activeTab(ws)
+      if (!tab) return
+      // Framing belongs to the tab now: persist the camera into the active tab, not its view.
+      set({
+        workspace: {
+          ...ws,
+          tabs: ws.tabs.map((t) => (t.id === tab.id ? { ...t, viewport } : t)),
+        },
+      })
+    },
+
+    previewTabId: null,
+    previewRestore: null,
+
+    previewTab: (tabId) => {
+      const ws = get().workspace
+      if (!ws) return
+      // Hovering the tab already on screen (or leaving the bar) just reverts any active preview.
+      if (tabId === null || tabId === ws.active_tab) {
+        get().clearPreview()
+        return
+      }
+      if (get().previewTabId === tabId) return // already previewing it
+      const tab = ws.tabs.find((t) => t.id === tabId)
+      const view = tab && ws.views[tab.view]
+      if (!view) return
+      // Never disturb an in-flight node drag — previewing is a strictly canvas-inert state.
+      if (useGraphStore.getState().nodes.some((n) => n.dragging)) return
+      // First hover snapshots the TRUE live positions so mouse-out restores them exactly
+      // (including any un-flushed drag) without mutating the persisted workspace.
+      const restore = get().previewRestore ?? toPositions(useGraphStore.getState().nodes)
+      set({ previewTabId: tabId, previewRestore: restore })
+      // If the hovered tab shows the SAME view as the active tab, the active view's live
+      // arrangement (including un-flushed edits) is the truth — and that's exactly our restore
+      // snapshot. Reproject it rather than the stale stored positions; this also undoes any
+      // prior preview of a *different* view. Otherwise show the hovered view's stored positions.
+      reprojectNodes(tab.view === activeView(ws)?.id ? restore : view.positions)
+    },
+
+    clearPreview: () => {
+      const { previewTabId, previewRestore } = get()
+      if (previewTabId === null) return
+      if (previewRestore) reprojectNodes(previewRestore)
+      set({ previewTabId: null, previewRestore: null })
+    },
+  }
+})

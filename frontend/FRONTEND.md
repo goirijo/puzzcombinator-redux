@@ -78,7 +78,7 @@ next to their source (`*.test.ts`).
 | `graphStore.ts` | The **graph store** — a Zustand + zundo `temporal` store holding the *undoable* graph: the React Flow nodes (positions *and* fields) + edges, and its mutators. One user action = one undo step (`equality` ignores selection/drag flags & rounds positions; a leading-edge `handleSet` debounce coalesces bursts). Positions ride here for now (see the data-flow section). |
 | `MenuBar.tsx` | The full-width top **menu bar**: global Undo / Redo + a single Save with a dirty indicator. Pure presentational; fed by `Shell.tsx`. |
 | `CommandRail.tsx` | The left **command rail**: one button per registry entry; collapses to a sliver. A dumb container — reads `COMMANDS`, reports clicks up. |
-| `TabBar.tsx` | The top **tab bar**: one button per open *tab*, each showing a *view*. Driven by the workspace state held in the shell. |
+| `TabBar.tsx` | The top **tab bar**: one chip per open *tab* (each showing a *view*), plus a persistent `+` (new tab) and a per-tab `×` (close). Hovering a tab previews it; clicking selects. Driven by the workspace store. |
 | `PanelRegion.tsx` | The **swappable panel**: looks the active command up in the registry and renders its `Panel`, forwarding `PanelProps`. Knows no specific panel. |
 | `Viewport.tsx` | The **viewport region**: wraps `<ReactFlow>` to draw the active tab's view, reports selection up, and re-`fitView`s on container resize (the one React Flow resize gotcha). |
 | `commands.ts` | The **command registry**: the `COMMANDS` list pairing each command id with the panel it opens. The single plug-in point — add a command here, nowhere else. |
@@ -116,9 +116,12 @@ the seams that hold it together are:
   graph, the `selection`, `updateNode`). A panel is a pure view over this; it owns no graph
   state. (Saving is global — it lives in the menu bar, not a panel.)
 - **Views and tabs (`model/workspace.ts`).** Vim model: a *view* is a buffer (an arrangement
-  of a graph — its positions + title); a *tab* is a window showing a view. The shell holds them
-  (a `WorkspaceDTO`), and the `Viewport` draws whichever view the active tab points at — so more
-  views/tabs drop in without rewiring.
+  of a graph — its positions + title); a *tab* is a window showing a view, carrying its **own
+  pan/zoom framing** (so two tabs on one view can be zoomed into different parts). The shell
+  holds them (a `WorkspaceDTO`), and the `Viewport` draws whichever view the active tab points
+  at, framed by that tab — so more views/tabs drop in without rewiring. Hovering a tab
+  *previews* it (the workspace store reprojects its view + the `Viewport` shows its camera),
+  reverting on mouse-out without committing — a strictly canvas-inert, transient state.
 
 **Pure modules vs. stateful files** — the same discipline as the Python core.
 `model/` and `nodes/HuntNode.tsx` and every panel are pure (data + view, no I/O). The undoable

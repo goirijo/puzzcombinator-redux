@@ -9,14 +9,18 @@ function node(id: string, x: number, y: number): HuntFlowNode {
   return { id, type: 'hunt', position: { x, y }, data: { label: id, action: '', notes: '' } }
 }
 
-// A fresh workspace each test: two views of one node, at different positions/framings, tab on v1.
+// A fresh workspace each test: two views of one node at different positions, and two tabs
+// (t1→v1 active, t2→v2) each with their own framing. Framing lives on the tab now.
 function makeWorkspace(): WorkspaceDTO {
   return {
     views: {
-      v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } }, viewport: { x: 0, y: 0, zoom: 1 } },
-      v2: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } }, viewport: { x: -90, y: 12, zoom: 1.5 } },
+      v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } },
+      v2: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } } },
     },
-    tabs: [{ id: 't1', view: 'v1' }],
+    tabs: [
+      { id: 't1', view: 'v1', viewport: { x: 0, y: 0, zoom: 1 } },
+      { id: 't2', view: 'v2', viewport: { x: -90, y: 12, zoom: 1.5 } },
+    ],
     active_tab: 't1',
   }
 }
@@ -64,11 +68,12 @@ describe('createView', () => {
     expect(ws.views[landedView].positions.n1).toEqual({ x: 9, y: 9 }) // seeded from live nodes
   })
 
-  it('inherits the current view framing so the camera does not jump', () => {
-    useWorkspaceStore.getState().setActiveViewport({ x: -30, y: 5, zoom: 2 }) // frame v1
+  it('keeps the tab framing so the camera does not jump', () => {
+    useWorkspaceStore.getState().setActiveViewport({ x: -30, y: 5, zoom: 2 }) // frame the active tab
     useWorkspaceStore.getState().createView()
     const ws = useWorkspaceStore.getState().workspace!
-    expect(ws.views[ws.tabs[0].view].viewport).toEqual({ x: -30, y: 5, zoom: 2 })
+    // The active tab kept its viewport while its view was repointed to the new one.
+    expect(ws.tabs[0].viewport).toEqual({ x: -30, y: 5, zoom: 2 })
   })
 })
 
@@ -104,10 +109,124 @@ describe('deleteView', () => {
 })
 
 describe('setActiveViewport', () => {
-  it('records the framing into the active view only', () => {
+  it('records the framing into the active tab only', () => {
     useWorkspaceStore.getState().setActiveViewport({ x: 7, y: 8, zoom: 0.9 })
     const ws = useWorkspaceStore.getState().workspace!
-    expect(ws.views.v1.viewport).toEqual({ x: 7, y: 8, zoom: 0.9 }) // active
-    expect(ws.views.v2.viewport).toEqual({ x: -90, y: 12, zoom: 1.5 }) // untouched
+    expect(ws.tabs[0].viewport).toEqual({ x: 7, y: 8, zoom: 0.9 }) // active t1
+    expect(ws.tabs[1].viewport).toEqual({ x: -90, y: 12, zoom: 1.5 }) // t2 untouched
+  })
+
+  it('does not persist a hover camera while previewing', () => {
+    useWorkspaceStore.getState().previewTab('t2') // now previewing
+    useWorkspaceStore.getState().setActiveViewport({ x: 1, y: 2, zoom: 3 })
+    expect(useWorkspaceStore.getState().workspace!.tabs[0].viewport).toEqual({ x: 0, y: 0, zoom: 1 })
+  })
+})
+
+describe('createTab', () => {
+  it('opens a tab on the current view, inheriting its framing, and lands on it', () => {
+    useWorkspaceStore.getState().setActiveViewport({ x: 3, y: 4, zoom: 2 }) // frame the active tab
+    useWorkspaceStore.getState().createTab()
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.tabs).toHaveLength(3)
+    const landed = ws.tabs.find((t) => t.id === ws.active_tab)!
+    expect(landed.view).toBe('v1') // same view as the tab we were on
+    expect(landed.viewport).toEqual({ x: 3, y: 4, zoom: 2 }) // inherited framing → no jump
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 }) // same view, unmoved
+  })
+})
+
+describe('deleteTab', () => {
+  it('closing a background tab leaves the canvas and active tab alone', () => {
+    useWorkspaceStore.getState().deleteTab('t2') // active is t1
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.tabs.map((t) => t.id)).toEqual(['t1'])
+    expect(ws.active_tab).toBe('t1')
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 })
+  })
+
+  it('closing the active tab lands on a neighbour and re-projects its view', () => {
+    useWorkspaceStore.getState().deleteTab('t1') // active; neighbour t2 shows v2 at 500,500
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.active_tab).toBe('t2')
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 500, y: 500 })
+  })
+
+  it('refuses to close the last tab', () => {
+    useWorkspaceStore.getState().deleteTab('t2')
+    useWorkspaceStore.getState().deleteTab('t1') // t1 is now the last tab
+    expect(useWorkspaceStore.getState().workspace!.tabs.map((t) => t.id)).toEqual(['t1'])
+  })
+})
+
+describe('previewTab / clearPreview', () => {
+  it('reprojects the hovered tab without committing, and reverts on clear', () => {
+    useWorkspaceStore.getState().previewTab('t2') // active t1 (v1@0,0); t2 shows v2@500,500
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 500, y: 500 })
+    expect(useWorkspaceStore.getState().previewTabId).toBe('t2')
+    expect(useWorkspaceStore.getState().workspace!.active_tab).toBe('t1') // not committed
+
+    useWorkspaceStore.getState().clearPreview()
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 }) // reverted
+    expect(useWorkspaceStore.getState().previewTabId).toBeNull()
+  })
+
+  it('restores an un-flushed drag on revert (snapshot, not stored positions)', () => {
+    useGraphStore.getState().setNodePositions({ n1: { x: 42, y: 7 } }) // a drag in v1, not flushed
+    useWorkspaceStore.getState().previewTab('t2')
+    useWorkspaceStore.getState().previewTab(null) // mouse-out
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 42, y: 7 }) // drag survives
+  })
+
+  it('previewing a tab on the SAME view keeps the live (un-flushed) edit', () => {
+    // Two tabs on one view, active t1; edit the view live, then hover the other tab on it.
+    useWorkspaceStore.getState().loadWorkspace({
+      views: { v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } } },
+      tabs: [
+        { id: 't1', view: 'v1', viewport: { x: 0, y: 0, zoom: 1 } },
+        { id: 't2', view: 'v1', viewport: { x: 9, y: 9, zoom: 2 } },
+      ],
+      active_tab: 't1',
+    })
+    useGraphStore.getState().setNodePositions({ n1: { x: 33, y: 44 } }) // un-flushed live edit
+    useWorkspaceStore.getState().previewTab('t2') // same view → must not clobber with stale stored
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 33, y: 44 })
+  })
+
+  it('reverts to the active view when hovering from one preview to a same-as-active tab', () => {
+    // t1 & t3 share view A (with the active tab t3); t2 shows view B. Edit A live, then hover
+    // t2 (→ shows B), then hover t1 (same view as active) — must snap back to the live A edit.
+    useWorkspaceStore.getState().loadWorkspace({
+      views: {
+        A: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } },
+        B: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } } },
+      },
+      tabs: [
+        { id: 't1', view: 'A', viewport: { x: 0, y: 0, zoom: 1 } },
+        { id: 't2', view: 'B', viewport: { x: 0, y: 0, zoom: 1 } },
+        { id: 't3', view: 'A', viewport: { x: 0, y: 0, zoom: 1 } },
+      ],
+      active_tab: 't3',
+    })
+    useGraphStore.getState().setNodePositions({ n1: { x: 77, y: 88 } }) // un-flushed edit in A
+    useWorkspaceStore.getState().previewTab('t2') // → view B
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 500, y: 500 })
+    useWorkspaceStore.getState().previewTab('t1') // same view as active t3 → back to live A edit
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 77, y: 88 })
+  })
+
+  it('hovering the active tab is a no-op', () => {
+    useWorkspaceStore.getState().previewTab('t1') // already active
+    expect(useWorkspaceStore.getState().previewTabId).toBeNull()
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 })
+  })
+
+  it('committing (selectTab) ends a preview first, flushing the true active view', () => {
+    useGraphStore.getState().setNodePositions({ n1: { x: 11, y: 22 } }) // un-flushed drag in v1
+    useWorkspaceStore.getState().previewTab('t2') // canvas now shows v2
+    useWorkspaceStore.getState().selectTab('t2') // commit to t2
+    // The drag was flushed into v1 (not lost to the previewed positions), and we're on v2.
+    expect(useWorkspaceStore.getState().workspace!.views.v1.positions.n1).toEqual({ x: 11, y: 22 })
+    expect(useWorkspaceStore.getState().previewTabId).toBeNull()
   })
 })

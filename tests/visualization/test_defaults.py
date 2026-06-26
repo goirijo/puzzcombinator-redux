@@ -23,7 +23,7 @@ def test_default_workspace_arranges_every_node_with_one_active_tab() -> None:
     view = ws.views[tab.view]
     assert view.graph == "main"
     assert set(view.positions) == {"start", "end"}  # auto-laid-out
-    assert isinstance(view.viewport, Viewport)
+    assert isinstance(tab.viewport, Viewport)  # framing lives on the tab
 
 
 def test_resolve_none_synthesizes_default() -> None:

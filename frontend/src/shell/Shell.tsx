@@ -48,6 +48,13 @@ export function Shell() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const selectTab = useWorkspaceStore((s) => s.selectTab)
+  const createTab = useWorkspaceStore((s) => s.createTab)
+  const deleteTab = useWorkspaceStore((s) => s.deleteTab)
+  const previewTab = useWorkspaceStore((s) => s.previewTab)
+  const clearPreview = useWorkspaceStore((s) => s.clearPreview)
+  // The tab being hover-previewed (or null). The canvas shows this tab when set, else the
+  // active tab — so hovering a tab previews exactly what clicking it would show.
+  const previewTabId = useWorkspaceStore((s) => s.previewTabId)
   const setActiveViewport = useWorkspaceStore((s) => s.setActiveViewport)
 
   // Non-undoable UI state.
@@ -81,6 +88,10 @@ export function Shell() {
 
   const onSave = useCallback(async () => {
     if (!workspace) return
+    // End any hover-preview first: save reads the live nodes directly, which would otherwise
+    // be the *previewed* arrangement. (Mouse-out already covers the pointer path; this covers
+    // Ctrl+S while the pointer still sits on a tab.)
+    clearPreview()
     // Read straight from the store so we always serialize the latest graph.
     const { nodes: n, edges: e } = useGraphStore.getState()
     const body = buildSaveRequest(n, e, workspace)
@@ -92,10 +103,17 @@ export function Shell() {
     } catch (err) {
       setSaveState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
     }
-  }, [workspace])
+  }, [workspace, clearPreview])
 
-  const onUndo = useCallback(() => useGraphStore.temporal.getState().undo(), [])
-  const onRedo = useCallback(() => useGraphStore.temporal.getState().redo(), [])
+  // Undo/redo also operate on the live nodes, so end any preview first (keyboard path).
+  const onUndo = useCallback(() => {
+    clearPreview()
+    useGraphStore.temporal.getState().undo()
+  }, [clearPreview])
+  const onRedo = useCallback(() => {
+    clearPreview()
+    useGraphStore.temporal.getState().redo()
+  }, [clearPreview])
 
   // Keyboard shortcuts: Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z (or Ctrl/⌘+Y) redo.
   useEffect(() => {
@@ -123,6 +141,11 @@ export function Shell() {
   }, [])
 
   const active = workspace ? activeView(workspace) : undefined
+  // Framing belongs to the tab now: the camera comes from a tab, the drawn arrangement from
+  // its view. The *displayed* tab is the previewed one while hovering, else the active tab —
+  // the store reprojects its view's positions; here we feed its id + camera to the Viewport.
+  const displayedTabId = previewTabId ?? workspace?.active_tab ?? null
+  const displayedTab = workspace?.tabs.find((t) => t.id === displayedTabId)
   const isDirty =
     workspace !== null &&
     savedSnapshot !== null &&
@@ -149,6 +172,9 @@ export function Shell() {
             views={workspace?.views ?? {}}
             activeTabId={workspace?.active_tab ?? null}
             onSelect={selectTab}
+            onCreate={createTab}
+            onClose={deleteTab}
+            onPreview={previewTab}
           />
           <div className="shell__content">
             {/* String sizes are percentages of the group; numbers would be pixels. */}
@@ -172,8 +198,8 @@ export function Shell() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onSelectionChange={handleSelectionChange}
-                  activeViewId={active?.id}
-                  viewport={active?.view.viewport}
+                  activeTabId={displayedTab?.id}
+                  viewport={displayedTab?.viewport}
                   onViewportChange={setActiveViewport}
                 />
               </Panel>

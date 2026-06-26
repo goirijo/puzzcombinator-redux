@@ -155,26 +155,78 @@
 }
 
 /* --- Tab bar -------------------------------------------------------------- */
-.tab-bar {
+/* Both lay their children out in a stretched row: the bar holds the tabs, a tab holds its
+ * label + close button. */
+.tab-bar,
+.tab-bar__tab {
   display: flex;
   align-items: stretch;
+}
+.tab-bar {
   height: var(--tab-bar-height);
   background: var(--shell-bg);
   border-bottom: 1px solid var(--shell-border);
 }
+/* Browser-style sizing: each tab prefers --tab-width but shrinks uniformly (flex-shrink 1)
+ * toward --tab-min-width once tabs crowd the bar — and never grows past the preferred width
+ * (flex-grow 0), so a half-empty bar keeps fixed-width tabs rather than stretching them. */
 .tab-bar__tab {
+  flex: 0 1 var(--tab-width);
+  min-width: var(--tab-min-width);
+  border-right: 1px solid var(--shell-border);
+  box-sizing: border-box; /* so a pinned flex-basis matches the measured border-box width */
+}
+.tab-bar__tab[data-active='true'] {
+  background: var(--shell-surface);
+}
+/* Closing-freeze: while the pointer is in the bar mid-close, pin every tab to the width
+ * captured at the first close (TabBar sets --tab-frozen-width), so removing a tab slides the
+ * next one's × under the cursor instead of reflowing the row. Released on mouse-out. */
+.tab-bar[data-frozen='true'] .tab-bar__tab {
+  flex: 0 0 var(--tab-frozen-width);
+}
+/* The label, the close (×), and the new (+) button are all flat, transparent, inherit-font
+ * controls — shared here so each rule below adds only what differs. */
+.tab-bar__label,
+.tab-bar__close,
+.tab-bar__new {
   background: transparent;
   border: none;
-  border-right: 1px solid var(--shell-border);
-  padding: 0 16px;
   font: inherit;
   color: var(--shell-muted);
   cursor: pointer;
 }
-.tab-bar__tab[data-active='true'] {
-  background: var(--shell-surface);
+.tab-bar__label:hover,
+.tab-bar__close:hover,
+.tab-bar__new:hover {
+  color: var(--shell-text);
+}
+.tab-bar__label {
+  flex: 1;
+  min-width: 0; /* let the label shrink so its ellipsis can engage inside the tab */
+  padding: 0 4px 0 12px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab-bar__tab[data-active='true'] .tab-bar__label {
   color: var(--shell-text);
   font-weight: 600;
+}
+/* The × and + glyphs: same compact, single-line treatment; padding/size differ. */
+.tab-bar__close,
+.tab-bar__new {
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.tab-bar__close {
+  padding: 0 8px;
+  font-size: 16px;
+}
+.tab-bar__new {
+  padding: 0 12px;
+  font-size: 18px;
 }
 
 /* --- Panel region --------------------------------------------------------- */

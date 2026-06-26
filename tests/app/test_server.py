@@ -48,7 +48,7 @@ def test_get_synthesizes_default_workspace_when_absent(tmp_path, monkeypatch) ->
     # Every node has a resolved position, and the tab has a viewport.
     assert set(view["positions"]) == {"only_start", "lonely"}
     assert {"x", "y"} <= set(view["positions"]["only_start"])
-    assert {"x", "y", "zoom"} <= set(view["viewport"])
+    assert {"x", "y", "zoom"} <= set(tab["viewport"])
 
 
 def test_loads_graph_from_env_file(tmp_path, monkeypatch) -> None:

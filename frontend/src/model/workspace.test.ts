@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   activeTab,
   activeView,
+  createTab,
   createView,
+  deleteTab,
   deleteView,
   renameView,
   setActiveTabView,
@@ -13,12 +15,12 @@ import {
 const VP = { x: 0, y: 0, zoom: 1 }
 const WS: WorkspaceDTO = {
   views: {
-    v1: { graph: 'main', title: 'Main', positions: { a: { x: 1, y: 2 } }, viewport: VP },
-    v2: { graph: 'main', title: 'Cellar', positions: {}, viewport: VP },
+    v1: { graph: 'main', title: 'Main', positions: { a: { x: 1, y: 2 } } },
+    v2: { graph: 'main', title: 'Cellar', positions: {} },
   },
   tabs: [
-    { id: 't1', view: 'v1' },
-    { id: 't2', view: 'v2' },
+    { id: 't1', view: 'v1', viewport: VP },
+    { id: 't2', view: 'v2', viewport: VP },
   ],
   active_tab: 't2',
 }
@@ -66,7 +68,7 @@ describe('setActiveTabView', () => {
 
 describe('createView', () => {
   it('adds the view under a fresh id without touching existing views or tabs', () => {
-    const view = { graph: 'main', title: 'Attic', positions: {}, viewport: VP }
+    const view = { graph: 'main', title: 'Attic', positions: {} }
     const { workspace, viewId } = createView(WS, view)
     expect(workspace.views[viewId]).toEqual(view)
     expect(Object.keys(workspace.views)).toHaveLength(3)
@@ -75,7 +77,7 @@ describe('createView', () => {
   })
 
   it('generates distinct ids on repeated calls', () => {
-    const view = { graph: 'main', title: 'x', positions: {}, viewport: VP }
+    const view = { graph: 'main', title: 'x', positions: {} }
     expect(createView(WS, view).viewId).not.toBe(createView(WS, view).viewId)
   })
 })
@@ -123,5 +125,63 @@ describe('deleteView', () => {
     deleteView(WS, 'v1')
     expect(WS.views).toHaveProperty('v1')
     expect(WS.tabs.find((t) => t.id === 't1')!.view).toBe('v1')
+  })
+})
+
+describe('createTab', () => {
+  it('appends a tab on the given view with its viewport, without switching', () => {
+    const { workspace, tabId } = createTab(WS, 'v1', VP)
+    expect(workspace.tabs).toHaveLength(3)
+    expect(workspace.tabs[2]).toEqual({ id: tabId, view: 'v1', viewport: VP })
+    expect(workspace.active_tab).toBe('t2') // create does not switch
+  })
+
+  it('generates distinct ids on repeated calls', () => {
+    expect(createTab(WS, 'v1', VP).tabId).not.toBe(createTab(WS, 'v1', VP).tabId)
+  })
+
+  it('does not mutate the input', () => {
+    createTab(WS, 'v1', VP)
+    expect(WS.tabs).toHaveLength(2)
+  })
+})
+
+describe('deleteTab', () => {
+  it('removes the tab and leaves its view intact', () => {
+    const next = deleteTab(WS, 't1') // background tab (active is t2)
+    expect(next.tabs.map((t) => t.id)).toEqual(['t2'])
+    expect(next.views).toHaveProperty('v1') // view survives the window closing
+  })
+
+  it('leaves active_tab alone when closing a background tab', () => {
+    expect(deleteTab(WS, 't1').active_tab).toBe('t2')
+  })
+
+  it('lands on the next tab when the active one is closed', () => {
+    const three: WorkspaceDTO = {
+      ...WS,
+      tabs: [...WS.tabs, { id: 't3', view: 'v1', viewport: VP }],
+      active_tab: 't2',
+    }
+    expect(deleteTab(three, 't2').active_tab).toBe('t3') // next by position
+  })
+
+  it('falls back to the previous tab when the closed active tab was last', () => {
+    expect(deleteTab(WS, 't2').active_tab).toBe('t1') // t2 was last → previous
+  })
+
+  it('refuses to remove the last tab (returns input unchanged)', () => {
+    const one: WorkspaceDTO = { ...WS, tabs: [WS.tabs[0]], active_tab: 't1' }
+    expect(deleteTab(one, 't1')).toBe(one)
+  })
+
+  it('returns the input unchanged for a missing id', () => {
+    expect(deleteTab(WS, 'nope')).toBe(WS)
+  })
+
+  it('does not mutate the input', () => {
+    deleteTab(WS, 't2')
+    expect(WS.tabs).toHaveLength(2)
+    expect(WS.active_tab).toBe('t2')
   })
 })
