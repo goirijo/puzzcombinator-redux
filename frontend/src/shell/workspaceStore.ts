@@ -16,7 +16,9 @@ import { toPositions } from '../model/flow'
 import {
   activeView,
   createView as addView,
+  deleteView as removeView,
   IDENTITY_VIEWPORT,
+  renameView as retitleView,
   setActiveTabView,
   type PositionDTO,
   type ViewportDTO,
@@ -35,6 +37,10 @@ interface WorkspaceState {
   selectTab: (tabId: string) => void
   /** Create a view seeded from the current arrangement and land on it. */
   createView: () => void
+  /** Retitle a view (metadata only — no canvas change, not undoable). */
+  renameView: (viewId: string, title: string) => void
+  /** Delete a view; if it was the one on screen, land the active tab on a survivor. */
+  deleteView: (viewId: string) => void
   /** Record the current pan/zoom into the active view (the camera moved on the canvas). */
   setActiveViewport: (viewport: ViewportDTO) => void
 }
@@ -111,6 +117,30 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     })
     set({ workspace: setActiveTabView(ws2, viewId) })
     resetHistory()
+  },
+
+  renameView: (viewId, title) => {
+    const ws = get().workspace
+    if (!ws) return
+    set({ workspace: retitleView(ws, viewId, title) })
+  },
+
+  deleteView: (viewId) => {
+    const ws = get().workspace
+    if (!ws) return
+    const wasActive = activeView(ws)?.id === viewId
+    // Deleting the active view discards its arrangement, so don't flush live drags into it.
+    // Deleting any other view keeps the active one on screen — flush so its current drags survive.
+    const base = wasActive ? ws : flushLivePositions(ws)
+    const next = removeView(base, viewId)
+    if (next === base) return // nothing removed (missing id, or the last view)
+    set({ workspace: next })
+    if (wasActive) {
+      // The active tab was repointed to a survivor — show that view's stored arrangement.
+      const target = activeView(next)
+      if (target) reprojectNodes(target.view.positions)
+      resetHistory()
+    }
   },
 
   setActiveViewport: (viewport) => {

@@ -308,11 +308,33 @@
   flex-direction: column;
   gap: 2px;
 }
-.view-list__item {
-  width: 100%;
-  text-align: left;
-  border: 1px solid transparent;
+/* A row pairs the (flex-growing) view button with its compact delete button; the inline
+ * rename field replaces the whole row. All three share one box so nothing jumps between modes. */
+.view-list__row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.view-list__item,
+.view-list__delete,
+.view-list__edit {
   padding: 6px 8px;
+}
+.view-list__item,
+.view-list__edit {
+  flex: 1;
+}
+.view-list__item,
+.view-list__delete {
+  border: 1px solid transparent;
+}
+.view-list__item {
+  text-align: left;
+}
+.view-list__edit {
+  font: inherit;
+  border: 1px solid var(--shell-accent);
+  border-radius: 4px;
 }
 .view-panel__action {
   border: 1px solid var(--shell-border);

@@ -4,6 +4,8 @@ import {
   activeTab,
   activeView,
   createView,
+  deleteView,
+  renameView,
   setActiveTabView,
   type WorkspaceDTO,
 } from './workspace'
@@ -75,5 +77,51 @@ describe('createView', () => {
   it('generates distinct ids on repeated calls', () => {
     const view = { graph: 'main', title: 'x', positions: {}, viewport: VP }
     expect(createView(WS, view).viewId).not.toBe(createView(WS, view).viewId)
+  })
+})
+
+describe('renameView', () => {
+  it('retitles only the named view', () => {
+    const next = renameView(WS, 'v1', 'Renamed')
+    expect(next.views.v1.title).toBe('Renamed')
+    expect(next.views.v2).toEqual(WS.views.v2) // untouched
+  })
+
+  it('does not mutate the input', () => {
+    renameView(WS, 'v1', 'Renamed')
+    expect(WS.views.v1.title).toBe('Main')
+  })
+
+  it('returns the input unchanged for a missing view', () => {
+    expect(renameView(WS, 'nope', 'x')).toBe(WS)
+  })
+})
+
+describe('deleteView', () => {
+  it('removes the view', () => {
+    const next = deleteView(WS, 'v1')
+    expect(next.views).not.toHaveProperty('v1')
+    expect(Object.keys(next.views)).toEqual(['v2'])
+  })
+
+  it('repoints tabs that showed the deleted view at a survivor', () => {
+    const next = deleteView(WS, 'v1') // t1 showed v1; v2 is the only survivor
+    expect(next.tabs.find((t) => t.id === 't1')!.view).toBe('v2')
+    expect(next.tabs.find((t) => t.id === 't2')!.view).toBe('v2') // unchanged
+  })
+
+  it('refuses to delete the last view (returns input unchanged)', () => {
+    const one: WorkspaceDTO = { ...WS, views: { v1: WS.views.v1 } }
+    expect(deleteView(one, 'v1')).toBe(one)
+  })
+
+  it('returns the input unchanged for a missing view', () => {
+    expect(deleteView(WS, 'nope')).toBe(WS)
+  })
+
+  it('does not mutate the input', () => {
+    deleteView(WS, 'v1')
+    expect(WS.views).toHaveProperty('v1')
+    expect(WS.tabs.find((t) => t.id === 't1')!.view).toBe('v1')
   })
 })

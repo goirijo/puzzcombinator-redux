@@ -137,6 +137,11 @@ Two conventions that go with it:
 - **Styling.** Components hold **no** style values. Colors/sizes are `:root` variables in
   `theme.css`; structural layout (e.g. full-screen) is in `index.css`. A theme is just a
   swapped block of variables.
+- **Don't repeat yourself in CSS.** When two or more selectors need the same
+  declaration, share it via a grouped selector (`.a, .b { padding: … }`) — don't copy the
+  same `property: value` into each rule. Group the shared declarations, then add only the
+  per-selector differences in their own rules (see `.view-list__*` in `shell.css`). A
+  repeated literal is a refactor smell, not just noise.
 
 ## The data flow: two channels, DTOs, and the projection
 

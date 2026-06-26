@@ -99,3 +99,30 @@ export function createView(
   const viewId = `view-${crypto.randomUUID().slice(0, 8)}`
   return { workspace: { ...ws, views: { ...ws.views, [viewId]: view } }, viewId }
 }
+
+/** Retitle a view. Immutable; a no-op when the view does not exist. */
+export function renameView(ws: WorkspaceDTO, viewId: string, title: string): WorkspaceDTO {
+  const view = ws.views[viewId]
+  if (!view) return ws
+  return { ...ws, views: { ...ws.views, [viewId]: { ...view, title } } }
+}
+
+/**
+ * Remove a view, repointing any tab that showed it at a surviving view so no tab is left
+ * dangling. Refuses to delete the last view — a workspace needs at least one — and is a no-op
+ * for a missing id; both cases return the input unchanged (referentially), which the store
+ * uses to detect "nothing happened".
+ */
+export function deleteView(ws: WorkspaceDTO, viewId: string): WorkspaceDTO {
+  if (!ws.views[viewId]) return ws
+  const survivors = Object.keys(ws.views).filter((id) => id !== viewId)
+  if (survivors.length === 0) return ws // never delete the last view
+  const fallback = survivors[0]
+  const views = { ...ws.views }
+  delete views[viewId]
+  return {
+    ...ws,
+    views,
+    tabs: ws.tabs.map((t) => (t.view === viewId ? { ...t, view: fallback } : t)),
+  }
+}

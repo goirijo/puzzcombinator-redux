@@ -21,9 +21,28 @@ export function ViewPanel() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const selectView = useWorkspaceStore((s) => s.selectView)
   const createView = useWorkspaceStore((s) => s.createView)
+  const renameView = useWorkspaceStore((s) => s.renameView)
+  const deleteView = useWorkspaceStore((s) => s.deleteView)
   // Disable the arrange buttons mid-request; a failed layout (e.g. a cycle) is rare and logged,
   // matching how Shell.tsx surfaces a failed load.
   const [arranging, setArranging] = useState(false)
+  // The view being renamed (id) and its in-progress title. Inline edit: clicking "Rename"
+  // swaps the row's label for an input; Enter/blur commits, Escape abandons.
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  function startRename(id: string, title: string) {
+    setEditing(id)
+    setDraft(title)
+  }
+
+  function commitRename() {
+    if (editing) {
+      const title = draft.trim()
+      if (title) renameView(editing, title) // ignore an empty rename — keep the old title
+    }
+    setEditing(null)
+  }
 
   async function onArrange(orientation: Orientation) {
     const { nodes, edges, setNodePositions } = useGraphStore.getState()
@@ -49,16 +68,46 @@ export function ViewPanel() {
         <h3 className="inspector__heading">Views</h3>
         <ul className="view-list">
           {views.map(([id, view]) => (
-            <li key={id}>
-              <button
-                type="button"
-                className="ghost-btn view-list__item"
-                data-active={id === activeId}
-                aria-current={id === activeId}
-                onClick={() => selectView(id)}
-              >
-                {view.title}
-              </button>
+            <li key={id} className="view-list__row">
+              {editing === id ? (
+                <input
+                  className="view-list__edit"
+                  value={draft}
+                  autoFocus
+                  aria-label="View name"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename()
+                    else if (e.key === 'Escape') setEditing(null)
+                  }}
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-btn view-list__item"
+                    data-active={id === activeId}
+                    aria-current={id === activeId}
+                    onClick={() => selectView(id)}
+                    onDoubleClick={() => startRename(id, view.title)}
+                    title="Double-click to rename"
+                  >
+                    {view.title}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn view-list__delete"
+                    aria-label={`Delete ${view.title}`}
+                    title="Delete view"
+                    // Never offer to delete the last view — a workspace needs one.
+                    disabled={views.length <= 1}
+                    onClick={() => deleteView(id)}
+                  >
+                    🗑
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ul>
