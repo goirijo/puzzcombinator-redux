@@ -53,6 +53,11 @@ which is the active frontier.
   `ConnectionMode.Loose`, so a designer starts a drag from anywhere on a node and the resulting
   edge floats like every other edge. Part of the near-term **Canvas interaction** milestone.
 - **Node creation.** A way to create new nodes (and artifacts — see below) from the UI.
+- **Smarter spawn placement for new nodes/artifacts.** Today a created node spawns at a
+  fixed point with a small cascade offset (deliberately clunky). Give creation a real notion
+  of *where* things land — e.g. the current viewport center, near the cursor, or offset from
+  the selection — so new nodes/artifacts appear in view rather than at a fixed corner. Applies
+  to the loose-artifact pool too.
 - **Custom node coloring.** Author-chosen colors per node. (Note: an earlier *automatic*
   start/middle/end role-coloring was rejected — coloring should be explicit author intent,
   not a derived, backend-absent property.)

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GraphBlockDTO } from './graph'
-import { applyPositions, toFlowEdges, toFlowNodes, toGraphBlock, toPositions } from './flow'
+import {
+  applyPositions,
+  makeNode,
+  toFlowEdges,
+  toFlowNodes,
+  toGraphBlock,
+  toPositions,
+} from './flow'
 import type { PositionDTO } from './workspace'
 
 // A small chain: n1 -> n2 -> n3, one artifact on the first edge, and some null fields
@@ -101,5 +108,26 @@ describe('round-trip', () => {
     const nodes = toFlowNodes(GRAPH.nodes, POSITIONS)
     const edges = toFlowEdges(GRAPH.edges)
     expect(toGraphBlock(nodes, edges)).toEqual(GRAPH)
+  })
+})
+
+describe('makeNode', () => {
+  it('builds a blank hunt node with empty fields and an id', () => {
+    const n = makeNode()
+    expect(n.type).toBe('hunt')
+    expect(n.data).toEqual({ label: '', action: '', notes: '' })
+    expect(n.id).toBeTruthy()
+  })
+
+  it('mints a distinct opaque id each call (not the backend nN scheme)', () => {
+    const a = makeNode()
+    const b = makeNode()
+    expect(a.id).not.toBe(b.id)
+    // Opaque on purpose — not GraphBuilder's readable `nN` sugar.
+    expect(a.id).not.toMatch(/^n\d+$/)
+  })
+
+  it('cascades the spawn position by spawnIndex so creations do not stack', () => {
+    expect(makeNode(1).position).not.toEqual(makeNode(0).position)
   })
 })

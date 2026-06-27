@@ -8,6 +8,7 @@
 
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { HuntFlowNode } from '../model/flow'
+import { shortId } from './shortId'
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left]
 
@@ -17,7 +18,9 @@ export function HuntNode({ id, data }: NodeProps<HuntFlowNode>) {
       {SIDES.map((side) => (
         <Handle key={side} type="source" position={side} id={side} />
       ))}
-      <div className="hunt-node__label">{data.label || id}</div>
+      <div className="hunt-node__label" title={data.label ? undefined : id}>
+        {data.label || shortId(id)}
+      </div>
       <div className="hunt-node__action">{data.action}</div>
     </div>
   )

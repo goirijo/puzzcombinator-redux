@@ -53,6 +53,30 @@ export function toFlowNodes(
   }))
 }
 
+/**
+ * Build a fresh blank node for in-editor creation. `spawnIndex` cascades the spawn position
+ * so successive creations don't stack exactly atop one another. Fields start empty — the
+ * designer fills them in via the inspector.
+ *
+ * The id is an **opaque uuid**, deliberately *not* the backend's readable `nN` scheme. That
+ * `nN` is `GraphBuilder`'s sugar for humans hand-writing Python; a node id is an internal
+ * handle the designer never types here, so the GUI mints opaque ids and the two producers
+ * don't share a naming convention to drift from. The one real contract — id *uniqueness* —
+ * has a single home: the Python codec re-validates the whole graph on save (`graph_from_dict`
+ * → `validate_structure`). So this builds a *canvas element* (note the position, a workspace
+ * concept — not a backend `Node` field) and does no validation of its own. Pure, so it's
+ * unit-testable away from the store.
+ */
+export function makeNode(spawnIndex = 0): HuntFlowNode {
+  const cascade = (spawnIndex % 8) * 32
+  return {
+    id: crypto.randomUUID(),
+    type: 'hunt',
+    position: { x: 120 + cascade, y: 120 + cascade },
+    data: { label: '', action: '', notes: '' },
+  }
+}
+
 /** Convert edge DTOs into React Flow edges (labeled with their artifact count). */
 export function toFlowEdges(edges: EdgeDTO[]): HuntFlowEdge[] {
   return edges.map((e) => ({

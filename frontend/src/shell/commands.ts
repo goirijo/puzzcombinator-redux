@@ -8,10 +8,13 @@ import type { FC } from 'react'
 
 import { GraphInspector } from '../panels/GraphInspector'
 import { PlaceholderPanel } from '../panels/PlaceholderPanel'
+import { TestingPanel } from '../panels/testing/TestingPanel'
 import { ViewPanel } from '../panels/ViewPanel'
 import type { PanelProps } from './types'
 
-/** The commands from the design (`frontend/design/ideas.txt`). */
+/** The commands from the design (`frontend/design/ideas.txt`), plus TESTING — a scratch
+ *  playground for in-progress features (not in the design). Its sections graduate into real
+ *  commands (e.g. EDIT) once they settle, and then it goes away. */
 export type CommandId =
   | 'view'
   | 'graph'
@@ -20,6 +23,7 @@ export type CommandId =
   | 'bind'
   | 'arrange'
   | 'manage'
+  | 'testing'
 
 export interface CommandDescriptor {
   id: CommandId
@@ -41,6 +45,7 @@ export const COMMANDS: CommandDescriptor[] = [
   { id: 'bind', label: 'Bind', icon: '❒', Panel: PlaceholderPanel },
   { id: 'arrange', label: 'Arrange', icon: '⊞', Panel: PlaceholderPanel },
   { id: 'manage', label: 'Manage', icon: '☰', Panel: PlaceholderPanel },
+  { id: 'testing', label: 'Testing', icon: '🧪', Panel: TestingPanel },
 ]
 
 export function commandById(id: CommandId): CommandDescriptor {

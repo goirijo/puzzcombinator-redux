@@ -25,7 +25,13 @@ import {
 import { create } from 'zustand'
 import { temporal } from 'zundo'
 
-import { applyPositions, type HuntFlowEdge, type HuntFlowNode, type NodeFields } from '../model/flow'
+import {
+  applyPositions,
+  makeNode,
+  type HuntFlowEdge,
+  type HuntFlowNode,
+  type NodeFields,
+} from '../model/flow'
 import type { ArtifactDTO } from '../model/graph'
 import type { PositionDTO } from '../model/workspace'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
@@ -40,8 +46,11 @@ export interface GraphState {
   // here (with the rest of the hunt data) purely so it survives load→save; it's intentionally
   // left out of `partialize` until pool editing lands and needs undo (Phase 3+).
   unplaced: ArtifactDTO[]
-  /** Replace the whole graph + pool (initial load). Caller clears history afterwards. */
-  loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[], unplaced: ArtifactDTO[]) => void
+  /** Replace the whole graph + pool (initial load). `unplaced` defaults to empty (most
+   *  callers — and every test — only care about nodes/edges). Caller clears history after. */
+  loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[], unplaced?: ArtifactDTO[]) => void
+  /** Add a new blank node to the canvas (undoable), placed with a cascade offset. */
+  createNode: () => void
   /** Patch one node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
   /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
@@ -57,7 +66,12 @@ export const useGraphStore = create<GraphState>()(
       nodes: [],
       edges: [],
       unplaced: [],
-      loadGraph: (nodes, edges, unplaced) => set({ nodes, edges, unplaced }),
+      loadGraph: (nodes, edges, unplaced = []) => set({ nodes, edges, unplaced }),
+      createNode: () => {
+        const nodes = get().nodes
+        // Cascade by the current node count so repeated clicks fan out instead of stacking.
+        set({ nodes: [...nodes, makeNode(nodes.length)] })
+      },
       updateNode: (id, patch) =>
         set({
           nodes: get().nodes.map((n) =>
