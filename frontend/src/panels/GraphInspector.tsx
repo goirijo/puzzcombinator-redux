@@ -27,6 +27,35 @@ function RelatedEdge({ otherId, edge }: { otherId: string; edge: HuntFlowEdge })
   )
 }
 
+/** A node's incoming or outgoing edges as a titled list. `edgeToOtherId` picks the node at
+ *  the *far* end of each edge (its source for incoming, its target for outgoing). */
+function RelatedEdgeList({
+  label,
+  edges,
+  edgeToOtherId,
+}: {
+  label: string
+  edges: HuntFlowEdge[]
+  edgeToOtherId: (edge: HuntFlowEdge) => string
+}) {
+  return (
+    <section className="inspector__related">
+      <h4 className="inspector__heading">
+        {label} ({edges.length})
+      </h4>
+      {edges.length === 0 ? (
+        <p className="inspector__none">none</p>
+      ) : (
+        <ul className="related">
+          {edges.map((e) => (
+            <RelatedEdge key={e.id} otherId={edgeToOtherId(e)} edge={e} />
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 export function GraphInspector({ nodes, edges, selection, updateNode }: PanelProps) {
   if (!selection) {
     return <p className="inspector__empty">Select a node on the canvas to edit it.</p>
@@ -90,31 +119,8 @@ export function GraphInspector({ nodes, edges, selection, updateNode }: PanelPro
         </label>
       </section>
 
-      <section className="inspector__related">
-        <h4 className="inspector__heading">Incoming ({incoming.length})</h4>
-        {incoming.length === 0 ? (
-          <p className="inspector__none">none</p>
-        ) : (
-          <ul className="related">
-            {incoming.map((e) => (
-              <RelatedEdge key={e.id} otherId={e.source} edge={e} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="inspector__related">
-        <h4 className="inspector__heading">Outgoing ({outgoing.length})</h4>
-        {outgoing.length === 0 ? (
-          <p className="inspector__none">none</p>
-        ) : (
-          <ul className="related">
-            {outgoing.map((e) => (
-              <RelatedEdge key={e.id} otherId={e.target} edge={e} />
-            ))}
-          </ul>
-        )}
-      </section>
+      <RelatedEdgeList label="Incoming" edges={incoming} edgeToOtherId={(e) => e.source} />
+      <RelatedEdgeList label="Outgoing" edges={outgoing} edgeToOtherId={(e) => e.target} />
     </div>
   )
 }

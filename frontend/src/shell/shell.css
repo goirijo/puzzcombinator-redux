@@ -185,16 +185,21 @@
 .tab-bar[data-frozen='true'] .tab-bar__tab {
   flex: 0 0 var(--tab-frozen-width);
 }
-/* The label, the close (×), and the new (+) button are all flat, transparent, inherit-font
- * controls — shared here so each rule below adds only what differs. */
+/* The tab label/×/+ and the panel's × (further down) are all flat, transparent, muted
+ * controls — the shared look lives here so each rule adds only what differs (font, sizing). */
+.tab-bar__label,
+.tab-bar__close,
+.tab-bar__new,
+.panel__close {
+  background: transparent;
+  border: none;
+  color: var(--shell-muted);
+  cursor: pointer;
+}
 .tab-bar__label,
 .tab-bar__close,
 .tab-bar__new {
-  background: transparent;
-  border: none;
   font: inherit;
-  color: var(--shell-muted);
-  cursor: pointer;
 }
 .tab-bar__label:hover,
 .tab-bar__close:hover,
@@ -250,13 +255,11 @@
   border-bottom: 1px solid var(--shell-border);
   font-weight: 600;
 }
+/* Shares the flat/transparent/muted base with the tab-bar buttons (see the grouped rule in
+ * the tab-bar section); only the glyph sizing differs. */
 .panel__close {
-  background: transparent;
-  border: none;
   font-size: 18px;
   line-height: 1;
-  color: var(--shell-muted);
-  cursor: pointer;
 }
 .panel__body {
   flex: 1;

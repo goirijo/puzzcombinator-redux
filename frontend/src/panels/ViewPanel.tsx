@@ -9,7 +9,7 @@
 // graph store — applied normally (undoable), since a re-layout is a deliberate edit. This mirrors
 // Shell.tsx's fetch/save: the component owns the I/O, the store owns the state.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { requestArrange, type Orientation } from '../model/api'
 import { toGraphBlock } from '../model/flow'
@@ -26,6 +26,9 @@ export function ViewPanel() {
   // Disable the arrange buttons mid-request; a failed layout (e.g. a cycle) is rare and logged,
   // matching how Shell.tsx surfaces a failed load.
   const [arranging, setArranging] = useState(false)
+  // Identifies the latest arrange request, so a slow earlier one can't apply stale
+  // positions or clear `arranging` after a newer click started. Only the newest wins.
+  const arrangeId = useRef(0)
   // The view being renamed (id) and its in-progress title. Inline edit: clicking "Rename"
   // swaps the row's label for an input; Enter/blur commits, Escape abandons.
   const [editing, setEditing] = useState<string | null>(null)
@@ -46,14 +49,15 @@ export function ViewPanel() {
 
   async function onArrange(orientation: Orientation) {
     const { nodes, edges, setNodePositions } = useGraphStore.getState()
+    const requestId = ++arrangeId.current
     setArranging(true)
     try {
       const positions = await requestArrange(toGraphBlock(nodes, edges), orientation)
-      setNodePositions(positions)
+      if (requestId === arrangeId.current) setNodePositions(positions)
     } catch (err) {
       console.error('failed to arrange', err)
     } finally {
-      setArranging(false)
+      if (requestId === arrangeId.current) setArranging(false)
     }
   }
 
