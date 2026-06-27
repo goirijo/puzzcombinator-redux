@@ -2,11 +2,13 @@
 // parts, per the design (frontend/design/ideas.txt): the SELECTED item, then its RELATED
 // items. For a node the related items are its incoming/outgoing edges and the artifacts on
 // them — the client mirror of the Python `required_inputs` / `produced_outputs`, derived
-// here straight from the edge list. A pure view over `PanelProps`: it reads selection +
-// graph and calls back; it owns no state.
+// here straight from the edge list. It subscribes to the stores it needs (the graph store for
+// nodes/edges + the mutating actions, the selection store for what's selected) and takes no
+// props; it owns no state of its own.
 
 import { toPool, type HuntFlowEdge } from '../model/flow'
-import type { PanelProps } from '../shell/types'
+import { useGraphStore } from '../shell/graphStore'
+import { useSelectionStore } from '../shell/selectionStore'
 
 /** One related edge: the node on its other end plus the artifacts riding it. */
 function RelatedEdge({ otherId, edge }: { otherId: string; edge: HuntFlowEdge }) {
@@ -80,14 +82,14 @@ function ArtifactRow({
   )
 }
 
-export function GraphInspector({
-  nodes,
-  edges,
-  selection,
-  updateNode,
-  placeArtifactOnEdge,
-  detachArtifact,
-}: PanelProps) {
+export function GraphInspector() {
+  const nodes = useGraphStore((s) => s.nodes)
+  const edges = useGraphStore((s) => s.edges)
+  const updateNode = useGraphStore((s) => s.updateNode)
+  const placeArtifactOnEdge = useGraphStore((s) => s.placeArtifactOnEdge)
+  const detachArtifact = useGraphStore((s) => s.detachArtifact)
+  const selection = useSelectionStore((s) => s.selection)
+
   if (!selection) {
     return <p className="inspector__empty">Select a node on the canvas to edit it.</p>
   }

@@ -25,8 +25,9 @@ import { TabBar } from './TabBar'
 import { Viewport } from './Viewport'
 import { useGraphStore } from './graphStore'
 import { useWorkspaceStore } from './workspaceStore'
+import { useSelectionStore } from './selectionStore'
 import type { CommandId } from './commands'
-import type { SaveState, Selection } from './types'
+import type { SaveState } from './types'
 import './shell.css'
 
 export function Shell() {
@@ -34,12 +35,9 @@ export function Shell() {
   const nodes = useGraphStore((s) => s.nodes)
   const edges = useGraphStore((s) => s.edges)
   const loadGraph = useGraphStore((s) => s.loadGraph)
-  const updateNode = useGraphStore((s) => s.updateNode)
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange)
   const detachEdges = useGraphStore((s) => s.detachEdges)
-  const placeArtifactOnEdge = useGraphStore((s) => s.placeArtifactOnEdge)
-  const detachArtifact = useGraphStore((s) => s.detachArtifact)
 
   // Undo/redo come from the temporal store. The methods are stable (read once); the
   // can-undo/can-redo flags are subscribed so the buttons enable/disable reactively.
@@ -60,8 +58,11 @@ export function Shell() {
   const previewTabId = useWorkspaceStore((s) => s.previewTabId)
   const setActiveViewport = useWorkspaceStore((s) => s.setActiveViewport)
 
+  // Selection lives in its own store so panels read it by subscribing (like the graph/workspace);
+  // the canvas writes it through this setter.
+  const setSelection = useSelectionStore((s) => s.setSelection)
+
   // Non-undoable UI state.
-  const [selection, setSelection] = useState<Selection>(null)
   const [activeCommandId, setActiveCommandId] = useState<CommandId | null>('graph')
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' })
   // The serialized save payload as of the last load/save; null until first load. Drives `isDirty`.
@@ -86,7 +87,7 @@ export function Shell() {
       else if (se.length > 0) setSelection({ kind: 'edge', id: se[0].id })
       else setSelection(null)
     },
-    [],
+    [setSelection],
   )
 
   const onSave = useCallback(async () => {
@@ -153,7 +154,6 @@ export function Shell() {
     workspace !== null &&
     savedSnapshot !== null &&
     JSON.stringify(buildSaveRequest(nodes, edges, workspace)) !== savedSnapshot
-  const panelProps = { nodes, edges, selection, updateNode, placeArtifactOnEdge, detachArtifact }
   // What the canvas actually draws: a projection of the store nodes that honors the *displayed*
   // view's per-view "show unplaced?" flag (the previewed view while hovering, else the active
   // one — so a hover-preview of a hide-pool view previews it hidden). The store/save always keep
@@ -197,7 +197,6 @@ export function Shell() {
                     <PanelRegion
                       activeCommandId={activeCommandId}
                       onClose={() => setActiveCommandId(null)}
-                      {...panelProps}
                     />
                   </Panel>
                   <Separator className="resize-handle" />

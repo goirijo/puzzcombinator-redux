@@ -1,17 +1,16 @@
 // The swappable panel region: a titled, closeable container that renders whichever
 // command's panel is active. It looks the command up in the registry and renders its
-// `Panel`, forwarding the shared `PanelProps`. It knows nothing about any specific panel —
-// that is the whole point: a new command shows up here for free.
+// `Panel`. Panels take no props — each subscribes to the stores it needs — so this region
+// knows nothing about any specific panel: a new command shows up here for free.
 
 import { commandById, type CommandId } from './commands'
-import type { PanelProps } from './types'
 
-interface PanelRegionProps extends PanelProps {
+interface PanelRegionProps {
   activeCommandId: CommandId
   onClose: () => void
 }
 
-export function PanelRegion({ activeCommandId, onClose, ...panelProps }: PanelRegionProps) {
+export function PanelRegion({ activeCommandId, onClose }: PanelRegionProps) {
   const cmd = commandById(activeCommandId)
   const Body = cmd.Panel
   return (
@@ -23,7 +22,7 @@ export function PanelRegion({ activeCommandId, onClose, ...panelProps }: PanelRe
         </button>
       </header>
       <div className="panel__body">
-        <Body {...panelProps} />
+        <Body />
       </div>
     </aside>
   )

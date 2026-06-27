@@ -2,8 +2,6 @@
 // show the full intended command set today; replacing a command's `Panel` in commands.ts
 // with a real component is the whole job of building that feature.
 
-import type { PanelProps } from '../shell/types'
-
-export function PlaceholderPanel(_props: PanelProps) {
+export function PlaceholderPanel() {
   return <p className="panel__placeholder">Not built yet.</p>
 }

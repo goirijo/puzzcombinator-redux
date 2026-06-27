@@ -1,8 +1,8 @@
 // The VIEW command's panel: list the workspace's views, switch the active tab to one, create a
-// new view from the current arrangement, and auto-arrange the graph. Unlike GraphInspector this
-// panel takes no PanelProps — it subscribes to the workspace store directly and reads exactly the
-// slice it needs. View-management's position-lifecycle logic lives in the store's actions
-// (selectView/createView); this component just names the intent.
+// new view from the current arrangement, and auto-arrange the graph. Like every panel it takes
+// no props — it subscribes to the workspace store directly and reads exactly the slice it needs.
+// View-management's position-lifecycle logic lives in the store's actions (selectView/
+// createView); this component just names the intent.
 //
 // Auto-arrange is the one action with I/O: layout is the backend's job, so the handler hits the
 // `/api/arrange` seam (model/api.ts) then drops the returned positions onto the live nodes via the

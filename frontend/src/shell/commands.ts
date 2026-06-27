@@ -10,7 +10,6 @@ import { GraphInspector } from '../panels/GraphInspector'
 import { PlaceholderPanel } from '../panels/PlaceholderPanel'
 import { TestingPanel } from '../panels/testing/TestingPanel'
 import { ViewPanel } from '../panels/ViewPanel'
-import type { PanelProps } from './types'
 
 /** The commands from the design (`frontend/design/ideas.txt`), plus TESTING — a scratch
  *  playground for in-progress features (not in the design). Its sections graduate into real
@@ -30,13 +29,13 @@ export interface CommandDescriptor {
   label: string
   /** A single glyph for the rail button (kept text-only until we add real icons). */
   icon: string
-  Panel: FC<PanelProps>
+  Panel: FC
 }
 
 // GRAPH and VIEW have real panels; the rest open a placeholder, so the rail already matches the
-// design and "build the feature" is swapping its `Panel` here. A panel may take PanelProps
-// (GraphInspector) or subscribe to stores directly and ignore them (ViewPanel) — both satisfy
-// `FC<PanelProps>`, so the registry stays uniform either way.
+// design and "build the feature" is swapping its `Panel` here. Panels take no props — each
+// subscribes to the stores it needs (graph / workspace / selection), so the registry stays
+// uniform and the panel region just renders the active entry's `Panel`.
 export const COMMANDS: CommandDescriptor[] = [
   { id: 'view', label: 'View', icon: '▤', Panel: ViewPanel },
   { id: 'graph', label: 'Graph', icon: '◆', Panel: GraphInspector },
