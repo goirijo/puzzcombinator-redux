@@ -5,7 +5,7 @@
 // here straight from the edge list. A pure view over `PanelProps`: it reads selection +
 // graph and calls back; it owns no state.
 
-import type { HuntFlowEdge } from '../model/flow'
+import { toPool, type HuntFlowEdge } from '../model/flow'
 import type { PanelProps } from '../shell/types'
 
 /** One related edge: the node on its other end plus the artifacts riding it. */
@@ -56,7 +56,38 @@ function RelatedEdgeList({
   )
 }
 
-export function GraphInspector({ nodes, edges, selection, updateNode }: PanelProps) {
+/** One artifact with a single action button — detach it from an edge, or place it onto one. */
+function ArtifactRow({
+  name,
+  type,
+  actionLabel,
+  onAction,
+}: {
+  name: string
+  type: string
+  actionLabel: string
+  onAction: () => void
+}) {
+  return (
+    <li className="inspector__artifact-row">
+      <span>
+        {name} <span className="related__type">{type}</span>
+      </span>
+      <button type="button" className="ghost-btn" onClick={onAction}>
+        {actionLabel}
+      </button>
+    </li>
+  )
+}
+
+export function GraphInspector({
+  nodes,
+  edges,
+  selection,
+  updateNode,
+  placeArtifactOnEdge,
+  detachArtifact,
+}: PanelProps) {
   if (!selection) {
     return <p className="inspector__empty">Select a node on the canvas to edit it.</p>
   }
@@ -64,6 +95,9 @@ export function GraphInspector({ nodes, edges, selection, updateNode }: PanelPro
   if (selection.kind === 'edge') {
     const edge = edges.find((e) => e.id === selection.id)
     if (!edge) return <p className="inspector__empty">Edge not found.</p>
+    const onEdge = edge.data?.content ?? []
+    // Every loose artifact not yet placed; placing one moves it from the pool onto this edge.
+    const pool = toPool(nodes)
     return (
       <div className="inspector">
         <section className="inspector__selected">
@@ -71,13 +105,44 @@ export function GraphInspector({ nodes, edges, selection, updateNode }: PanelPro
           <p className="inspector__edge-ends">
             {edge.source} → {edge.target}
           </p>
-          <ul className="related__artifacts">
-            {(edge.data?.content ?? []).map((a) => (
-              <li key={a.id}>
-                {a.name} <span className="related__type">{a.type}</span>
-              </li>
-            ))}
-          </ul>
+        </section>
+
+        <section className="inspector__related">
+          <h4 className="inspector__heading">On this edge ({onEdge.length})</h4>
+          {onEdge.length === 0 ? (
+            <p className="inspector__none">none</p>
+          ) : (
+            <ul className="related__artifacts">
+              {onEdge.map((a) => (
+                <ArtifactRow
+                  key={a.id}
+                  name={a.name}
+                  type={a.type}
+                  actionLabel="Detach"
+                  onAction={() => detachArtifact(edge.id, a.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="inspector__related">
+          <h4 className="inspector__heading">Place from pool ({pool.length})</h4>
+          {pool.length === 0 ? (
+            <p className="inspector__none">none</p>
+          ) : (
+            <ul className="related__artifacts">
+              {pool.map((a) => (
+                <ArtifactRow
+                  key={a.id}
+                  name={a.name}
+                  type={a.type}
+                  actionLabel="Place"
+                  onAction={() => placeArtifactOnEdge(a.id, edge.id)}
+                />
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     )

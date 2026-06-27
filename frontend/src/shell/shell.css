@@ -352,6 +352,14 @@
   color: var(--shell-muted);
   font-size: 11px;
 }
+/* An artifact line with its detach/place button pushed to the right. */
+.inspector__artifact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
 
 /* --- VIEW panel ----------------------------------------------------------- */
 /* The buttons are .ghost-btn; these add only their per-item border and padding. */

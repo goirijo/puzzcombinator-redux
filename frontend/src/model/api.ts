@@ -12,6 +12,7 @@ import {
   toGraphBlock,
   toPool,
   toPositions,
+  type CanvasGraph,
   type CanvasNode,
   type HuntFlowEdge,
 } from './flow'
@@ -101,10 +102,7 @@ export async function requestArrange(
 // back into the graph block and the pool.
 
 /** Load: fuse hunt nodes + pooled artifacts into one canvas array, with active-view positions. */
-export function toFlowGraph(res: GraphResponseDTO): {
-  nodes: CanvasNode[]
-  edges: HuntFlowEdge[]
-} {
+export function toFlowGraph(res: GraphResponseDTO): CanvasGraph {
   const active = activeView(res.workspace)
   const positions = active?.view.positions ?? {}
   return {

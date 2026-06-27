@@ -30,22 +30,23 @@ import {
   detachedArtifactNodes,
   makeLooseArtifact,
   makeNode,
+  withArtifactDetached,
+  withArtifactPlaced,
+  type CanvasGraph,
   type CanvasNode,
   type HuntFlowEdge,
   type NodeFields,
 } from '../model/flow'
 import type { PositionDTO } from '../model/workspace'
-import { graphSignature, leadingDebounce, type TrackedState } from './history'
+import { graphSignature, leadingDebounce } from './history'
 
 /** Wait this long after the last change before snapshotting — coalesces typing/dragging. */
 const HISTORY_DEBOUNCE_MS = 350
 
-export interface GraphState {
-  // One array of canvas nodes — hunt-graph nodes AND loose-artifact nodes (see flow.ts). The
-  // loose-artifact pool is no longer a separate held field: it rides here as `type: 'artifact'`
-  // nodes and is split back out at the save seam (`buildSaveRequest`).
-  nodes: CanvasNode[]
-  edges: HuntFlowEdge[]
+// `nodes` is one array of canvas nodes — hunt-graph nodes AND loose-artifact nodes (see flow.ts).
+// The loose-artifact pool is not a separate held field: it rides in `nodes` as `type: 'artifact'`
+// entries and is split back out at the save seam (`buildSaveRequest`).
+export interface GraphState extends CanvasGraph {
   /** Replace the whole canvas (initial load). Caller clears history afterwards. */
   loadGraph: (nodes: CanvasNode[], edges: HuntFlowEdge[]) => void
   /** Add a new blank hunt node to the canvas (undoable), placed with a cascade offset. */
@@ -56,6 +57,10 @@ export interface GraphState {
    *  React Flow's `onEdgesDelete`, which fires for both a directly-deleted edge and edges
    *  cascaded by a node delete. */
   detachEdges: (deleted: HuntFlowEdge[]) => void
+  /** Move a pooled artifact onto an edge (it leaves the pool, rides the edge). */
+  placeArtifactOnEdge: (artifactId: string, edgeId: string) => void
+  /** Move one artifact off an edge back into the pool, landing at the edge's midpoint. */
+  detachArtifact: (edgeId: string, artifactId: string) => void
   /** Patch one hunt node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
   /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
@@ -80,6 +85,9 @@ export const useGraphStore = create<GraphState>()(
         const nodes = get().nodes
         set({ nodes: [...nodes, makeLooseArtifact(nodes.length)] })
       },
+      placeArtifactOnEdge: (artifactId, edgeId) =>
+        set(withArtifactPlaced(get(), artifactId, edgeId)),
+      detachArtifact: (edgeId, artifactId) => set(withArtifactDetached(get(), edgeId, artifactId)),
       detachEdges: (deleted) => {
         const nodes = get().nodes
         // React Flow fires onEdgesDelete *before* applying the removals, so the source/target
@@ -103,7 +111,7 @@ export const useGraphStore = create<GraphState>()(
       onEdgesChange: (changes) => set({ edges: applyEdgeChanges(changes, get().edges) }),
     }),
     {
-      partialize: (state): TrackedState => ({ nodes: state.nodes, edges: state.edges }),
+      partialize: (state): CanvasGraph => ({ nodes: state.nodes, edges: state.edges }),
       equality: (a, b) => graphSignature(a) === graphSignature(b),
       handleSet: (handleSet) => leadingDebounce(handleSet, HISTORY_DEBOUNCE_MS),
     },

@@ -38,6 +38,8 @@ export function Shell() {
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange)
   const detachEdges = useGraphStore((s) => s.detachEdges)
+  const placeArtifactOnEdge = useGraphStore((s) => s.placeArtifactOnEdge)
+  const detachArtifact = useGraphStore((s) => s.detachArtifact)
 
   // Undo/redo come from the temporal store. The methods are stable (read once); the
   // can-undo/can-redo flags are subscribed so the buttons enable/disable reactively.
@@ -151,7 +153,7 @@ export function Shell() {
     workspace !== null &&
     savedSnapshot !== null &&
     JSON.stringify(buildSaveRequest(nodes, edges, workspace)) !== savedSnapshot
-  const panelProps = { nodes, edges, selection, updateNode }
+  const panelProps = { nodes, edges, selection, updateNode, placeArtifactOnEdge, detachArtifact }
   // What the canvas actually draws: a projection of the store nodes that honors the *displayed*
   // view's per-view "show unplaced?" flag (the previewed view while hovering, else the active
   // one — so a hover-preview of a hide-pool view previews it hidden). The store/save always keep

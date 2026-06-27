@@ -4,6 +4,7 @@ import {
   isLooseArtifactNode,
   looseElementId,
   toPool,
+  type CanvasNode,
   type HuntFlowEdge,
   type HuntFlowNode,
 } from '../model/flow'
@@ -16,6 +17,23 @@ function node(id: string, x: number, y: number): HuntFlowNode {
 
 function edge(id: string, content: ArtifactDTO[]): HuntFlowEdge {
   return { id, source: 'n1', target: 'n1', type: 'floating', data: { content } }
+}
+
+function looseArtifact(id: string): CanvasNode {
+  return {
+    id: looseElementId(id),
+    type: 'artifact',
+    connectable: false,
+    position: { x: 0, y: 0 },
+    data: { artifact: { type: 'text', id, name: id, payload: { text: '' } } },
+  }
+}
+
+/** Reload the store with a scenario and re-baseline undo history (mirrors the beforeEach). */
+function loadScenario(nodes: CanvasNode[], edges: HuntFlowEdge[]): void {
+  useGraphStore.getState().loadGraph(nodes, edges)
+  useGraphStore.temporal.getState().clear()
+  vi.advanceTimersByTime(400)
 }
 
 // Fake timers so we can close the history debounce window deterministically. The store
@@ -102,5 +120,47 @@ describe('detachEdges', () => {
     expect(toPool(useGraphStore.getState().nodes)).toHaveLength(1)
     useGraphStore.temporal.getState().undo()
     expect(toPool(useGraphStore.getState().nodes)).toEqual([])
+  })
+})
+
+describe('placeArtifactOnEdge', () => {
+  const ART: ArtifactDTO = { type: 'text', id: 'u1', name: 'u1', payload: { text: '' } }
+
+  it('moves a pooled artifact onto the edge and out of the pool', () => {
+    loadScenario([node('n1', 0, 0), looseArtifact('u1')], [edge('e1', [])])
+    useGraphStore.getState().placeArtifactOnEdge('u1', 'e1')
+    const { nodes, edges } = useGraphStore.getState()
+    expect(toPool(nodes)).toEqual([])
+    expect(edges[0].data!.content).toEqual([ART])
+  })
+
+  it('is undoable — undo returns the artifact to the pool and clears the edge', () => {
+    loadScenario([node('n1', 0, 0), looseArtifact('u1')], [edge('e1', [])])
+    useGraphStore.getState().placeArtifactOnEdge('u1', 'e1')
+    useGraphStore.temporal.getState().undo()
+    const { nodes, edges } = useGraphStore.getState()
+    expect(toPool(nodes)).toHaveLength(1)
+    expect(edges[0].data!.content).toEqual([])
+  })
+})
+
+describe('detachArtifact', () => {
+  const ART: ArtifactDTO = { type: 'text', id: 'a1', name: 'clue', payload: { text: 'hi' } }
+
+  it('moves one artifact off the edge back into the pool', () => {
+    loadScenario([node('n1', 0, 0)], [edge('e1', [ART])])
+    useGraphStore.getState().detachArtifact('e1', 'a1')
+    const { nodes, edges } = useGraphStore.getState()
+    expect(edges[0].data!.content).toEqual([])
+    expect(toPool(nodes)).toEqual([ART])
+  })
+
+  it('is undoable — undo puts the artifact back on the edge', () => {
+    loadScenario([node('n1', 0, 0)], [edge('e1', [ART])])
+    useGraphStore.getState().detachArtifact('e1', 'a1')
+    useGraphStore.temporal.getState().undo()
+    const { nodes, edges } = useGraphStore.getState()
+    expect(edges[0].data!.content).toEqual([ART])
+    expect(toPool(nodes)).toEqual([])
   })
 })

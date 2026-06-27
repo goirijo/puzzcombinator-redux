@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { HuntFlowEdge, HuntFlowNode } from '../model/flow'
-import { graphSignature, leadingDebounce, type TrackedState } from './history'
+import type { CanvasGraph, HuntFlowEdge, HuntFlowNode } from '../model/flow'
+import { graphSignature, leadingDebounce } from './history'
 
 function node(over: Partial<HuntFlowNode> = {}): HuntFlowNode {
   return {
@@ -13,7 +13,7 @@ function node(over: Partial<HuntFlowNode> = {}): HuntFlowNode {
   }
 }
 
-const state = (nodes: HuntFlowNode[], edges: HuntFlowEdge[] = []): TrackedState => ({ nodes, edges })
+const state = (nodes: HuntFlowNode[], edges: HuntFlowEdge[] = []): CanvasGraph => ({ nodes, edges })
 
 describe('graphSignature', () => {
   it('is unchanged by selection/drag flags (so clicking a node makes no undo step)', () => {

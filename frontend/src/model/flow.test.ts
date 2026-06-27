@@ -13,6 +13,8 @@ import {
   toGraphBlock,
   toPool,
   toPositions,
+  withArtifactDetached,
+  withArtifactPlaced,
   withLooseArtifactsHidden,
 } from './flow'
 import type { PositionDTO } from './workspace'
@@ -215,5 +217,62 @@ describe('detachedArtifactNodes', () => {
 
   it('skips artifacts already present (e.g. still in the pool), keyed by element id', () => {
     expect(detachedArtifactNodes([e1], new Set([looseElementId('a1')]), POS)).toEqual([])
+  })
+})
+
+describe('withArtifactPlaced', () => {
+  // One pooled artifact (u1) + a graph with an empty edge (e2) to place it on.
+  const POOL = [{ type: 'text', id: 'u1', name: 'note', payload: { text: 'hi' } }]
+  const graph = () => ({
+    nodes: [...toFlowNodes(GRAPH.nodes, {}), ...toFlowArtifacts(POOL, {})],
+    edges: toFlowEdges(GRAPH.edges),
+  })
+
+  it('moves the artifact out of the pool and onto the edge', () => {
+    const { nodes, edges } = withArtifactPlaced(graph(), 'u1', 'e2')
+    expect(toPool(nodes)).toEqual([]) // left the pool
+    expect(edges.find((e) => e.id === 'e2')!.data!.content).toEqual(POOL) // now on the edge
+  })
+
+  it('refreshes the edge label to the new count', () => {
+    const { edges } = withArtifactPlaced(graph(), 'u1', 'e2')
+    expect(edges.find((e) => e.id === 'e2')!.label).toBe('1')
+  })
+
+  it('is a no-op when the artifact is not in the pool', () => {
+    const g = graph()
+    expect(withArtifactPlaced(g, 'nope', 'e2')).toBe(g)
+  })
+
+  it('is a no-op when the artifact is already on that edge', () => {
+    const placed = withArtifactPlaced(graph(), 'u1', 'e2')
+    // u1 is now on e2 and no longer a loose node, so a second place is a no-op.
+    expect(withArtifactPlaced(placed, 'u1', 'e2')).toBe(placed)
+  })
+})
+
+describe('withArtifactDetached', () => {
+  // GRAPH's e1 (n1→n2) carries artifact a1; detaching returns it to the pool.
+  const graph = () => ({
+    nodes: toFlowNodes(GRAPH.nodes, POSITIONS),
+    edges: toFlowEdges(GRAPH.edges),
+  })
+
+  it('moves the artifact off the edge and back into the pool', () => {
+    const { nodes, edges } = withArtifactDetached(graph(), 'e1', 'a1')
+    expect(edges.find((e) => e.id === 'e1')!.data!.content).toEqual([]) // left the edge
+    expect(toPool(nodes)).toEqual([GRAPH.edges[0].content[0]]) // back in the pool
+  })
+
+  it('lands the detached artifact at the edge’s midpoint and clears the now-empty label', () => {
+    const { nodes, edges } = withArtifactDetached(graph(), 'e1', 'a1')
+    expect(nodes.find((n) => n.id === looseElementId('a1'))!.position).toEqual({ x: 120, y: 20 })
+    expect(edges.find((e) => e.id === 'e1')!.label).toBeUndefined()
+  })
+
+  it('is a no-op when the edge or artifact is missing', () => {
+    const g = graph()
+    expect(withArtifactDetached(g, 'e1', 'nope')).toBe(g)
+    expect(withArtifactDetached(g, 'nope', 'a1')).toBe(g)
   })
 })

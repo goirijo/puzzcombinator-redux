@@ -54,6 +54,14 @@ export type LooseArtifactFlowNode = Node<LooseArtifactData, 'artifact'>
  *  channels only at the save seam. */
 export type CanvasNode = HuntFlowNode | LooseArtifactFlowNode
 
+/** The two canvas arrays together: every node (hunt + loose-artifact) and every edge. This is
+ *  what the loader produces, the store holds, undo tracks, and the node/edge transforms take and
+ *  return — one name for the pair so they can't drift apart. */
+export interface CanvasGraph {
+  nodes: CanvasNode[]
+  edges: HuntFlowEdge[]
+}
+
 /** The React Flow element id for a pooled artifact — `loose:{artifactId}`, kept distinct from
  *  the domain artifact id so one artifact could later render in more than one place. */
 export function looseElementId(artifactId: string): string {
@@ -207,6 +215,59 @@ export function withLooseArtifactsHidden(nodes: CanvasNode[], hidden: boolean): 
   return nodes.map((n) => (isLooseArtifactNode(n) ? { ...n, hidden: true } : n))
 }
 
+/**
+ * Move a pooled artifact onto an edge: remove its loose node and append the artifact to the
+ * edge's content. A move, not a copy — the artifact leaves the pool. Returns the input unchanged
+ * when the artifact isn't in the pool, the edge doesn't exist, or it's already on that edge.
+ */
+export function withArtifactPlaced(graph: CanvasGraph, artifactId: string, edgeId: string): CanvasGraph {
+  const { nodes, edges } = graph
+  const elementId = looseElementId(artifactId)
+  const looseNode = nodes.find((n): n is LooseArtifactFlowNode => n.id === elementId && isLooseArtifactNode(n))
+  const edge = edges.find((e) => e.id === edgeId)
+  if (!looseNode || !edge) return graph
+  const content = edge.data?.content ?? []
+  if (content.some((a) => a.id === artifactId)) return graph // already on this edge
+  const next = [...content, looseNode.data.artifact]
+  return {
+    nodes: nodes.filter((n) => n.id !== elementId),
+    edges: edges.map((e) =>
+      e.id === edgeId ? { ...e, label: edgeContentLabel(next), data: { ...e.data, content: next } } : e,
+    ),
+  }
+}
+
+/**
+ * Move one artifact off an edge back into the pool: drop it from the edge's content and re-add it
+ * as a loose node at the edge's midpoint, so it lands where it rode rather than at a corner. The
+ * single-artifact counterpart of {@link detachedArtifactNodes}, which returns a whole edge's
+ * content. Returns the input unchanged when the edge or artifact doesn't exist.
+ */
+export function withArtifactDetached(graph: CanvasGraph, edgeId: string, artifactId: string): CanvasGraph {
+  const { nodes, edges } = graph
+  const edge = edges.find((e) => e.id === edgeId)
+  const artifact = edge?.data?.content?.find((a) => a.id === artifactId)
+  if (!edge || !artifact) return graph
+  // Borrow detachedArtifactNodes' midpoint + dedup by handing it an edge holding just this artifact.
+  const positions = new Map(nodes.map((n) => [n.id, n.position]))
+  const oneArtifactEdge = { ...edge, data: { ...edge.data, content: [artifact] } }
+  const [looseNode] = detachedArtifactNodes([oneArtifactEdge], new Set(nodes.map((n) => n.id)), positions)
+  const remaining = (edge.data?.content ?? []).filter((a) => a.id !== artifactId)
+  return {
+    nodes: looseNode ? [...nodes, looseNode] : nodes,
+    edges: edges.map((e) =>
+      e.id === edgeId ? { ...e, label: edgeContentLabel(remaining), data: { ...e.data, content: remaining } } : e,
+    ),
+  }
+}
+
+/** An edge's on-canvas label: the artifact count, or nothing when empty. We show the count, not
+ *  the joined names — names get long and overlap the edge; the full list lives in the inspector.
+ *  Shared by the projection and the place/detach transforms so the label can't drift from content. */
+function edgeContentLabel(content: ArtifactDTO[]): string | undefined {
+  return content.length ? String(content.length) : undefined
+}
+
 /** Convert edge DTOs into React Flow edges (labeled with their artifact count). */
 export function toFlowEdges(edges: EdgeDTO[]): HuntFlowEdge[] {
   return edges.map((e) => ({
@@ -216,9 +277,7 @@ export function toFlowEdges(edges: EdgeDTO[]): HuntFlowEdge[] {
     // "floating": the edge attaches to whichever node sides face each other, recomputed from
     // live positions (edges/FloatingEdge) — so the graph isn't pinned to a left→right shape.
     type: 'floating',
-    // Show the artifact count, not the joined names — names get long and overlap the edge;
-    // the count stays legible and the full list lives in the inspector.
-    label: e.content.length ? String(e.content.length) : undefined,
+    label: edgeContentLabel(e.content),
     markerEnd: { type: MarkerType.ArrowClosed },
     data: { content: e.content },
   }))

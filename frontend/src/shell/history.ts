@@ -3,13 +3,7 @@
 // counts as a meaningful change; `leadingDebounce` decides how a burst of changes collapses
 // into one history step. See store.ts for how zundo's `temporal` middleware uses them.
 
-import { isLooseArtifactNode, type CanvasNode, type HuntFlowEdge } from '../model/flow'
-
-/** The slice of state zundo tracks for undo history. */
-export interface TrackedState {
-  nodes: CanvasNode[]
-  edges: HuntFlowEdge[]
-}
+import { isLooseArtifactNode, type CanvasGraph } from '../model/flow'
 
 /**
  * A signature of the *meaningful* graph state. It deliberately ignores volatile React Flow
@@ -19,7 +13,7 @@ export interface TrackedState {
  * contribute their editable fields; loose-artifact nodes contribute their artifact id (their
  * payload isn't editable on the canvas yet).
  */
-export function graphSignature({ nodes, edges }: TrackedState): string {
+export function graphSignature({ nodes, edges }: CanvasGraph): string {
   const n = nodes
     .map((x) => {
       const at = `${x.id}@${Math.round(x.position.x)},${Math.round(x.position.y)}`
