@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { GraphBlockDTO } from './graph'
 import {
   applyPositions,
+  detachedArtifactNodes,
   looseElementId,
   makeLooseArtifact,
   makeNode,
@@ -170,5 +171,39 @@ describe('loose artifacts on the canvas', () => {
     // Every artifact has a name (what the generic node renders) — not payload-specific.
     expect(node.data.artifact.name).toBe('New artifact')
     expect(node.id).toBe(looseElementId(node.data.artifact.id))
+  })
+})
+
+describe('detachedArtifactNodes', () => {
+  // e1 (n1→n2) carries one artifact (a1); e2 carries none. Both are real flow edges.
+  const [e1, e2] = toFlowEdges(GRAPH.edges)
+  // n1 at x=10, n2 at x=230 (from POSITIONS) → e1's midpoint is x=120.
+  const POS = new Map(Object.entries(POSITIONS))
+
+  it('turns a deleted edge’s artifacts into non-connectable loose-artifact nodes', () => {
+    const detached = detachedArtifactNodes([e1], new Set(), POS)
+    expect(detached).toHaveLength(1)
+    expect(detached[0].id).toBe(looseElementId('a1'))
+    expect(detached[0].type).toBe('artifact')
+    expect(detached[0].connectable).toBe(false)
+    expect(detached[0].data.artifact).toEqual(GRAPH.edges[0].content[0])
+  })
+
+  it('anchors the freed artifact at the deleted edge’s midpoint', () => {
+    const [node] = detachedArtifactNodes([e1], new Set(), POS)
+    // midpoint of n1 (10,20) and n2 (230,20).
+    expect(node.position).toEqual({ x: 120, y: 20 })
+  })
+
+  it('falls back to a neutral spot when the edge’s endpoints have no known position', () => {
+    expect(detachedArtifactNodes([e1], new Set(), new Map())[0].position).toEqual({ x: 200, y: 300 })
+  })
+
+  it('yields nothing for an edge with no content', () => {
+    expect(detachedArtifactNodes([e2], new Set(), POS)).toEqual([])
+  })
+
+  it('skips artifacts already present (e.g. still in the pool), keyed by element id', () => {
+    expect(detachedArtifactNodes([e1], new Set([looseElementId('a1')]), POS)).toEqual([])
   })
 })

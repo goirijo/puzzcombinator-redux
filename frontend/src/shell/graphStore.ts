@@ -27,6 +27,7 @@ import { temporal } from 'zundo'
 
 import {
   applyPositions,
+  detachedArtifactNodes,
   makeLooseArtifact,
   makeNode,
   type CanvasNode,
@@ -51,6 +52,10 @@ export interface GraphState {
   createNode: () => void
   /** Add a new pre-baked loose artifact to the canvas/pool (undoable), cascade-offset. */
   createLooseArtifact: () => void
+  /** Return a just-deleted edge's artifacts to the loose pool (don't destroy them). Called from
+   *  React Flow's `onEdgesDelete`, which fires for both a directly-deleted edge and edges
+   *  cascaded by a node delete. */
+  detachEdges: (deleted: HuntFlowEdge[]) => void
   /** Patch one hunt node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
   /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
@@ -74,6 +79,17 @@ export const useGraphStore = create<GraphState>()(
       createLooseArtifact: () => {
         const nodes = get().nodes
         set({ nodes: [...nodes, makeLooseArtifact(nodes.length)] })
+      },
+      detachEdges: (deleted) => {
+        const nodes = get().nodes
+        // React Flow fires onEdgesDelete *before* applying the removals, so the source/target
+        // nodes are still here — letting us anchor each freed artifact at its edge's midpoint.
+        const positions = new Map(nodes.map((n) => [n.id, n.position]))
+        const detached = detachedArtifactNodes(deleted, new Set(nodes.map((n) => n.id)), positions)
+        // The edge removal itself rides React Flow's own `onEdgesChange` (a 'remove' change); we
+        // only add the freed artifacts back. Both `set`s land in one debounced burst → one undo
+        // step, so undoing a delete restores the edge AND drops the artifacts it freed.
+        if (detached.length) set({ nodes: [...nodes, ...detached] })
       },
       updateNode: (id, patch) =>
         set({

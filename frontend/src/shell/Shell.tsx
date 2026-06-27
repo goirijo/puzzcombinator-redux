@@ -37,6 +37,7 @@ export function Shell() {
   const updateNode = useGraphStore((s) => s.updateNode)
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange)
+  const detachEdges = useGraphStore((s) => s.detachEdges)
 
   // Undo/redo come from the temporal store. The methods are stable (read once); the
   // can-undo/can-redo flags are subscribed so the buttons enable/disable reactively.
@@ -197,6 +198,7 @@ export function Shell() {
                   edges={edges}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
+                  onEdgesDelete={detachEdges}
                   onSelectionChange={handleSelectionChange}
                   activeTabId={displayedTab?.id}
                   viewport={displayedTab?.viewport}

@@ -41,6 +41,8 @@ interface ViewportProps {
   edges: HuntFlowEdge[]
   onNodesChange: OnNodesChange<CanvasNode>
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
+  /** Deleted edges (Delete/Backspace, or cascaded by a node delete) — return their artifacts. */
+  onEdgesDelete: (edges: HuntFlowEdge[]) => void
   onSelectionChange: (params: OnSelectionChangeParams<CanvasNode, HuntFlowEdge>) => void
   /** Id of the active tab — changing it triggers a camera restore. */
   activeTabId?: string
@@ -55,6 +57,7 @@ function ViewportInner({
   edges,
   onNodesChange,
   onEdgesChange,
+  onEdgesDelete,
   onSelectionChange,
   activeTabId,
   viewport,
@@ -115,6 +118,10 @@ function ViewportInner({
         connectionMode={ConnectionMode.Loose}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        // Delete/Backspace removal is React Flow's built-in: it emits the 'remove' changes that
+        // onNodesChange/onEdgesChange already apply (cascading a node's edges for free). We add
+        // only onEdgesDelete, to return a removed edge's artifacts to the pool rather than lose them.
+        onEdgesDelete={onEdgesDelete}
         onSelectionChange={onSelectionChange}
         onMoveEnd={(_, vp) => onViewportChange({ x: vp.x, y: vp.y, zoom: vp.zoom })}
       >

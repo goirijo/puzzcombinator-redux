@@ -65,6 +65,13 @@ export function isLooseArtifactNode(n: CanvasNode): n is LooseArtifactFlowNode {
   return n.type === 'artifact'
 }
 
+/** Wrap an artifact in its canvas-node envelope at a given position. The single shape for a
+ *  loose-artifact node — shared by the pool projection, in-editor creation, and edge-detach so
+ *  the three can't drift (every loose artifact is `type: 'artifact'`, never a wiring endpoint). */
+function looseArtifactNode(artifact: ArtifactDTO, position: PositionDTO): LooseArtifactFlowNode {
+  return { id: looseElementId(artifact.id), type: 'artifact', connectable: false, position, data: { artifact } }
+}
+
 /**
  * Project graph nodes through a view's positions into React Flow nodes: identity + fields
  * from the hunt data, position from the workspace channel (falling back to 0,0 when a node
@@ -120,13 +127,7 @@ export function toFlowArtifacts(
 ): LooseArtifactFlowNode[] {
   return pool.map((artifact) => {
     const id = looseElementId(artifact.id)
-    return {
-      id,
-      type: 'artifact',
-      connectable: false,
-      position: { x: positions[id]?.x ?? 0, y: positions[id]?.y ?? 0 },
-      data: { artifact },
-    }
+    return looseArtifactNode(artifact, { x: positions[id]?.x ?? 0, y: positions[id]?.y ?? 0 })
   })
 }
 
@@ -146,13 +147,48 @@ export function makeLooseArtifact(spawnIndex = 0): LooseArtifactFlowNode {
     name: 'New artifact',
     payload: { text: '', title: null, monospace: false },
   }
-  return {
-    id: looseElementId(artifact.id),
-    type: 'artifact',
-    connectable: false,
-    position: { x: 380 + cascade, y: 120 + cascade },
-    data: { artifact },
+  return looseArtifactNode(artifact, { x: 380 + cascade, y: 120 + cascade })
+}
+
+/** Where a freed artifact should land: the midpoint of the deleted edge it rode, so it stays
+ *  in the area it occupied rather than springing to a fixed corner. Falls back to whichever
+ *  endpoint is known (then a neutral spot) if a position is missing. */
+function edgeAnchor(edge: HuntFlowEdge, positions: Map<string, PositionDTO>): PositionDTO {
+  const source = positions.get(edge.source)
+  const target = positions.get(edge.target)
+  if (source && target) return { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 }
+  return source ?? target ?? { x: 200, y: 300 }
+}
+
+/**
+ * Turn deleted edges' embedded artifacts back into loose-artifact (pool) nodes — the
+ * "detach, don't destroy" half of edge/node deletion. React Flow's `onEdgesDelete` hands us
+ * the full edges (with `data.content`) for a directly-deleted edge AND for edges cascaded by a
+ * node delete; both paths return their artifacts to the pool through here. Each freed artifact
+ * lands near its edge's midpoint (`positions`, the live node placements read *before* the
+ * delete applies — see the store), so it stays where it was rather than jumping to a corner;
+ * several artifacts off one edge fan out so they don't stack. An artifact whose element id is
+ * already present is skipped (e.g. the same artifact still sits in the pool).
+ */
+export function detachedArtifactNodes(
+  deleted: HuntFlowEdge[],
+  existingIds: Set<string>,
+  positions: Map<string, PositionDTO>,
+): LooseArtifactFlowNode[] {
+  const seen = new Set(existingIds)
+  const out: LooseArtifactFlowNode[] = []
+  for (const edge of deleted) {
+    const anchor = edgeAnchor(edge, positions)
+    let fan = 0
+    for (const artifact of edge.data?.content ?? []) {
+      const id = looseElementId(artifact.id)
+      if (seen.has(id)) continue
+      seen.add(id)
+      const offset = fan++ * 28
+      out.push(looseArtifactNode(artifact, { x: anchor.x + offset, y: anchor.y + offset }))
+    }
   }
+  return out
 }
 
 /** The pool half of the save: pull the artifacts back out of the loose-artifact nodes. */

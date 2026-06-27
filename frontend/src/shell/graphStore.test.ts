@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isLooseArtifactNode, toPool, type HuntFlowNode } from '../model/flow'
+import {
+  isLooseArtifactNode,
+  looseElementId,
+  toPool,
+  type HuntFlowEdge,
+  type HuntFlowNode,
+} from '../model/flow'
+import type { ArtifactDTO } from '../model/graph'
 import { useGraphStore } from './graphStore'
 
 function node(id: string, x: number, y: number): HuntFlowNode {
   return { id, type: 'hunt', position: { x, y }, data: { label: id, action: '', notes: '' } }
+}
+
+function edge(id: string, content: ArtifactDTO[]): HuntFlowEdge {
+  return { id, source: 'n1', target: 'n1', type: 'floating', data: { content } }
 }
 
 // Fake timers so we can close the history debounce window deterministically. The store
@@ -64,6 +75,32 @@ describe('createLooseArtifact', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(2)
     useGraphStore.temporal.getState().undo()
     expect(useGraphStore.getState().nodes).toHaveLength(1)
+    expect(toPool(useGraphStore.getState().nodes)).toEqual([])
+  })
+})
+
+describe('detachEdges', () => {
+  const ART: ArtifactDTO = { type: 'text', id: 'a1', name: 'clue', payload: { text: 'hi' } }
+
+  it('returns a deleted edge’s artifacts to the loose pool', () => {
+    useGraphStore.getState().detachEdges([edge('e1', [ART])])
+    const pool = toPool(useGraphStore.getState().nodes)
+    expect(pool).toEqual([ART])
+    // It re-entered as a non-connectable canvas node keyed by its loose element id.
+    const art = useGraphStore.getState().nodes.find(isLooseArtifactNode)!
+    expect(art.id).toBe(looseElementId('a1'))
+    expect(art.connectable).toBe(false)
+  })
+
+  it('does nothing for edges with no content', () => {
+    useGraphStore.getState().detachEdges([edge('e1', [])])
+    expect(useGraphStore.getState().nodes).toHaveLength(1)
+  })
+
+  it('is undoable — undo drops the artifacts the delete had freed', () => {
+    useGraphStore.getState().detachEdges([edge('e1', [ART])])
+    expect(toPool(useGraphStore.getState().nodes)).toHaveLength(1)
+    useGraphStore.temporal.getState().undo()
     expect(toPool(useGraphStore.getState().nodes)).toEqual([])
   })
 })
