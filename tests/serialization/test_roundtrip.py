@@ -72,6 +72,43 @@ def test_document_dict_roundtrip(cipher_hunt: Graph, converging_hunt: Graph) -> 
     assert document_from_dict(document_to_dict(doc)) == doc
 
 
+def test_document_roundtrip_with_unplaced_pool(cipher_hunt: Graph) -> None:
+    from puzzcombinator import TextArtifact
+
+    doc = HuntDocument(
+        graphs={"main": cipher_hunt},
+        unplaced={
+            "main": (
+                TextArtifact("loose one", id="loose-1"),
+                TextArtifact("loose two", id="loose-2"),
+            )
+        },
+    )
+    restored = document_from_dict(document_to_dict(doc))
+    assert restored == doc
+    assert [a.text for a in restored.unplaced["main"]] == ["loose one", "loose two"]
+
+
+def test_document_without_unplaced_key_loads_empty_pool(cipher_hunt: Graph) -> None:
+    # A document serialized before the pool existed has no "unplaced" key; it must
+    # read back as an empty pool, not raise.
+    data = document_to_dict(HuntDocument.single(cipher_hunt))
+    del data["unplaced"]
+    restored = document_from_dict(data)
+    assert restored.unplaced == {}
+    assert restored == HuntDocument.single(cipher_hunt)
+
+
+def test_json_file_roundtrip_preserves_unplaced(cipher_hunt: Graph) -> None:
+    from puzzcombinator import TextArtifact
+
+    doc = HuntDocument(
+        graphs={"main": cipher_hunt},
+        unplaced={"main": (TextArtifact("scratch", id="loose-1"),)},
+    )
+    assert from_json(to_json(doc)) == doc
+
+
 # --- File level: saving/loading a hunt file is document-level JSON/YAML. -------------
 
 

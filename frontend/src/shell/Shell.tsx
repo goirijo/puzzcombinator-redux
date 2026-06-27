@@ -33,6 +33,9 @@ export function Shell() {
   // Graph state lives in the store (so it's undoable); subscribe to it here.
   const nodes = useGraphStore((s) => s.nodes)
   const edges = useGraphStore((s) => s.edges)
+  // The loose-artifact pool rides the graph store as opaque passthrough (not rendered yet);
+  // subscribed here only so it's folded into every save payload and dirty check.
+  const unplaced = useGraphStore((s) => s.unplaced)
   const loadGraph = useGraphStore((s) => s.loadGraph)
   const updateNode = useGraphStore((s) => s.updateNode)
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
@@ -69,10 +72,10 @@ export function Shell() {
       .then((res) => {
         loadWorkspace(res.workspace)
         const { nodes: n, edges: e } = toFlowGraph(res)
-        loadGraph(n, e)
+        loadGraph(n, e, res.unplaced)
         // The initial load shouldn't be undoable, and is the clean baseline.
         useGraphStore.temporal.getState().clear()
-        setSavedSnapshot(JSON.stringify(buildSaveRequest(n, e, res.workspace)))
+        setSavedSnapshot(JSON.stringify(buildSaveRequest(n, e, res.unplaced, res.workspace)))
       })
       .catch((err) => console.error('failed to load graph', err))
   }, [loadGraph, loadWorkspace])
@@ -93,8 +96,8 @@ export function Shell() {
     // Ctrl+S while the pointer still sits on a tab.)
     clearPreview()
     // Read straight from the store so we always serialize the latest graph.
-    const { nodes: n, edges: e } = useGraphStore.getState()
-    const body = buildSaveRequest(n, e, workspace)
+    const { nodes: n, edges: e, unplaced: u } = useGraphStore.getState()
+    const body = buildSaveRequest(n, e, u, workspace)
     setSaveState({ status: 'saving' })
     try {
       await saveGraph(body)
@@ -149,7 +152,7 @@ export function Shell() {
   const isDirty =
     workspace !== null &&
     savedSnapshot !== null &&
-    JSON.stringify(buildSaveRequest(nodes, edges, workspace)) !== savedSnapshot
+    JSON.stringify(buildSaveRequest(nodes, edges, unplaced, workspace)) !== savedSnapshot
   const panelProps = { nodes, edges, selection, updateNode }
 
   return (

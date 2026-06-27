@@ -41,3 +41,8 @@ KEY_GRAPH = "graph"  # the single-graph envelope's body key
 KEY_GRAPHS = "graphs"  # the document envelope's map key
 KEY_NODES = "nodes"
 KEY_EDGES = "edges"
+#: The document envelope's scratch-pool map: graph id -> that graph's loose artifacts.
+#: Added additively (a document without it reads as an empty pool), so no version bump
+#: per the evolution policy above. Lives only on the *document* envelope, not the
+#: single-graph one — a lone graph has no pool.
+KEY_UNPLACED = "unplaced"

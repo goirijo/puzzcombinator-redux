@@ -37,6 +37,7 @@ from typing import Any, cast, get_args
 from fastapi import FastAPI, HTTPException
 
 from puzzcombinator.app.demo import build_demo_graph
+from puzzcombinator.artifacts.registry import artifact_from_dict, artifact_to_dict
 from puzzcombinator.core.document import DEFAULT_GRAPH_ID, HuntDocument
 from puzzcombinator.errors import GraphError, SerializationError
 from puzzcombinator.serialization import (
@@ -47,8 +48,8 @@ from puzzcombinator.serialization import (
 )
 from puzzcombinator.serialization.schema import (
     KEY_GRAPH,
-    KEY_GRAPHS,
     KEY_SCHEMA_VERSION,
+    KEY_UNPLACED,
     SCHEMA_VERSION,
 )
 from puzzcombinator.visualization.defaults import resolve_workspace
@@ -84,32 +85,39 @@ app = FastAPI(title="puzzcombinator editor")
 
 @app.get("/api/graph")
 def get_graph() -> dict[str, Any]:
-    """The drawn graph's envelope + a workspace with every node's position resolved."""
+    """The drawn graph's envelope + its loose-artifact pool + a position-resolved workspace.
+
+    ``unplaced`` is the drawn graph's scratch pool. The document keys pools by graph id; the
+    API is single-graph, so we send the main graph's pool as a flat list. Demo mode has none.
+    """
     raw = _load_raw()
-    graph = build_demo_graph() if raw is None else document_from_dict(raw).main
+    doc = None if raw is None else document_from_dict(raw)
+    graph = build_demo_graph() if doc is None else doc.main
+    pool = () if doc is None else doc.unplaced.get(DEFAULT_GRAPH_ID, ())
     stored = (
         workspace_from_dict(raw[KEY_WORKSPACE])
         if raw is not None and KEY_WORKSPACE in raw
         else None
     )
     workspace = resolve_workspace(stored, {DEFAULT_GRAPH_ID: graph})
-    # Compose the two channels as explicit siblings — that symmetry is the point.
+    # Compose the channels as explicit siblings — that symmetry is the point.
     return {
         KEY_SCHEMA_VERSION: SCHEMA_VERSION,
         KEY_GRAPH: graph_to_dict(graph)[KEY_GRAPH],
+        KEY_UNPLACED: [artifact_to_dict(a) for a in pool],
         KEY_WORKSPACE: workspace_to_dict(workspace),
     }
 
 
 @app.put("/api/graph")
 def save_graph(body: dict[str, Any]) -> dict[str, Any]:
-    """Persist an edited ``{graph, workspace}`` body to the ``PUZZ_GRAPH`` file.
+    """Persist an edited ``{graph, unplaced, workspace}`` body to the ``PUZZ_GRAPH`` file.
 
     The ``graph`` block (``{nodes, edges}``) is reconstructed through the serialization
-    layer (which validates structure and rebuilds artifacts via the registry); the
-    ``workspace`` block round-trips through its own codec so what is stored is always
-    loadable. The two channels are composed into one document as explicit siblings.
-    Returns 409 in demo mode (no file to save to) and 422 on an invalid body.
+    layer (which validates structure and rebuilds artifacts via the registry); ``unplaced``
+    is the graph's loose-artifact pool (rebuilt the same way); the ``workspace`` block
+    round-trips through its own codec so what is stored is always loadable. The channels are
+    composed into one document. Returns 409 in demo mode (no file) and 422 on an invalid body.
     """
     path = _graph_path()
     if not path:
@@ -118,15 +126,18 @@ def save_graph(body: dict[str, Any]) -> dict[str, Any]:
         )
     try:
         graph = graph_from_dict({KEY_SCHEMA_VERSION: SCHEMA_VERSION, KEY_GRAPH: body[KEY_GRAPH]})
+        pool = tuple(artifact_from_dict(a) for a in body.get(KEY_UNPLACED, []))
         workspace = workspace_from_dict(body[KEY_WORKSPACE])
     except (GraphError, SerializationError, KeyError, TypeError) as exc:
         raise HTTPException(status_code=422, detail=f"invalid save body: {exc}") from exc
 
-    document = {
-        KEY_SCHEMA_VERSION: SCHEMA_VERSION,
-        KEY_GRAPHS: document_to_dict(HuntDocument.single(graph))[KEY_GRAPHS],
-        KEY_WORKSPACE: workspace_to_dict(workspace),
-    }
+    # The API's single graph maps to the document's main graph; its pool is keyed there by id
+    # (omitted entirely when empty, to keep the file clean). document_to_dict emits both.
+    doc = HuntDocument(
+        graphs={DEFAULT_GRAPH_ID: graph},
+        unplaced={DEFAULT_GRAPH_ID: pool} if pool else {},
+    )
+    document = {**document_to_dict(doc), KEY_WORKSPACE: workspace_to_dict(workspace)}
     Path(path).write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"saved": True}
 

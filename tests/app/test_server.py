@@ -106,6 +106,52 @@ def test_put_persists_workspace_positions(tmp_path, monkeypatch) -> None:
     assert reloaded["views"][view_id]["positions"]["start"] == {"x": 999.0, "y": 42.0}
 
 
+def test_get_returns_empty_pool_when_file_has_none(tmp_path, monkeypatch) -> None:
+    b = GraphBuilder()
+    b.node("start")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+    assert client.get("/api/graph").json()["unplaced"] == []
+
+
+def test_get_exposes_seeded_unplaced_pool(tmp_path, monkeypatch) -> None:
+    # A hunt file whose document carries a loose-artifact pool surfaces it on GET.
+    b = GraphBuilder()
+    b.node("start")
+    doc = HuntDocument(
+        graphs={"main": b.build()},
+        unplaced={"main": (TextArtifact("loose", id="u1"),)},
+    )
+    path = tmp_path / "hunt.json"
+    path.write_text(to_json(doc), encoding="utf-8")
+    monkeypatch.setenv("PUZZ_GRAPH", str(path))
+
+    pool = client.get("/api/graph").json()["unplaced"]
+    assert [a["id"] for a in pool] == ["u1"]
+    assert pool[0]["payload"]["text"] == "loose"
+
+
+def test_put_persists_unplaced_pool(tmp_path, monkeypatch) -> None:
+    # The pool survives a load→edit→save→reload cycle (the passthrough that keeps a save
+    # from wiping loose artifacts the editor isn't rendering yet).
+    b = GraphBuilder()
+    b.node("start")
+    _seed_hunt(tmp_path, monkeypatch, b.build())
+
+    from puzzcombinator.artifacts.registry import artifact_to_dict
+
+    body = client.get("/api/graph").json()
+    body["unplaced"] = [artifact_to_dict(TextArtifact("scratch", id="u1"))]
+    saved = client.put(
+        "/api/graph",
+        json={"graph": body["graph"], "unplaced": body["unplaced"], "workspace": body["workspace"]},
+    )
+    assert saved.status_code == 200
+
+    reloaded = client.get("/api/graph").json()["unplaced"]
+    assert [a["id"] for a in reloaded] == ["u1"]
+    assert reloaded[0]["payload"]["text"] == "scratch"
+
+
 def test_put_in_demo_mode_is_rejected(monkeypatch) -> None:
     # With no PUZZ_GRAPH there is nowhere to save; the server says so rather than
     # silently writing the demo somewhere.

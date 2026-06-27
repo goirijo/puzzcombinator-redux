@@ -31,6 +31,7 @@ from puzzcombinator.serialization.schema import (
     KEY_GRAPHS,
     KEY_NODES,
     KEY_SCHEMA_VERSION,
+    KEY_UNPLACED,
     SCHEMA_VERSION,
 )
 
@@ -119,14 +120,27 @@ def graph_from_dict(data: dict[str, Any]) -> Graph:
 
 
 def document_to_dict(doc: HuntDocument) -> dict[str, Any]:
-    """Serialize a whole hunt document (its ``graphs`` map) to a JSON-safe envelope."""
+    """Serialize a whole hunt document (its ``graphs`` map + loose-artifact pool)."""
     return {
         KEY_SCHEMA_VERSION: SCHEMA_VERSION,
         KEY_GRAPHS: {gid: _block_to_dict(g) for gid, g in doc.graphs.items()},
+        KEY_UNPLACED: {
+            gid: [artifact_to_dict(a) for a in pool] for gid, pool in doc.unplaced.items()
+        },
     }
 
 
 def document_from_dict(data: dict[str, Any]) -> HuntDocument:
-    """Deserialize a hunt document produced by :func:`document_to_dict`."""
+    """Deserialize a hunt document produced by :func:`document_to_dict`.
+
+    The ``unplaced`` pool is read additively — a document saved before it existed
+    simply has no pool, which deserializes to an empty one.
+    """
     _assert_current_version(data)
-    return HuntDocument(graphs={gid: _block_from_dict(g) for gid, g in data[KEY_GRAPHS].items()})
+    return HuntDocument(
+        graphs={gid: _block_from_dict(g) for gid, g in data[KEY_GRAPHS].items()},
+        unplaced={
+            gid: tuple(artifact_from_dict(a) for a in pool)
+            for gid, pool in data.get(KEY_UNPLACED, {}).items()
+        },
+    )

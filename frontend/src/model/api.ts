@@ -4,7 +4,7 @@
 // using the `flow.ts` projection. The wire carries both channels as explicit siblings, never
 // mixed — losing `workspace` loses only how things are drawn, never the hunt.
 
-import type { GraphBlockDTO } from './graph'
+import type { ArtifactDTO, GraphBlockDTO } from './graph'
 import {
   toFlowEdges,
   toFlowNodes,
@@ -18,16 +18,23 @@ import { activeView, type PositionDTO, type WorkspaceDTO } from './workspace'
 /** The auto-arrange orientations the backend accepts (echoes its `Orientation` Literal). */
 export type Orientation = 'horizontal' | 'vertical'
 
-/** The full `GET /api/graph` envelope: the two channels as explicit siblings. */
+/** The full `GET /api/graph` envelope: the two channels as explicit siblings.
+ *
+ * `unplaced` is the drawn graph's *loose-artifact pool* — created-but-not-yet-placed
+ * artifacts. It's hunt data (it rides the graph channel, not the workspace), carried as a
+ * flat list because the API is single-graph. The editor doesn't render it yet; it's threaded
+ * through load→save so a save can't wipe a pool stored in the file. */
 export interface GraphResponseDTO {
   schema_version: string
   graph: GraphBlockDTO
+  unplaced: ArtifactDTO[]
   workspace: WorkspaceDTO
 }
 
 /** The `PUT /api/graph` body: both channels back, the way the backend composes them. */
 export interface SaveRequestDTO {
   graph: GraphBlockDTO
+  unplaced: ArtifactDTO[]
   workspace: WorkspaceDTO
 }
 
@@ -109,11 +116,14 @@ export function toFlowGraph(res: GraphResponseDTO): {
 export function buildSaveRequest(
   nodes: HuntFlowNode[],
   edges: HuntFlowEdge[],
+  unplaced: ArtifactDTO[],
   workspace: WorkspaceDTO,
 ): SaveRequestDTO {
   const active = activeView(workspace)
   const views = active
     ? { ...workspace.views, [active.id]: { ...active.view, positions: toPositions(nodes) } }
     : workspace.views
-  return { graph: toGraphBlock(nodes, edges), workspace: { ...workspace, views } }
+  // `unplaced` passes through unchanged — the editor doesn't edit the pool yet, but sending it
+  // back keeps a save from dropping artifacts the file already holds.
+  return { graph: toGraphBlock(nodes, edges), unplaced, workspace: { ...workspace, views } }
 }

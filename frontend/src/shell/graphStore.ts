@@ -26,6 +26,7 @@ import { create } from 'zustand'
 import { temporal } from 'zundo'
 
 import { applyPositions, type HuntFlowEdge, type HuntFlowNode, type NodeFields } from '../model/flow'
+import type { ArtifactDTO } from '../model/graph'
 import type { PositionDTO } from '../model/workspace'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
 
@@ -35,8 +36,12 @@ const HISTORY_DEBOUNCE_MS = 350
 export interface GraphState {
   nodes: HuntFlowNode[]
   edges: HuntFlowEdge[]
-  /** Replace the whole graph (initial load). Caller clears history afterwards. */
-  loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[]) => void
+  // The loose-artifact pool — hunt data, but not yet rendered or edited in the UI. It's held
+  // here (with the rest of the hunt data) purely so it survives load→save; it's intentionally
+  // left out of `partialize` until pool editing lands and needs undo (Phase 3+).
+  unplaced: ArtifactDTO[]
+  /** Replace the whole graph + pool (initial load). Caller clears history afterwards. */
+  loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[], unplaced: ArtifactDTO[]) => void
   /** Patch one node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
   /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
@@ -51,7 +56,8 @@ export const useGraphStore = create<GraphState>()(
     (set, get) => ({
       nodes: [],
       edges: [],
-      loadGraph: (nodes, edges) => set({ nodes, edges }),
+      unplaced: [],
+      loadGraph: (nodes, edges, unplaced) => set({ nodes, edges, unplaced }),
       updateNode: (id, patch) =>
         set({
           nodes: get().nodes.map((n) =>

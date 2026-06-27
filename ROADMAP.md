@@ -66,8 +66,25 @@ which is the active frontier.
 
 ## Artifacts on the canvas
 
-- **A canvas representation for artifacts** that can be dragged onto edges. Open design
-  question: how to handle an artifact that appears on more than one edge.
+- **A canvas representation for artifacts** that can be dragged onto edges. *(Design
+  decided 2026-06-27; build in progress.)* **Storage:** loose (unplaced) artifacts live in
+  a per-graph pool — a new `unplaced` field on `Graph`, beside `nodes`/`edges` — and
+  **propagate to every view** of that graph; their *positions* are per-view (in `View`,
+  with auto-layout fallback), exactly like nodes. Placement moves an artifact from
+  `Graph.unplaced` into an `edge.content`; deleting an edge detaches its artifacts back to
+  the pool. **Frontend invariant:** the React Flow element id must be distinct from the
+  domain artifact id (e.g. `loose:{id}` / `{edgeId}:{id}`), so one artifact can render in
+  several places — this is also what keeps the normalization below cheap.
+- **Normalize artifacts into a document-level store (future).** The chosen route above
+  *embeds* artifacts in each `edge.content`, so the same artifact id on several edges is
+  several equal copies: "appears on many edges" works (already supported today), but
+  "edit once → all instances update" does not. The cleaner endgame is a normalized
+  artifact table at the `HuntDocument` level (sibling of `graphs`) with edges/pool holding
+  **id references** — giving true single-instance sharing and edit-propagation (the "one
+  key, many locks" case). Deferred until edit-propagation is a felt need. Bounded refactor
+  (touches `Edge.content`, the codec, and the binder's edge-reading code in
+  `required_inputs`/`produced_outputs`/`Section.from_node`); no data migration since
+  schemas are regenerated, not migrated.
 - **Artifact creation, two paths.** One rail command → a puzzle/artifact *generator*;
   a separate rail command → make an *individual* artifact.
 - **Artifact preview.** Clicking an artifact renders its HTML preview.

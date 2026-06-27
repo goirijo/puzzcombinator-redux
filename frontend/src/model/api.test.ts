@@ -21,6 +21,7 @@ const RES: GraphResponseDTO = {
     ],
     edges: [],
   },
+  unplaced: [{ type: 'text', id: 'u1', name: 'text', payload: { text: 'loose' } }],
   workspace: WS,
 }
 
@@ -36,7 +37,7 @@ describe('buildSaveRequest (save: split the channels)', () => {
   it('drops positions from the graph block and refreshes the active view from the nodes', () => {
     const { nodes, edges } = toFlowGraph(RES)
     const moved = nodes.map((n) => (n.id === 'n2' ? { ...n, position: { x: 99, y: 88 } } : n))
-    const body = buildSaveRequest(moved, edges, WS)
+    const body = buildSaveRequest(moved, edges, RES.unplaced, WS)
 
     // The graph block is hunt data only — no positions.
     expect(body.graph.nodes.find((n) => n.id === 'n1')).toEqual({
@@ -53,6 +54,12 @@ describe('buildSaveRequest (save: split the channels)', () => {
     // The rest of the workspace is preserved untouched.
     expect(body.workspace.active_tab).toBe('t1')
     expect(body.workspace.tabs).toEqual(WS.tabs)
+  })
+
+  it('passes the loose-artifact pool through unchanged', () => {
+    const { nodes, edges } = toFlowGraph(RES)
+    const body = buildSaveRequest(nodes, edges, RES.unplaced, WS)
+    expect(body.unplaced).toEqual(RES.unplaced)
   })
 })
 
