@@ -32,11 +32,17 @@ export function isIdentityViewport(vp: ViewportDTO): boolean {
 /**
  * A view (a *buffer*): an arrangement of one graph — node positions and a title. Framing
  * (pan/zoom) lives on the tab, not here, so two tabs on one view can be framed differently.
+ *
+ * `show_unplaced` is a per-view *display* choice: whether this view draws the graph's unplaced
+ * (loose) artifacts. The pool is hunt data shared by every view of the graph; this flag only
+ * governs whether *this* arrangement renders it — so two views can differ solely in showing the
+ * pool or not (the visualization analog of per-view node collapse).
  */
 export interface ViewDTO {
   graph: string
   title: string
   positions: Record<string, PositionDTO>
+  show_unplaced: boolean
 }
 
 /**
@@ -108,6 +114,13 @@ export function renameView(ws: WorkspaceDTO, viewId: string, title: string): Wor
   const view = ws.views[viewId]
   if (!view) return ws
   return { ...ws, views: { ...ws.views, [viewId]: { ...view, title } } }
+}
+
+/** Set a view's "draw the unplaced pool?" flag. Immutable; a no-op when the view is missing. */
+export function setShowUnplaced(ws: WorkspaceDTO, viewId: string, value: boolean): WorkspaceDTO {
+  const view = ws.views[viewId]
+  if (!view) return ws
+  return { ...ws, views: { ...ws.views, [viewId]: { ...view, show_unplaced: value } } }
 }
 
 /**

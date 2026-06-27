@@ -14,8 +14,8 @@ function node(id: string, x: number, y: number): HuntFlowNode {
 function makeWorkspace(): WorkspaceDTO {
   return {
     views: {
-      v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } },
-      v2: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } } },
+      v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } }, show_unplaced: true },
+      v2: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } }, show_unplaced: true },
     },
     tabs: [
       { id: 't1', view: 'v1', viewport: { x: 0, y: 0, zoom: 1 } },
@@ -82,6 +82,19 @@ describe('renameView', () => {
     useWorkspaceStore.getState().renameView('v2', 'Cellar')
     expect(useWorkspaceStore.getState().workspace!.views.v2.title).toBe('Cellar')
     expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 }) // unmoved
+  })
+})
+
+describe('setShowUnplaced', () => {
+  it('flips a view’s flag without moving the canvas', () => {
+    useWorkspaceStore.getState().setShowUnplaced('v1', false)
+    expect(useWorkspaceStore.getState().workspace!.views.v1.show_unplaced).toBe(false)
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 }) // unmoved
+  })
+
+  it('is per-view — flipping one leaves the others alone', () => {
+    useWorkspaceStore.getState().setShowUnplaced('v1', false)
+    expect(useWorkspaceStore.getState().workspace!.views.v2.show_unplaced).toBe(true)
   })
 })
 
@@ -181,7 +194,7 @@ describe('previewTab / clearPreview', () => {
   it('previewing a tab on the SAME view keeps the live (un-flushed) edit', () => {
     // Two tabs on one view, active t1; edit the view live, then hover the other tab on it.
     useWorkspaceStore.getState().loadWorkspace({
-      views: { v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } } },
+      views: { v1: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } }, show_unplaced: true } },
       tabs: [
         { id: 't1', view: 'v1', viewport: { x: 0, y: 0, zoom: 1 } },
         { id: 't2', view: 'v1', viewport: { x: 9, y: 9, zoom: 2 } },
@@ -198,8 +211,8 @@ describe('previewTab / clearPreview', () => {
     // t2 (→ shows B), then hover t1 (same view as active) — must snap back to the live A edit.
     useWorkspaceStore.getState().loadWorkspace({
       views: {
-        A: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } } },
-        B: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } } },
+        A: { graph: 'main', title: 'A', positions: { n1: { x: 0, y: 0 } }, show_unplaced: true },
+        B: { graph: 'main', title: 'B', positions: { n1: { x: 500, y: 500 } }, show_unplaced: true },
       },
       tabs: [
         { id: 't1', view: 'A', viewport: { x: 0, y: 0, zoom: 1 } },

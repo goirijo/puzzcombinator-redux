@@ -13,6 +13,7 @@ import {
   toGraphBlock,
   toPool,
   toPositions,
+  withLooseArtifactsHidden,
 } from './flow'
 import type { PositionDTO } from './workspace'
 
@@ -161,6 +162,15 @@ describe('loose artifacts on the canvas', () => {
   it('toGraphBlock drops artifact nodes from the hunt-data block', () => {
     const mixed = [...toFlowNodes(GRAPH.nodes, {}), ...toFlowArtifacts(POOL, {})]
     expect(toGraphBlock(mixed, []).nodes.map((n) => n.id)).toEqual(['n1', 'n2', 'n3'])
+  })
+
+  it('withLooseArtifactsHidden flags only loose artifacts (and only when hiding)', () => {
+    const mixed = [...toFlowNodes(GRAPH.nodes, {}), ...toFlowArtifacts(POOL, {})]
+    // Not hiding: the exact same array reference passes through (no needless re-render churn).
+    expect(withLooseArtifactsHidden(mixed, false)).toBe(mixed)
+    const hidden = withLooseArtifactsHidden(mixed, true)
+    expect(hidden.filter((n) => n.type === 'hunt').every((n) => !n.hidden)).toBe(true)
+    expect(hidden.filter((n) => n.type === 'artifact').every((n) => n.hidden)).toBe(true)
   })
 
   it('makeLooseArtifact builds a non-connectable node with a pre-baked, named text artifact', () => {

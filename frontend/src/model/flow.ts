@@ -196,6 +196,17 @@ export function toPool(nodes: CanvasNode[]): ArtifactDTO[] {
   return nodes.filter(isLooseArtifactNode).map((n) => n.data.artifact)
 }
 
+/**
+ * Display projection for the hide-loose-artifacts toggle. When `hidden`, flag loose-artifact
+ * nodes so React Flow keeps them (positions intact) but doesn't draw them; hunt nodes pass
+ * through untouched. Purely a *view* transform — the store and the save always hold the full,
+ * unflagged set, so hiding never touches the pool or the persisted file.
+ */
+export function withLooseArtifactsHidden(nodes: CanvasNode[], hidden: boolean): CanvasNode[] {
+  if (!hidden) return nodes
+  return nodes.map((n) => (isLooseArtifactNode(n) ? { ...n, hidden: true } : n))
+}
+
 /** Convert edge DTOs into React Flow edges (labeled with their artifact count). */
 export function toFlowEdges(edges: EdgeDTO[]): HuntFlowEdge[] {
   return edges.map((e) => ({

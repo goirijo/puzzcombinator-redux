@@ -395,6 +395,13 @@
   border: 1px solid var(--shell-border);
   padding: 6px 10px;
 }
+/* A per-view display setting: checkbox + label on one row. */
+.view-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
 /* Side-by-side Horizontal / Vertical buttons, each taking half the row. */
 .view-panel__arrange {
   display: flex;

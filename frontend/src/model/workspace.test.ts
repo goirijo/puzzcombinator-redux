@@ -9,14 +9,15 @@ import {
   deleteView,
   renameView,
   setActiveTabView,
+  setShowUnplaced,
   type WorkspaceDTO,
 } from './workspace'
 
 const VP = { x: 0, y: 0, zoom: 1 }
 const WS: WorkspaceDTO = {
   views: {
-    v1: { graph: 'main', title: 'Main', positions: { a: { x: 1, y: 2 } } },
-    v2: { graph: 'main', title: 'Cellar', positions: {} },
+    v1: { graph: 'main', title: 'Main', positions: { a: { x: 1, y: 2 } }, show_unplaced: true },
+    v2: { graph: 'main', title: 'Cellar', positions: {}, show_unplaced: false },
   },
   tabs: [
     { id: 't1', view: 'v1', viewport: VP },
@@ -68,7 +69,7 @@ describe('setActiveTabView', () => {
 
 describe('createView', () => {
   it('adds the view under a fresh id without touching existing views or tabs', () => {
-    const view = { graph: 'main', title: 'Attic', positions: {} }
+    const view = { graph: 'main', title: 'Attic', positions: {}, show_unplaced: true }
     const { workspace, viewId } = createView(WS, view)
     expect(workspace.views[viewId]).toEqual(view)
     expect(Object.keys(workspace.views)).toHaveLength(3)
@@ -77,8 +78,25 @@ describe('createView', () => {
   })
 
   it('generates distinct ids on repeated calls', () => {
-    const view = { graph: 'main', title: 'x', positions: {} }
+    const view = { graph: 'main', title: 'x', positions: {}, show_unplaced: true }
     expect(createView(WS, view).viewId).not.toBe(createView(WS, view).viewId)
+  })
+})
+
+describe('setShowUnplaced', () => {
+  it('flips only the named view’s flag', () => {
+    const next = setShowUnplaced(WS, 'v1', false)
+    expect(next.views.v1.show_unplaced).toBe(false)
+    expect(next.views.v2).toEqual(WS.views.v2) // untouched
+  })
+
+  it('does not mutate the input', () => {
+    setShowUnplaced(WS, 'v1', false)
+    expect(WS.views.v1.show_unplaced).toBe(true)
+  })
+
+  it('is a no-op for a missing view (returns the input unchanged)', () => {
+    expect(setShowUnplaced(WS, 'nope', false)).toBe(WS)
   })
 })
 

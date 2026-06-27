@@ -10,13 +10,13 @@
 // ride the graph store's React Flow nodes during editing — split apart only at save. A second
 // store for independent move-undo is deferred until it has a UI.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { type OnSelectionChangeParams } from '@xyflow/react'
 import { useStore } from 'zustand'
 
 import { buildSaveRequest, fetchGraph, saveGraph, toFlowGraph } from '../model/api'
-import type { CanvasNode, HuntFlowEdge } from '../model/flow'
+import { withLooseArtifactsHidden, type CanvasNode, type HuntFlowEdge } from '../model/flow'
 import { activeView } from '../model/workspace'
 import { CommandRail } from './CommandRail'
 import { MenuBar } from './MenuBar'
@@ -152,6 +152,15 @@ export function Shell() {
     savedSnapshot !== null &&
     JSON.stringify(buildSaveRequest(nodes, edges, workspace)) !== savedSnapshot
   const panelProps = { nodes, edges, selection, updateNode }
+  // What the canvas actually draws: a projection of the store nodes that honors the *displayed*
+  // view's per-view "show unplaced?" flag (the previewed view while hovering, else the active
+  // one — so a hover-preview of a hide-pool view previews it hidden). The store/save always keep
+  // the full set; this only changes what's rendered. See withLooseArtifactsHidden.
+  const showUnplaced = displayedTab ? (workspace?.views[displayedTab.view]?.show_unplaced ?? true) : true
+  const displayNodes = useMemo(
+    () => withLooseArtifactsHidden(nodes, !showUnplaced),
+    [nodes, showUnplaced],
+  )
 
   return (
     <div className="app">
@@ -194,7 +203,7 @@ export function Shell() {
               )}
               <Panel id="canvas">
                 <Viewport
-                  nodes={nodes}
+                  nodes={displayNodes}
                   edges={edges}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}

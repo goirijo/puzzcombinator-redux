@@ -30,7 +30,9 @@ def _sample_workspace() -> Workspace:
                 title="Main",
                 positions={"start": Position(60.0, 60.0), "end": Position(280.0, 60.0)},
             ),
-            "v2": View(graph="main", title="Cellar", positions={}),
+            # A second view of the SAME graph that hides the unplaced pool — the per-view
+            # display distinction this flag exists for.
+            "v2": View(graph="main", title="Cellar", positions={}, show_unplaced=False),
         },
         # Two tabs on the SAME view, framed differently — the whole point of per-tab viewport.
         tabs=[
@@ -92,3 +94,17 @@ def test_positions_and_viewport_preserved() -> None:
     assert ws.tabs[0].viewport == Viewport(-120.0, 40.0, 0.85)  # framing on the tab
     assert ws.views["v2"].positions == {}
     assert ws.tabs[1].viewport == Viewport(0.0, 0.0, 1.0)  # defaulted
+
+
+def test_show_unplaced_preserved_per_view() -> None:
+    ws = workspace_from_dict(workspace_to_dict(_sample_workspace()))
+    assert ws.views["v1"].show_unplaced is True  # defaulted on construction
+    assert ws.views["v2"].show_unplaced is False  # the hide-pool view round-trips
+
+
+def test_view_without_show_unplaced_defaults_to_shown() -> None:
+    # Back-compat / minimal docs: a view dict written before this flag existed loads as
+    # "show the pool" rather than failing — same forgiving read as a missing tab viewport.
+    text = '{ "views": { "v1": { "graph": "main", "title": "Main" } }, "tabs": [] }'
+    ws = workspace_from_json(text)
+    assert ws.views["v1"].show_unplaced is True

@@ -23,6 +23,7 @@ import {
   IDENTITY_VIEWPORT,
   renameView as retitleView,
   setActiveTabView,
+  setShowUnplaced as setViewShowUnplaced,
   type PositionDTO,
   type ViewportDTO,
   type WorkspaceDTO,
@@ -46,6 +47,8 @@ interface WorkspaceState {
   deleteTab: (tabId: string) => void
   /** Retitle a view (metadata only — no canvas change, not undoable). */
   renameView: (viewId: string, title: string) => void
+  /** Set a view's "draw the unplaced pool?" flag (per-view display state, not undoable). */
+  setShowUnplaced: (viewId: string, value: boolean) => void
   /** Delete a view; if it was the one on screen, land the active tab on a survivor. */
   deleteView: (viewId: string) => void
   /** Record the current pan/zoom into the active tab (the camera moved on the canvas). */
@@ -141,6 +144,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         graph: current?.view.graph ?? 'main',
         title: `View ${count}`,
         positions,
+        // A new view copies the current arrangement, so inherit its show-unplaced choice too.
+        show_unplaced: current?.view.show_unplaced ?? true,
       })
       // Repoint the active tab at the new view; the tab keeps its own framing, so the
       // (current-seeded) view shows with the current camera — no jump.
@@ -152,6 +157,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const ws = get().workspace
       if (!ws) return
       set({ workspace: retitleView(ws, viewId, title) })
+    },
+
+    // A pure display flag on the view — no positions move, so (like rename) no flush, no
+    // reproject, no history reset. The canvas re-derives what it draws from the new flag.
+    setShowUnplaced: (viewId, value) => {
+      const ws = get().workspace
+      if (!ws) return
+      set({ workspace: setViewShowUnplaced(ws, viewId, value) })
     },
 
     deleteView: committing((viewId) => {

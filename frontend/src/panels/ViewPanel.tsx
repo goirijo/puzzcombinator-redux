@@ -23,6 +23,7 @@ export function ViewPanel() {
   const createView = useWorkspaceStore((s) => s.createView)
   const renameView = useWorkspaceStore((s) => s.renameView)
   const deleteView = useWorkspaceStore((s) => s.deleteView)
+  const setShowUnplaced = useWorkspaceStore((s) => s.setShowUnplaced)
   // Disable the arrange buttons mid-request; a failed layout (e.g. a cycle) is rare and logged,
   // matching how Shell.tsx surfaces a failed load.
   const [arranging, setArranging] = useState(false)
@@ -63,7 +64,8 @@ export function ViewPanel() {
 
   if (!workspace) return <p className="inspector__empty">Loading…</p>
 
-  const activeId = activeView(workspace)?.id
+  const active = activeView(workspace)
+  const activeId = active?.id
   const views = Object.entries(workspace.views)
 
   return (
@@ -119,6 +121,22 @@ export function ViewPanel() {
           + New view
         </button>
       </section>
+
+      {active && (
+        <section className="view-panel__section">
+          <h3 className="inspector__heading">Display</h3>
+          {/* Per-view: whether this arrangement draws the graph's unplaced (loose) artifacts.
+              The pool is shared hunt data; this only changes what THIS view renders. */}
+          <label className="view-panel__toggle">
+            <input
+              type="checkbox"
+              checked={active.view.show_unplaced}
+              onChange={(e) => setShowUnplaced(active.id, e.target.checked)}
+            />
+            Show unplaced artifacts
+          </label>
+        </section>
+      )}
 
       <section className="view-panel__section">
         <h3 className="inspector__heading">Auto-arrange</h3>

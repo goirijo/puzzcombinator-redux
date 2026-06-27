@@ -42,6 +42,7 @@ KEY_ACTIVE_TAB = "active_tab"
 KEY_VIEW_GRAPH = "graph"  # a view's reference to the graph id it draws
 KEY_VIEW_TITLE = "title"
 KEY_VIEW_POSITIONS = "positions"
+KEY_VIEW_SHOW_UNPLACED = "show_unplaced"  # per-view: draw the graph's unplaced artifacts?
 KEY_TAB_ID = "id"
 KEY_TAB_VIEW = "view"  # a tab's reference to the view id it displays
 KEY_VIEWPORT = "viewport"
@@ -78,11 +79,18 @@ class View:
     :class:`Position` for nodes the designer has placed; nodes absent from the map fall
     back to auto-layout. Framing (pan/zoom) lives on the :class:`Tab`, not here, so two
     tabs on one view can each remember their own camera.
+
+    ``show_unplaced`` is a per-view *display* choice: whether this view draws the
+    graph's unplaced (loose) artifacts. The pool itself belongs to the hunt data and is
+    shared by every view of the graph; this flag only governs whether *this* arrangement
+    renders it — so two views of one graph can differ solely in showing the pool or not
+    (the visualization analog of per-view node collapse). Defaults to showing them.
     """
 
     graph: str
     title: str
     positions: dict[str, Position] = field(default_factory=dict)
+    show_unplaced: bool = True
 
 
 @dataclass
@@ -134,6 +142,7 @@ def _view_to_dict(view: View) -> dict[str, Any]:
         KEY_VIEW_GRAPH: view.graph,
         KEY_VIEW_TITLE: view.title,
         KEY_VIEW_POSITIONS: {nid: _position_to_dict(p) for nid, p in view.positions.items()},
+        KEY_VIEW_SHOW_UNPLACED: view.show_unplaced,
     }
 
 
@@ -144,6 +153,9 @@ def _view_from_dict(data: dict[str, Any]) -> View:
         positions={
             nid: _position_from_dict(p) for nid, p in data.get(KEY_VIEW_POSITIONS, {}).items()
         },
+        # Additive + defaulted: a view from a file written before this flag existed loads as
+        # "show them" rather than failing — same forgiving read as the tab viewport above.
+        show_unplaced=data.get(KEY_VIEW_SHOW_UNPLACED, True),
     )
 
 
