@@ -151,6 +151,18 @@ which is the active frontier.
 
 - **Status window** surfacing warnings about a bad authoring state (cycles in the graph,
   disjoint/orphaned nodes, etc.). Authoring-only — still no answer-checking.
+- **Graceful save-validation errors that help the user fix the problem.** Today a save that
+  fails validation (e.g. a cycle — the codec's `validate_structure` rejects it) comes back from
+  the backend as a 422 whose raw `detail` string is dumped into a `<span>` in the menu bar
+  (`MenuBar`'s `menu-bar__err`). It's accurate but ugly and unhelpful: it doesn't say *which*
+  nodes/edges form the cycle or how to resolve it, and the user only finds out at save time.
+  Wanted: (1) catch the failure and present it clearly (a dismissible message/panel, not a
+  cramped menu-bar span), (2) **point at the offending elements** — parse/return the cycle's
+  node ids and highlight them on the canvas — so the fix is obvious, and ideally (3) surface it
+  *proactively* (pre-save, via the **Status window** above) rather than only on a failed save.
+  Pairs with the deferred-audit "narrower exception handling (drop the catch-all 422)" item and
+  with returning structured validation errors (offending ids, not just a message) from the
+  codec/`app` seam.
 
 ## Polish & small enhancements
 
