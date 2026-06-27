@@ -163,10 +163,21 @@ grouped backlog. It is a *tracking* doc, not a work queue: nothing there enters
 development until a prompt makes it the explicit subject (the `build-only-whats-asked`
 rule). New "nice to have" ideas get parked there, not coded speculatively.
 
-In short, the GUI editor is the active frontier: the canvas-interaction milestone (node
-dragging with positions persisted to the workspace channel in
-`visualization/workspace.py`, pan/zoom, drawing connections — React Flow), persisting UI
-state alongside the graph, and a browser file-picker to replace the `PUZZ_GRAPH` env var. Wiring "generate a binder from the
-editor" is now unblocked (the binder is real). The user is **new to frontend** — pace
-GUI work incrementally. Later layers (more puzzle types, GUI authoring, the
-tracking/monitoring layer where answer-checking would live) stay deferred unless asked.
+The GUI editor is the active frontier, and the **content-editing milestone has landed**:
+beyond drawing the graph (node drag with per-view positions persisted, pan/zoom, floating
+edges — all done), the editor now **creates and deletes** nodes/edges/loose artifacts,
+**moves artifacts between the unplaced pool and edges** (deleting an edge detaches its
+artifacts back to the pool), and has a **per-view "show unplaced artifacts" toggle** — all
+undoable. Storage for this is the `HuntDocument.unplaced` pool (per graph id) and the
+workspace `View.show_unplaced` flag. The frontend grew to three Zustand stores (`graphStore`
+undoable, `workspaceStore`, `selectionStore`); `PanelProps` was retired — panels subscribe to
+stores. Create/delete buttons currently live in a scratch **TESTING** rail command; placement
+buttons live in the GRAPH inspector.
+
+Likely next steps: the **drag-onto-edge gesture** for placement (buttons exist; the gesture
+needs edge hit-testing), a **browser file-picker** to replace the `PUZZ_GRAPH` env var,
+**"empty project by default"** (drop demo mode), formalizing the TESTING sections into real
+commands, and wiring **"generate a binder from the editor"** (unblocked — the binder is real).
+The user is **new to frontend** — pace GUI work incrementally. Later layers (more puzzle types,
+GUI authoring, the tracking/monitoring layer where answer-checking would live) stay deferred
+unless asked.

@@ -29,11 +29,19 @@ fallback an editor uses for any node a designer has **not** placed by hand.
 The **second persisted channel**, alongside hunt data. The mental model is **vim**:
 
 - A **view** is a *buffer* — a created, persistent arrangement of one graph: node
-  `positions` and a `title`. It exists whether or not anything displays it.
+  `positions`, a `title`, and a `show_unplaced` flag. It exists whether or not anything
+  displays it.
 - A **tab** is a *window* — a display slot referencing a view by id, carrying its own
   `viewport` (pan/zoom). Several tabs may show one view; closing a tab doesn't destroy
   the view.
 - A **`Workspace`** is the whole channel: `{ views, tabs, active_tab }`.
+
+A view's **`show_unplaced`** (bool, default `True`) is a per-view *display* choice: whether
+that view draws the graph's unplaced (loose) artifact pool. The pool itself is hunt data
+(`HuntDocument.unplaced`) shared by every view of the graph; this flag only governs whether
+*this* arrangement renders it — so two views of one graph can differ solely in showing the
+pool or not (the visualization analog of per-view node collapse). It is rendering state, not
+hunt data.
 
 **Channel independence is the invariant.** `workspace.py` references nodes by **opaque
 id**, never imports the hunt-data model, and has its **own self-contained codec**
@@ -48,7 +56,8 @@ The on-disk shape:
 ```jsonc
 "workspace": {
   "views": { "<view_id>": { "graph": "<graph_id>", "title": "<name>",
-                            "positions": { "<node_id>": {"x": 0, "y": 0} } } },
+                            "positions": { "<node_id>": {"x": 0, "y": 0} },
+                            "show_unplaced": true } },
   "tabs":  [ { "id": "<tab_id>", "view": "<view_id>",
                "viewport": {"x": 0, "y": 0, "zoom": 1} } ],
   "active_tab": "<tab_id>"

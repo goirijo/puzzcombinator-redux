@@ -115,10 +115,14 @@ Two things make this seam durable:
   geo-coordinates) needs no migration; the schema version bumps only for *non-additive*
   changes.
 - **Two separate channels, never mixed.** *Hunt data* (the graph itself — nodes, edges,
-  artifacts) is the source of truth, owned by `serialization` + `HuntDocument`. *Workspace
-  state* (purely where/how a hunt is *drawn* — node x/y, which views and tabs are open) is
-  a separate channel owned by `visualization/workspace.py`, with its own self-contained
-  codec that references nodes by opaque id and never imports the hunt-data model.
+  artifacts — plus `HuntDocument.unplaced`, the per-graph pool of loose artifacts a designer
+  has created but not yet placed) is the source of truth, owned by `serialization` +
+  `HuntDocument`. The pool lives on the **document**, not the pure `Graph`, so it propagates
+  to every view of its graph without polluting the value-equal graph model. *Workspace state*
+  (purely where/how a hunt is *drawn* — node x/y, which views and tabs are open, whether a
+  view draws the unplaced pool) is a separate channel owned by `visualization/workspace.py`,
+  with its own self-contained codec that references nodes by opaque id and never imports the
+  hunt-data model.
   `serialization` stays UI-ignorant; the `app` layer composes the two into one saved file
   (they *could* be two files — the codecs are independent). A hunt is fully valid with no
   workspace state; the editor falls back to the auto-`layout`.

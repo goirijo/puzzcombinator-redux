@@ -52,12 +52,27 @@ which is the active frontier.
   *single invisible handle covering the whole node* (React Flow's "Easy Connect" pattern) +
   `ConnectionMode.Loose`, so a designer starts a drag from anywhere on a node and the resulting
   edge floats like every other edge. Part of the near-term **Canvas interaction** milestone.
-- **Node creation.** A way to create new nodes (and artifacts — see below) from the UI.
+- **Node creation.** *(Built.)* Create new nodes (and loose artifacts — see below) from the
+  UI; currently bare buttons in the scratch TESTING command, to be formalized into a real
+  command (EDIT) once settled. Undoable via the `createNode`/`createLooseArtifact` store
+  actions; ids are opaque uuids minted client-side.
+- **Delete nodes / artifacts / edges.** *(Built.)* Delete via React Flow's native
+  Delete/Backspace (a node cascades its edges). Deleting an edge — or a node that owned it —
+  **detaches that edge's artifacts back into the pool** at the edge midpoint rather than
+  destroying them (`detachEdges`). Undoable. (Today this leans on React Flow's built-in key
+  handling; explicit keybindings for everything are a later pass.)
 - **Smarter spawn placement for new nodes/artifacts.** Today a created node spawns at a
   fixed point with a small cascade offset (deliberately clunky). Give creation a real notion
   of *where* things land — e.g. the current viewport center, near the cursor, or offset from
   the selection — so new nodes/artifacts appear in view rather than at a fixed corner. Applies
   to the loose-artifact pool too.
+- **Stagger coincident nodes on auto-arrange.** After an auto-arrange, any canvas nodes that
+  land on the *same* coordinate should be nudged apart by a small offset so it's visible that
+  several occupy one spot, rather than rendering as a single node. The sharp case today: the
+  arrange request is built from `toGraphBlock`, which drops loose-artifact nodes — so the
+  layout returns no position for them and they all fall back to `(0,0)` and stack. Two angles
+  to consider: give the unplaced pool its own arranged placement (a column/grid beside the
+  graph), and/or a general post-arrange pass that de-overlaps any coincident positions.
 - **Custom node coloring.** Author-chosen colors per node. (Note: an earlier *automatic*
   start/middle/end role-coloring was rejected — coloring should be explicit author intent,
   not a derived, backend-absent property.)
@@ -71,15 +86,20 @@ which is the active frontier.
 
 ## Artifacts on the canvas
 
-- **A canvas representation for artifacts** that can be dragged onto edges. *(Design
-  decided 2026-06-27; build in progress.)* **Storage:** loose (unplaced) artifacts live in
-  a per-graph pool — a new `unplaced` field on `Graph`, beside `nodes`/`edges` — and
-  **propagate to every view** of that graph; their *positions* are per-view (in `View`,
-  with auto-layout fallback), exactly like nodes. Placement moves an artifact from
-  `Graph.unplaced` into an `edge.content`; deleting an edge detaches its artifacts back to
-  the pool. **Frontend invariant:** the React Flow element id must be distinct from the
-  domain artifact id (e.g. `loose:{id}` / `{edgeId}:{id}`), so one artifact can render in
-  several places — this is also what keeps the normalization below cheap.
+- **A canvas representation for artifacts.** *(Built.)* Loose (unplaced) artifacts live in a
+  per-graph pool on `HuntDocument` (keyed by graph id), **propagate to every view** of that
+  graph, and render as non-connectable canvas nodes; their *positions* are per-view (in `View`,
+  with auto-layout fallback), like nodes. Placing an artifact moves it from the pool into an
+  `edge.content`; detaching (one artifact, or all when an edge is deleted) returns it to the
+  pool at the edge's midpoint. The React Flow element id is kept distinct from the domain
+  artifact id (`loose:{id}`) so one artifact could later render in several places — which is
+  also what keeps the normalization below cheap.
+- **Drag an artifact onto an edge to place it.** The placement/detach actions are wired and
+  driven by buttons in the GRAPH inspector (select an edge → place from pool / detach). The
+  remaining piece is the gesture: drag a loose-artifact node and drop it on an edge to place
+  it, drag it off to detach. React Flow has no native drop-on-edge, so this needs geometric
+  hit-testing of the drop point against edge paths. The store actions (`placeArtifactOnEdge`/
+  `detachArtifact`) are UI-agnostic, so the drag layer just calls the same machinery.
 - **Normalize artifacts into a document-level store (future).** The chosen route above
   *embeds* artifacts in each `edge.content`, so the same artifact id on several edges is
   several equal copies: "appears on many edges" works (already supported today), but
@@ -106,7 +126,10 @@ which is the active frontier.
   artifacts are document-scoped with their own lifecycle, distinct from graph wiring.
   Value-equality survives — id references are still values.
 - **Artifact creation, two paths.** One rail command → a puzzle/artifact *generator*;
-  a separate rail command → make an *individual* artifact.
+  a separate rail command → make an *individual* artifact. *(Partial:* the individual path has
+  a clunky stub — `createLooseArtifact` drops a pre-baked text artifact into the pool from the
+  TESTING command. Still to do: choosing the artifact type + editing its payload, and the
+  generator path.*)*
 - **Artifact preview.** Clicking an artifact renders its HTML preview.
 - **Grouping artifacts** on the canvas (the model already has `CompositeArtifact`).
 

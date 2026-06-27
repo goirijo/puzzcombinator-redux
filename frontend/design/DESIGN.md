@@ -73,6 +73,13 @@ screen.
    - **A small store** (Zustand — *not* Redux) only when prop-passing gets painful. You'll
      feel when that happens; don't pre-build it.
 
+   *Where this landed:* the editor now has three small, single-concern Zustand stores —
+   `graphStore` (the undoable graph), `workspaceStore` (views/tabs), `selectionStore` (canvas
+   selection) — and panels subscribe to the ones they need rather than receiving props. That's
+   the progression playing out: prop-passing did get painful (a catch-all `PanelProps`), so
+   shared state moved into focused stores. The advice still holds for *new* state — start
+   local, lift, and reach for a store when it earns its place.
+
 ---
 
 ## React Flow is *not* the app — it's one widget inside it

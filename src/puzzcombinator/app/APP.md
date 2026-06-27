@@ -95,8 +95,10 @@ and composes them.
     "nodes": [{ "id", "action", "label", "notes" }],
     "edges": [{ "id", "source", "target", "content": [{ "type", "id", "name", "payload" }] }]
   },
+  "unplaced": [{ "type", "id", "name", "payload" }],         // hunt data: the loose pool
   "workspace": {                                             // UI channel (visualization)
-    "views": { "<view_id>": { "graph", "title", "positions": { "<node_id>": {"x","y"} } } },
+    "views": { "<view_id>": { "graph", "title", "positions": { "<node_id>": {"x","y"} },
+                              "show_unplaced": true } },
     "tabs":  [ { "id", "view", "viewport": {"x","y","zoom"} } ],
     "active_tab": "<tab_id>"
   }
@@ -104,12 +106,15 @@ and composes them.
 ```
 
 `graph` is the graph-level envelope's body (`graph_to_dict(graph)[KEY_GRAPH]`), not the
-document map — the browser draws one graph. `PUT /api/graph` sends the same two channels
-back: `{ "graph": { nodes, edges }, "workspace": { … } }`. The browser never sees
-`Graph`/`Puzzle` objects — only this JSON. That decoupling is what lets the view be
-replaced without touching the model. The saved **file** is the document form
-(`{schema_version, graphs, workspace}`); `server` is the one place that maps between the
-single-graph wire shape and the document-on-disk shape.
+document map — the browser draws one graph. `unplaced` is that graph's loose-artifact pool
+(`HuntDocument.unplaced`) as a **flat list** on the wire, even though on disk the document
+keys it per graph id — because `server` is single-graph. `PUT /api/graph` sends the same
+channels back: `{ "graph": { nodes, edges }, "unplaced": [ … ], "workspace": { … } }`, and
+`server` rebuilds a `HuntDocument` carrying the pool. The browser never sees `Graph`/`Puzzle`
+objects — only this JSON. That decoupling is what lets the view be replaced without touching
+the model. The saved **file** is the document form (`{schema_version, graphs, unplaced,
+workspace}`); `server` is the one place that maps between the single-graph wire shape and the
+document-on-disk shape.
 
 ## The frontend
 

@@ -1,8 +1,10 @@
 # Editor frontend
 
 The UI for the hunt editor: a **React + React Flow** app (built with **Vite**, in
-**TypeScript**) that draws the hunt graph and — soon — lets you edit it. It is a pure
-consumer/producer of the backend's JSON seam; it owns no hunt data of its own.
+**TypeScript**) that draws the hunt graph and lets you edit it — create and delete nodes,
+create loose artifacts, move artifacts between the unplaced pool and edges, switch views, all
+undoable. It is a pure consumer/producer of the backend's JSON seam; it owns no hunt data of
+its own.
 
 The Python backend that serves that seam (the FastAPI app, the graph layout, the
 workspace channel) is documented in
@@ -59,30 +61,34 @@ next to their source (`*.test.ts`).
 | File | What it is |
 | --- | --- |
 | `graph.ts` | The **hunt-data channel** (echoes Python `serialization/`): the wire DTOs `NodeDTO`/`EdgeDTO`/`ArtifactDTO`/`GraphBlockDTO`. Pure data; no drawing. |
-| `workspace.ts` | The **workspace channel** (echoes Python `visualization/`): the UI-state DTOs `WorkspaceDTO`/`ViewDTO`/`TabDTO`/`PositionDTO`/`ViewportDTO`. References nodes by opaque id only. |
-| `flow.ts` | The **bridge** (echoes `visualization/defaults.py`): the React Flow view-model (`HuntFlowNode`/`HuntFlowEdge`, `NodeFields`) + the projection that fuses the two channels — `toFlowNodes`/`toFlowEdges` (load), `toGraphBlock`/`toPositions` (save). The only module that knows both channels. |
-| `api.ts` | The **composition seam** (echoes Python `app/`): `GraphResponseDTO`/`SaveRequestDTO` (both channels as siblings) + `fetchGraph()` / `saveGraph()`. |
+| `workspace.ts` | The **workspace channel** (echoes Python `visualization/`): the UI-state DTOs `WorkspaceDTO`/`ViewDTO`/`TabDTO`/`PositionDTO`/`ViewportDTO` (`ViewDTO` carries the per-view `show_unplaced` flag) + the pure mutations (`setShowUnplaced`, `renameView`, …). References nodes by opaque id only. |
+| `flow.ts` | The **bridge** (echoes `visualization/defaults.py`): the React Flow view-model (`HuntFlowNode`, `LooseArtifactFlowNode`, their union `CanvasNode`, `HuntFlowEdge`, `NodeFields`) and the `CanvasGraph` `{nodes, edges}` pair type, plus the pure transforms — `toFlowNodes`/`toFlowArtifacts`/`toFlowEdges` (load), `toGraphBlock`/`toPool`/`toPositions` (save), and the editing transforms `withArtifactPlaced`/`withArtifactDetached`/`detachedArtifactNodes`/`withLooseArtifactsHidden`. The only module that knows both channels. |
+| `api.ts` | The **composition seam** (echoes Python `app/`): `GraphResponseDTO`/`SaveRequestDTO` (the graph, the `unplaced` pool, and the workspace as siblings) + `fetchGraph()` / `saveGraph()`, and `toFlowGraph`/`buildSaveRequest` (fuse on load, split on save). |
 | `flow.test.ts` | Vitest units for the projection (null↔'' coalescing, round-trip, position extraction). |
 
 **Canvas node components (`src/nodes/`):**
 
 | File | What it is |
 | --- | --- |
-| `HuntNode.tsx` | The **node component**: renders one node's box from its `data`. No style values (class names + `data-role`); carries the two React Flow `Handle`s edges attach to. A new node *type* is another component here, registered in `shell/Viewport.tsx`'s `nodeTypes`. |
+| `HuntNode.tsx` | The **hunt-node component**: renders one graph node's box from its `data` (label or a shortened id when unlabelled). No style values (class names); carries the four side `Handle`s a connection can start from. A new node *type* is another component here, registered in `shell/Viewport.tsx`'s `nodeTypes`. |
+| `LooseArtifactNode.tsx` | The **loose-artifact component**: draws an unplaced (pooled) artifact as a non-connectable card showing only its `type` + `name` (never the type-specific payload). No `Handle`s — a loose artifact isn't wired; it meets an edge by being placed on it. |
+| `shortId.ts` | `shortId(id)` — a node's 6-char id stub (git-hash style) shown when it has no label. |
 
 **The shell — the stable region skeleton (`src/shell/`):**
 
 | File | What it is |
 | --- | --- |
-| `Shell.tsx` | The **stateful / I/O file**. Fetches both channels on mount (graph → the graph store, workspace → local state), fuses them via the projection, holds the *non-undoable* UI state (`selection`, active command, save status + dirty, the workspace), wires the regions with `react-resizable-panels`, and drives global Save/Undo/Redo + keyboard shortcuts. |
-| `graphStore.ts` | The **graph store** — a Zustand + zundo `temporal` store holding the *undoable* graph: the React Flow nodes (positions *and* fields) + edges, and its mutators. One user action = one undo step (`equality` ignores selection/drag flags & rounds positions; a leading-edge `handleSet` debounce coalesces bursts). Positions ride here for now (see the data-flow section). |
+| `Shell.tsx` | The **orchestrator / I/O file**. Fetches both channels on mount (graph → the graph store, workspace → the workspace store), holds the little non-store UI state that's left (active command, save status + dirty), wires the regions with `react-resizable-panels`, projects the displayed nodes (honoring the active view's `show_unplaced`), routes the canvas's selection into the selection store, and drives global Save/Undo/Redo + keyboard shortcuts. |
+| `graphStore.ts` | The **graph store** — a Zustand + zundo `temporal` store holding the *undoable* canvas: `nodes` (hunt **and** loose-artifact nodes, positions *and* fields) + `edges`, and its mutators (`createNode`, `createLooseArtifact`, `updateNode`, `placeArtifactOnEdge`, `detachArtifact`, `detachEdges`, `setNodePositions`, the React Flow change handlers). One user action = one undo step (`equality` ignores selection/drag flags & rounds positions; a leading-edge `handleSet` debounce coalesces bursts). Positions ride here for now (see the data-flow section). |
+| `workspaceStore.ts` | The **workspace store** — a Zustand store (deliberately **not** undoable) holding the `WorkspaceDTO` (views/tabs/active tab) + the view/tab actions (`selectView`/`selectTab`/`createView`/`createTab`/`deleteView`/`deleteTab`/`renameView`/`setShowUnplaced`/viewport + hover-preview). Owns the position-lifecycle dance on view switches (flush live drags, reproject, reset history). |
+| `selectionStore.ts` | The **selection store** — a tiny Zustand store for the transient canvas `selection` (a node, an edge, or null). Not undoable, not saved; the canvas writes it, panels read it. |
 | `MenuBar.tsx` | The full-width top **menu bar**: global Undo / Redo + a single Save with a dirty indicator. Pure presentational; fed by `Shell.tsx`. |
 | `CommandRail.tsx` | The left **command rail**: one button per registry entry; collapses to a sliver. A dumb container — reads `COMMANDS`, reports clicks up. |
 | `TabBar.tsx` | The top **tab bar**: one chip per open *tab* (each showing a *view*), plus a persistent `+` (new tab) and a per-tab `×` (close). Hovering a tab previews it; clicking selects. Driven by the workspace store. |
-| `PanelRegion.tsx` | The **swappable panel**: looks the active command up in the registry and renders its `Panel`, forwarding `PanelProps`. Knows no specific panel. |
+| `PanelRegion.tsx` | The **swappable panel**: looks the active command up in the registry and renders its `Panel` with **no props** (panels subscribe to the stores they need). Knows no specific panel. |
 | `Viewport.tsx` | The **viewport region**: wraps `<ReactFlow>` to draw the active tab's view, reports selection up, and re-`fitView`s on container resize (the one React Flow resize gotcha). |
-| `commands.ts` | The **command registry**: the `COMMANDS` list pairing each command id with the panel it opens. The single plug-in point — add a command here, nowhere else. |
-| `types.ts` | The shell↔feature contracts: `Selection`, `SaveState`, and `PanelProps` (what every panel receives). |
+| `commands.ts` | The **command registry**: the `COMMANDS` list pairing each command id with the panel it opens (panels are typed `FC`, no props). The single plug-in point — add a command here, nowhere else. |
+| `types.ts` | The small shared value types: `Selection` (what's selected on the canvas) and `SaveState`. Panels don't take props — they subscribe to stores — so there's no `PanelProps`. |
 | `history.ts` | Pure undo-granularity helpers used by `graphStore.ts`: `graphSignature` (what counts as a meaningful change) and `leadingDebounce` (how a burst collapses to one step). Kept separate so they're unit-testable. |
 | `history.test.ts` | Vitest units for `graphSignature` + `leadingDebounce`. |
 | `shell.css` | Region + panel styling. Structural/visual CSS using `theme.css` tokens (no hardcoded values). |
@@ -91,7 +97,9 @@ next to their source (`*.test.ts`).
 
 | File | What it is |
 | --- | --- |
-| `GraphInspector.tsx` | The **GRAPH** command's panel: edit the selected node's label/action/notes, see its incoming/outgoing edges + artifacts, Save. A pure view over `PanelProps`. |
+| `GraphInspector.tsx` | The **GRAPH** command's panel: with a node selected, edit its label/action/notes and see its incoming/outgoing edges + artifacts; with an edge selected, list its artifacts (each with **Detach**) and the pool (each with **Place**). Subscribes to the graph + selection stores; takes no props. |
+| `ViewPanel.tsx` | The **VIEW** command's panel: list/switch/create/rename/delete views, auto-arrange, and the per-view **Show unplaced artifacts** toggle. Subscribes to the workspace (and graph) store. |
+| `testing/` | The **TESTING** rail command — a scratch playground whose self-contained `<Section>`s (node create, artifact create) subscribe to stores directly, so each lifts into its real command once it settles. |
 | `PlaceholderPanel.tsx` | The stand-in every not-yet-built command opens, so the rail shows the full intended command set. |
 
 **Config — set once, rarely opened:** `index.html` (the page React loads into),
@@ -112,9 +120,12 @@ the seams that hold it together are:
 - **The command registry (`shell/commands.ts`).** Each command is a `{ id, label, icon,
   Panel }` descriptor. The rail renders a button per entry; the panel region renders the
   active entry's `Panel`. Neither names a specific command — so a new one is *one entry*.
-- **`PanelProps` (`shell/types.ts`).** The uniform contract every panel receives (the
-  graph, the `selection`, `updateNode`). A panel is a pure view over this; it owns no graph
-  state. (Saving is global — it lives in the menu bar, not a panel.)
+- **Stores, not props.** A panel takes **no props** — it subscribes to the stores it needs
+  (`useGraphStore` for the graph + its mutators, `useSelectionStore` for what's selected,
+  `useWorkspaceStore` for views/tabs). This replaced an older `PanelProps` object that had
+  become a catch-all for one panel's needs; now each new editing capability is a store action
+  the panel subscribes to, and nothing central grows. (Saving is global — it lives in the menu
+  bar, not a panel.)
 - **Views and tabs (`model/workspace.ts`).** Vim model: a *view* is a buffer (an arrangement
   of a graph — its positions + title); a *tab* is a window showing a view, carrying its **own
   pan/zoom framing** (so two tabs on one view can be zoomed into different parts). The shell
@@ -124,12 +135,13 @@ the seams that hold it together are:
   reverting on mouse-out without committing — a strictly canvas-inert, transient state.
 
 **Pure modules vs. stateful files** — the same discipline as the Python core.
-`model/` and `nodes/HuntNode.tsx` and every panel are pure (data + view, no I/O). The undoable
-graph lives in the zundo-backed Zustand store (`shell/graphStore.ts`) — currently the React
-Flow nodes (positions included) + edges. Everything else — the workspace (views/tabs/active
-tab) and the *non-undoable* UI state (selection, active command, save status) — lives in
-`shell/Shell.tsx` as plain hooks. `DESIGN.md`'s "lift to the shell first" governs: don't pour
-non-graph state into the store.
+`model/` and the `nodes/` components and every panel are pure (data + view, no I/O). State
+lives in three focused Zustand stores, one per concern: `graphStore` (the *undoable* canvas —
+nodes + edges + mutators, zundo-backed), `workspaceStore` (views/tabs/active tab — **not**
+undoable, so navigation doesn't pollute graph history), and `selectionStore` (the transient
+canvas selection). The only state left in `shell/Shell.tsx` as plain hooks is the small
+non-store remainder (active command, save status). Keep each store scoped to its concern:
+don't pour non-graph state into the graph store.
 
 Two conventions that go with it:
 
@@ -179,6 +191,18 @@ node's fields in `.data` and the active view's `Position` in `.position`, yieldi
 data), `toPositions` keeps it (→ workspace). The xy never lives "on a node DTO"; it lives in
 a view, and the projection is the only meeting point.
 
+**Loose artifacts ride the same canvas array.** Unplaced artifacts (the `HuntDocument.unplaced`
+pool, sent as the `unplaced` sibling on the wire) project into `LooseArtifactFlowNode`s —
+non-connectable React Flow nodes whose element id is `loose:{artifactId}` (distinct from the
+domain id, so one artifact could later render in several places). They live in the *same*
+`nodes` array as hunt nodes — the union `CanvasNode = HuntFlowNode | LooseArtifactFlowNode` —
+so they share React Flow's drag/position/selection/undo machinery for free, and split back into
+their own channels only at the save seam (`toGraphBlock` keeps the hunt nodes, `toPool` keeps
+the artifacts). Moving an artifact pool↔edge (`withArtifactPlaced`/`withArtifactDetached`) is
+just rewriting that one array plus the target edge's `content`. The `{nodes, edges}` pair has
+one name throughout — `CanvasGraph` — so the loader, the store, undo tracking, and these
+transforms can't drift on its shape.
+
 **Why four node-ish types** — each has one job:
 
 | Type | Where | Job |
@@ -199,13 +223,14 @@ node's xy is just a plain `{x, y}` `PositionDTO` in a view's `positions` map.)
 
 **State and undo.** The graph lives in one zundo-`temporal` Zustand store,
 `shell/graphStore.ts`, holding the React Flow nodes (positions *and* fields) + edges — so edits
-and moves currently share **one** undo stack. The workspace (views/tabs/active tab) rides as
-plain `useState` in `Shell.tsx`. Both are **plain objects** — a React Flow node and a
-`WorkspaceDTO` are bare objects, not class instances — so an undo stack is just an array of
-snapshots. The channels are kept apart where it counts — on disk, and through the load/save
-composition (`toFlowGraph` fuses, `buildSaveRequest` splits) — but in memory the graph store
-carries positions for React Flow's sake. (A future split that gives node moves their own undo
-stack is tracked in `ROADMAP.md`.)
+and moves currently share **one** undo stack. The workspace (views/tabs/active tab) lives in
+its own `workspaceStore`, deliberately **not** undoable (a view switch or tab open shouldn't be
+an undo step); selection lives in `selectionStore`. All hold **plain objects** — a React Flow
+node and a `WorkspaceDTO` are bare objects, not class instances — so an undo stack is just an
+array of snapshots. The channels are kept apart where it counts — on disk, and through the
+load/save composition (`toFlowGraph` fuses, `buildSaveRequest` splits) — but in memory the
+graph store carries positions for React Flow's sake. (A future split that gives node moves
+their own undo stack is tracked in `ROADMAP.md`.)
 
 ## Diagrams
 
@@ -226,18 +251,22 @@ flowchart TD
     flow["flow.ts<br/>the bridge"]
     graphDto["graph.ts<br/>channel A"]
     workspace["workspace.ts<br/>channel B"]
-    graphStore["graphStore.ts<br/>zundo"]
+    graphStore["graphStore.ts<br/>zundo (undoable)"]
+    workspaceStore["workspaceStore.ts"]
+    selectionStore["selectionStore.ts"]
     Viewport["Viewport.tsx"]
-    nodes["HuntNode.tsx"]
+    nodes["HuntNode + LooseArtifactNode"]
     commands["commands.ts<br/>+ PanelRegion"]
     panels["panels/*"]
 
-    Shell --> api & flow & workspace & graphStore & Viewport & commands
+    Shell --> api & flow & graphStore & workspaceStore & selectionStore & Viewport & commands
     api --> graphDto & flow & workspace
     flow --> graphDto & workspace
     graphStore --> flow
+    workspaceStore --> flow & workspace
     Viewport --> flow & workspace & nodes
     commands --> panels
+    panels --> graphStore & workspaceStore & selectionStore
 ```
 
 **Load/save lifecycle — the calls a round-trip makes.** `toFlowGraph` fuses the two channels
@@ -254,15 +283,15 @@ sequenceDiagram
     Note over S: mount
     S->>A: fetchGraph()
     A->>B: GET /api/graph
-    B-->>A: { graph, workspace }
+    B-->>A: { graph, unplaced, workspace }
     A->>F: toFlowGraph — FUSE
     F-->>A: HuntFlowNode[] / Edge[]
     A-->>S: response
-    S->>G: loadGraph(...)
-    S->>S: setWorkspace + clear history
+    S->>G: loadGraph(...) + clear history
+    S->>S: loadWorkspace (workspace store)
 
     Note over S,G: editing — one undo step per burst
-    S->>G: updateNode / onNodesChange
+    S->>G: updateNode / create / place / onNodesChange
 
     Note over S: Save (Ctrl+S)
     S->>A: buildSaveRequest — SPLIT
@@ -292,10 +321,10 @@ is the cheap correctness gate; run it before committing.
 
 Find what you're adding; it tells you which file to touch:
 
-- **A new command / panel** (Puzzle, Bind, …) → write a component in `panels/` that takes
-  `PanelProps`, then swap it in for that command's `Panel` in `shell/commands.ts`. No shell
-  edits — the rail and panel region pick it up. (A brand-new command is one more `COMMANDS`
-  entry + its `CommandId`.) **Full step-by-step:**
+- **A new command / panel** (Puzzle, Bind, …) → write a component in `panels/` that subscribes
+  to the stores it needs (no props), then swap it in for that command's `Panel` in
+  `shell/commands.ts`. No shell edits — the rail and panel region pick it up. (A brand-new
+  command is one more `COMMANDS` entry + its `CommandId`.) **Full step-by-step:**
   [`ADDING-A-COMMAND.md`](ADDING-A-COMMAND.md), which walks it end to end using the GRAPH
   command as the worked example.
 - **A new field the backend already sends** (a node gains an attribute, say) → add it to the
@@ -308,17 +337,18 @@ Find what you're adding; it tells you which file to touch:
   (colors). For a genuinely new node type, write another component in `nodes/` and register
   it in `shell/Viewport.tsx`'s `nodeTypes` map.
 - **A new interaction, state, or network call** → an **undoable graph change** goes in the
-  graph store (`shell/graphStore.ts`); the **workspace** and other **non-undoable UI state** go
-  in `shell/Shell.tsx`. Expose data to panels via `PanelProps`; keep new markup in a *pure*
-  component. Saving is global (the menu bar): `saveGraph()` `PUT`s both channels —
-  `buildSaveRequest` rebuilds them — to `/api/graph` (note it returns **409 in demo mode** with
-  no `PUZZ_GRAPH` file).
+  graph store (`shell/graphStore.ts`); **workspace** state (views/tabs/`show_unplaced`) goes in
+  `shell/workspaceStore.ts`; transient **selection** is `shell/selectionStore.ts`. Panels reach
+  any of it by subscribing — no props; keep new markup in a *pure* component. Saving is global
+  (the menu bar): `saveGraph()` `PUT`s all channels — `buildSaveRequest` rebuilds them — to
+  `/api/graph` (note it returns **409 in demo mode** with no `PUZZ_GRAPH` file).
 - **Always finish with `npm run build`** — it's the type-check gate.
 
-The throughline: a new command → `commands.ts` + a `panels/` component; new wire data →
-`model/graph.ts` or `model/workspace.ts` (by channel); a transform → `model/flow.ts`; a visual
-→ a component + `theme.css`; an undoable graph change → `shell/graphStore.ts`; the workspace &
-other state/I/O → `shell/Shell.tsx`.
+The throughline: a new command → `commands.ts` + a `panels/` component (subscribing to stores);
+new wire data → `model/graph.ts` or `model/workspace.ts` (by channel); a transform →
+`model/flow.ts`; a visual → a component + `theme.css`; an undoable graph change →
+`shell/graphStore.ts`; workspace state → `shell/workspaceStore.ts`; selection →
+`shell/selectionStore.ts`.
 
 ## Tests
 

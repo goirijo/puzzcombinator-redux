@@ -19,9 +19,11 @@ touch the rail, the panel region, the tab bar, or the canvas.
 1. [ ] **Run the app** and confirm it works before you change anything.
 2. [ ] **Decide the data** your command needs — and whether the backend already sends it.
 3. [ ] *(only if new data)* **Add the backend endpoint/field** first.
-4. [ ] **Write the panel** in `src/panels/YourPanel.tsx`, typed `(props: PanelProps)`.
-5. [ ] *(only if it needs state not in `PanelProps`)* **lift state** into `Shell.tsx` and
-       **extend `PanelProps`** in `shell/types.ts`.
+4. [ ] **Write the panel** in `src/panels/YourPanel.tsx` — a `FC` that takes **no props** and
+       subscribes to the stores it needs (graph / workspace / selection).
+5. [ ] *(only if it needs state no store holds yet)* **add it to the right store** —
+       `graphStore` (undoable graph mutations), `workspaceStore` (views/tabs/UI), or
+       `selectionStore` (transient selection) — then subscribe to it.
 6. [ ] **Register it** in `src/shell/commands.ts` (new `CommandId` + `COMMANDS` entry, or
        swap a placeholder's `Panel`).
 7. [ ] **Style it** in `src/shell/shell.css` using `theme.css` tokens (no inline styles).
@@ -61,23 +63,23 @@ That's the feature you're about to clone the shape of.
 
 Before writing code, answer two questions:
 
-1. **What data does the panel show or edit?** Everything the shell already shares arrives
-   through one object, `PanelProps` (`src/shell/types.ts`):
+1. **What data does the panel show or edit?** Panels take **no props** — each subscribes to
+   the stores it needs (this replaced an older catch-all `PanelProps` object). There are
+   three stores, one per concern:
 
-   ```ts
-   export interface PanelProps {
-     nodes: HuntFlowNode[]          // the whole graph (React Flow shape)
-     edges: HuntFlowEdge[]
-     selection: Selection           // what's selected on the canvas: a node, an edge, or null
-     updateNode: (id, patch) => void  // edit a node's label/action/notes
-   }
-   ```
+   - **`useGraphStore`** (`src/shell/graphStore.ts`) — the undoable graph: `nodes`, `edges`,
+     and the mutating actions (`updateNode`, `createNode`, `createLooseArtifact`,
+     `placeArtifactOnEdge`, `detachArtifact`, …).
+   - **`useSelectionStore`** (`src/shell/selectionStore.ts`) — `selection`: what's selected on
+     the canvas (a node, an edge, or null).
+   - **`useWorkspaceStore`** (`src/shell/workspaceStore.ts`) — `workspace` (views/tabs/active
+     tab) and its actions (`selectView`, `setShowUnplaced`, …).
 
-   GRAPH needed exactly these — it reads `selection`, looks the node up in `nodes`, and edits
-   via `updateNode`. (Saving is **not** a panel concern: it's a global action in the menu bar
-   that commits the whole graph — see `MenuBar.tsx` / `Shell.tsx`.) If your command's needs are
-   a subset of `PanelProps`, you write **only** the panel (Steps 4, 6, 8) and skip Steps 3
-   and 5.
+   GRAPH reads `selection` from the selection store, looks the node up in `nodes` from the
+   graph store, and edits via `updateNode` — all by subscribing, no props. (Saving is **not**
+   a panel concern: it's a global action in the menu bar that commits the whole graph — see
+   `MenuBar.tsx` / `Shell.tsx`.) If everything your command needs already lives in a store, you
+   write **only** the panel (Steps 4, 6, 8) and skip Steps 3 and 5.
 
 2. **Does it need data the backend doesn't send yet?** If your panel needs something new from
    the server (a rendered artifact preview, a re-layout, a list of files…), that's a backend
@@ -90,30 +92,30 @@ Before writing code, answer two questions:
 
 So you know what you're plugging into:
 
-```
-CommandRail (reads COMMANDS) ──click──> Shell sets activeCommandId
-                                            │
-                                            ▼
-                          PanelRegion looks up COMMANDS[activeCommandId]
-                                            │
-                                            ▼
-                              renders <YourPanel {...PanelProps} />
+```mermaid
+flowchart TD
+    Rail["CommandRail · reads COMMANDS"] -->|click| Shell["Shell sets activeCommandId"]
+    Shell --> Region["PanelRegion looks up COMMANDS[activeCommandId]"]
+    Region -->|"renders, no props"| Panel["YourPanel"]
+    Panel -->|subscribes| Stores["useGraphStore / useSelectionStore / useWorkspaceStore"]
 ```
 
-- `src/shell/commands.ts` — the registry (`COMMANDS`). **The only file you must edit** to add
-  a command.
-- `src/shell/Shell.tsx` — owns all shared state and builds the `PanelProps` object. You edit
-  this **only if** your command needs state/callbacks that aren't in `PanelProps` yet.
-- `src/panels/*.tsx` — the panels. You **add a file here**.
+- `src/shell/commands.ts` — the registry (`COMMANDS`). **The only shell file you must edit** to
+  add a command (besides writing your panel).
+- `src/panels/*.tsx` — the panels. You **add a file here**, and it subscribes to stores itself.
+- The stores (`src/shell/graphStore.ts`, `workspaceStore.ts`, `selectionStore.ts`) — edit one
+  **only if** your command needs state none of them holds yet (Step 5).
 - `src/shell/shell.css` — panel styling.
 
-You do not edit `CommandRail.tsx`, `PanelRegion.tsx`, `TabBar.tsx`, or `Canvas.tsx`.
+You do not edit `Shell.tsx`, `CommandRail.tsx`, `PanelRegion.tsx`, `TabBar.tsx`, or
+`Viewport.tsx` — the shell wires regions, but a panel reaches its data through stores, not
+through the shell.
 
 ---
 
 ## Step 3 — (Only if you need new backend data) extend the seam first
 
-Skip this if your command works off `PanelProps` alone (most editing commands do).
+Skip this if your command works off the existing stores alone (most editing commands do).
 
 If you need new server data, the order is: backend → DTO → adapter → panel.
 
@@ -121,8 +123,9 @@ If you need new server data, the order is: backend → DTO → adapter → panel
    [`../src/puzzcombinator/app/APP.md`](../src/puzzcombinator/app/APP.md)).
 2. Mirror the wire shape as a `*DTO` interface in `src/model/api.ts` and add the `fetch`/`PUT`
    helper next to `fetchGraph`/`saveGraph`.
-3. If it changes the graph→view mapping, do it in the **pure** `src/model/adapt.ts` (and add a
-   unit test next to it, `model/adapt.test.ts` — it's the easy place).
+3. If it changes the graph→canvas mapping, do it in the **pure** `src/model/flow.ts` (the
+   `toFlowGraph`/`toGraphBlock`/`toPool` fuse-and-split functions) and add a unit test next to
+   it, `model/flow.test.ts` — it's the easy place.
 
 Naming rule: wire types end in `DTO` (`NodeDTO`); view-model types start with `Hunt`
 (`HuntFlowNode`). Don't blur them.
@@ -131,16 +134,21 @@ Naming rule: wire types end in `DTO` (`NodeDTO`); view-model types start with `H
 
 ## Step 4 — Write the panel component
 
-Create `src/panels/YourPanel.tsx`. A panel is a **pure view** over `PanelProps` — it reads
-the data and calls the callbacks; it holds no graph state of its own. Type its props as
-`PanelProps` so the compiler guarantees it fits the slot.
+Create `src/panels/YourPanel.tsx`. A panel takes **no props**: it subscribes to the stores it
+needs and holds no graph state of its own. Each `use*Store((s) => s.field)` call selects one
+slice and re-renders the panel when just that slice changes.
 
 The GRAPH panel (`src/panels/GraphInspector.tsx`) is the reference. Its shape:
 
 ```tsx
-import type { PanelProps } from '../shell/types'
+import { useGraphStore } from '../shell/graphStore'
+import { useSelectionStore } from '../shell/selectionStore'
 
-export function GraphInspector({ nodes, edges, selection, updateNode }: PanelProps) {
+export function GraphInspector() {
+  const nodes = useGraphStore((s) => s.nodes)
+  const updateNode = useGraphStore((s) => s.updateNode)
+  const selection = useSelectionStore((s) => s.selection)
+
   if (!selection) return <p className="inspector__empty">Select a node…</p>
 
   const node = nodes.find((n) => n.id === selection.id)
@@ -162,8 +170,11 @@ export function GraphInspector({ nodes, edges, selection, updateNode }: PanelPro
 
 Things to copy from it:
 
+- **Subscribe to stores, don't take props.** One `use*Store((s) => s.x)` selector per slice;
+  the panel re-renders only when a selected slice changes. This is how every panel reaches its
+  data (ViewPanel reads the workspace store the same way).
 - **Controlled inputs.** The `<input value=… onChange=…>` pattern: the value comes *from* the
-  data, and editing calls a callback that updates the data — React re-renders with the new
+  store, and editing calls a store action that updates it — React re-renders with the new
   value. Don't keep a second copy of the field in local state.
 - **Handle the empty/missing cases** (`!selection`, node not found) with a friendly message,
   like the `inspector__empty` lines.
@@ -180,34 +191,32 @@ is exactly what the other six commands use today.
 
 ## Step 5 — (Only if needed) lift new state into the shell
 
-Skip this if `PanelProps` already carries what you need.
+Skip this if the existing stores already hold what you need.
 
-If your panel needs shared state or a callback that isn't in `PanelProps` yet, decide where
-it lives:
+If your panel needs shared state or a callback no store exposes yet, add it to the store whose
+concern it matches, then subscribe to it from your panel:
 
-- **It mutates the graph** (nodes/edges) → add the action to the **graph store**
-  (`src/shell/store.ts`). The graph lives in a zundo-backed Zustand store so edits are
+- **It mutates the graph** (nodes/edges/artifacts) → add the action to the **graph store**
+  (`src/shell/graphStore.ts`). The graph lives in a zundo-backed Zustand store so edits are
   undoable; `updateNode` is the example to copy. Any new graph mutation should be a store
   action (so it flows through undo/redo too).
-- **It's other shared UI state** (a selected tab, a transient toggle) → keep it in
-  `Shell.tsx` as `useState`, the way `selection` / `activeCommandId` are.
+- **It's workspace state** (views/tabs, the per-view `show_unplaced` flag) → add it to
+  `workspaceStore.ts`, which is **not** undoable (UI navigation shouldn't pollute the graph's
+  undo history); `setShowUnplaced` is the example to copy.
+- **It's transient canvas selection** → it already lives in `selectionStore.ts`.
 
-Either way, expose what the panel needs by adding a field to the `PanelProps` interface in
-`src/shell/types.ts` and including it in the `panelProps` object `Shell.tsx` builds — that is
-the *one* contract; don't pass props to a panel by a side channel.
+Don't reach for a side channel or thread props through the shell — a panel gets everything by
+subscribing. Keep each store scoped to its concern (the graph store is for the undoable graph
+only; don't pour unrelated UI state into it).
 
-```tsx
-// in store.ts — a graph mutation, undoable
+```ts
+// in graphStore.ts — a graph mutation, undoable
 updateNode: (id, patch) =>
   set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)) }),
 
-// in Shell.tsx — the single PanelProps object every panel receives
-const panelProps = { nodes, edges, selection, updateNode }
+// in your panel — subscribe to it (re-renders only when that slice changes)
+const updateNode = useGraphStore((s) => s.updateNode)
 ```
-
-Note the store is intentionally scoped to the **graph** (the undoable thing). Don't pour
-unrelated UI state into it — `DESIGN.md`'s "lift to the shell first" still applies for
-everything that isn't the graph.
 
 ---
 
@@ -283,9 +292,9 @@ interface to settle. `npm run build` is still the type-check gate.
 
 ## What you touched, at a glance
 
-For a typical editing command (works off `PanelProps`): **two files** —
-`src/panels/YourPanel.tsx` (new) and `src/shell/commands.ts` (one line), plus some CSS in
-`shell.css`. Only if it needs new shared state do you also touch `shell/store.ts` (graph
-mutation) or `Shell.tsx` + `types.ts` (other UI state); only if it needs new server data do
-you also touch `model/api.ts` (+ maybe `model/adapt.ts`) and the backend. You never
-restructure the shell — that's the whole point of building it first.
+For a typical editing command (works off the existing stores): **two files** —
+`src/panels/YourPanel.tsx` (new, subscribes to stores) and `src/shell/commands.ts` (one line),
+plus some CSS in `shell.css`. Only if it needs new shared state do you also touch a store
+(`graphStore.ts` for graph mutations, `workspaceStore.ts` for UI state); only if it needs new
+server data do you also touch `model/api.ts` (+ maybe `model/flow.ts`) and the backend. You
+never restructure the shell — that's the whole point of building it first.

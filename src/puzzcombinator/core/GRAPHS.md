@@ -391,6 +391,14 @@ text = to_json(HuntDocument.single(hunt))   # JSON string (stdlib; indent=2 by d
 assert from_json(text).main == hunt         # .main is the default "main" graph
 ```
 
+A `HuntDocument` also carries an **`unplaced`** pool: `dict[str, tuple[Artifact, ...]]`
+keyed by graph id — loose artifacts a designer has created but not yet placed on any edge.
+It lives on the document, **not** on the pure `Graph` (which stays just `{nodes, edges}`
+with value-equality), so the pool is a document-level concern that propagates to every view
+of its graph without polluting the graph model. It round-trips under the `unplaced` key
+(added additively — the schema version did not bump); a single-graph `graph_to_dict` slice
+does not include it, because the pool is document-scoped.
+
 `*_from_dict(*_to_dict(x)) == x` is the invariant the whole serialization layer is
 built to preserve — which is why wiring is recomputed on load and ids (not object
 references) tie everything together. Each edge's artifacts round-trip through their
