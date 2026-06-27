@@ -14,6 +14,12 @@
   --action-font-size: 11px;
   --action-color: #37474f;
 
+  /* Artifact nodes — a warm, dashed card with a type tag, visibly unlike a hunt node. */
+  --artifact-bg: #fff7e6;
+  --artifact-border: #d08700;
+  --artifact-min-width: 96px;
+  --artifact-tag-text: #ffffff;
+
   /* --- Shell chrome (rail / tabs / panel) --------------------------------- */
   --shell-bg: #f4f5f7;
   --shell-surface: #ffffff;
@@ -44,15 +50,21 @@
   --font-ui: system-ui, sans-serif;
 }
 
-.hunt-node {
-  background: var(--node-bg);
+/* Both kinds of canvas node share these; each sets its own bg/border/min-width below so they
+ * read as clearly different shapes. */
+.hunt-node,
+.artifact-node {
   color: var(--node-text);
-  border: 2px solid var(--node-border);
   border-radius: var(--node-radius);
   padding: var(--node-pad);
-  min-width: var(--node-min-width);
   text-align: center;
   font-family: system-ui, sans-serif;
+}
+
+.hunt-node {
+  background: var(--node-bg);
+  border: 2px solid var(--node-border);
+  min-width: var(--node-min-width);
 }
 
 .hunt-node__label {
@@ -62,4 +74,31 @@
 .hunt-node__action {
   font-size: var(--action-font-size);
   color: var(--action-color);
+}
+
+/* An artifact node: warm fill + dashed accent border + a type tag — and (rendering no handles)
+ * not connectable, since it meets edges by being dragged onto them, not wired. */
+.artifact-node {
+  background: var(--artifact-bg);
+  border: 2px dashed var(--artifact-border);
+  min-width: var(--artifact-min-width);
+  max-width: 200px;
+}
+
+.artifact-node__tag {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--artifact-border);
+  color: var(--artifact-tag-text);
+  font-size: var(--action-font-size);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.artifact-node__body {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

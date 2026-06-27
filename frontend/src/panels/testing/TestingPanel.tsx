@@ -4,12 +4,14 @@
 // feature settles it can be lifted wholesale into its real command (EDIT, …) with no
 // rewiring. Deliberately clunky: bare buttons, no polish yet.
 
+import { ArtifactCreateSection } from './ArtifactCreateSection'
 import { NodeCreateSection } from './NodeCreateSection'
 
 export function TestingPanel() {
   return (
     <div className="testing-panel">
       <NodeCreateSection />
+      <ArtifactCreateSection />
     </div>
   )
 }

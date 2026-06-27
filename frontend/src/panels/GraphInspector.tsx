@@ -83,8 +83,10 @@ export function GraphInspector({ nodes, edges, selection, updateNode }: PanelPro
     )
   }
 
-  const node = nodes.find((n) => n.id === selection.id)
-  if (!node) return <p className="inspector__empty">Node not found.</p>
+  // The selection may be a loose-artifact node (it shares the canvas); this panel only edits
+  // hunt nodes, so narrow to those. A selected artifact has no editor here yet.
+  const node = nodes.find((n) => n.id === selection.id && n.type === 'hunt')
+  if (!node) return <p className="inspector__empty">No editable node selected.</p>
 
   const incoming = edges.filter((e) => e.target === node.id)
   const outgoing = edges.filter((e) => e.source === node.id)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { HuntFlowNode } from '../model/flow'
+import { isLooseArtifactNode, toPool, type HuntFlowNode } from '../model/flow'
 import { useGraphStore } from './graphStore'
 
 function node(id: string, x: number, y: number): HuntFlowNode {
@@ -32,9 +32,9 @@ describe('createNode', () => {
     expect(added.data).toEqual({ label: '', action: '', notes: '' })
   })
 
-  it('does not disturb the loose-artifact pool', () => {
+  it('adds a hunt node, not an artifact (the pool stays empty)', () => {
     useGraphStore.getState().createNode()
-    expect(useGraphStore.getState().unplaced).toEqual([])
+    expect(toPool(useGraphStore.getState().nodes)).toEqual([])
   })
 
   it('is undoable — undo removes exactly the created node', () => {
@@ -44,5 +44,26 @@ describe('createNode', () => {
     const nodes = useGraphStore.getState().nodes
     expect(nodes).toHaveLength(1)
     expect(nodes[0].id).toBe('n1')
+  })
+})
+
+describe('createLooseArtifact', () => {
+  it('adds a non-connectable artifact node carrying a pre-baked text artifact', () => {
+    useGraphStore.getState().createLooseArtifact()
+    const nodes = useGraphStore.getState().nodes
+    expect(nodes).toHaveLength(2)
+    const art = nodes.find(isLooseArtifactNode)!
+    expect(art.connectable).toBe(false)
+    expect(art.data.artifact.type).toBe('text')
+    // The pool now reflects exactly that one artifact.
+    expect(toPool(nodes)).toHaveLength(1)
+  })
+
+  it('is undoable — undo removes the created artifact', () => {
+    useGraphStore.getState().createLooseArtifact()
+    expect(useGraphStore.getState().nodes).toHaveLength(2)
+    useGraphStore.temporal.getState().undo()
+    expect(useGraphStore.getState().nodes).toHaveLength(1)
+    expect(toPool(useGraphStore.getState().nodes)).toEqual([])
   })
 })

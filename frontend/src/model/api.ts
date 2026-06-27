@@ -6,12 +6,14 @@
 
 import type { ArtifactDTO, GraphBlockDTO } from './graph'
 import {
+  toFlowArtifacts,
   toFlowEdges,
   toFlowNodes,
   toGraphBlock,
+  toPool,
   toPositions,
+  type CanvasNode,
   type HuntFlowEdge,
-  type HuntFlowNode,
 } from './flow'
 import { activeView, type PositionDTO, type WorkspaceDTO } from './workspace'
 
@@ -92,38 +94,39 @@ export async function requestArrange(
   return body.positions
 }
 
-// --- Composition: fuse the two channels on load, split them on save. ---------------------
+// --- Composition: fuse the channels on load, split them on save. -------------------------
 // Pure (no fetch/state), so they're unit-testable. The load↔save pair is symmetric: load
-// projects the active view's positions onto the nodes; save reads them back off.
+// fuses graph nodes + the loose-artifact pool into one canvas array and projects the active
+// view's positions onto all of them; save reads positions back off and partitions the array
+// back into the graph block and the pool.
 
-/** Load: project the response's active-view positions onto React Flow nodes. */
+/** Load: fuse hunt nodes + pooled artifacts into one canvas array, with active-view positions. */
 export function toFlowGraph(res: GraphResponseDTO): {
-  nodes: HuntFlowNode[]
+  nodes: CanvasNode[]
   edges: HuntFlowEdge[]
 } {
   const active = activeView(res.workspace)
+  const positions = active?.view.positions ?? {}
   return {
-    nodes: toFlowNodes(res.graph.nodes, active?.view.positions ?? {}),
+    nodes: [...toFlowNodes(res.graph.nodes, positions), ...toFlowArtifacts(res.unplaced, positions)],
     edges: toFlowEdges(res.graph.edges),
   }
 }
 
 /**
- * Save: split the live editor state back into the two channels. The graph block comes from
- * the nodes/edges (positions dropped); the active view's positions are refreshed from those
- * same nodes (positions ride the graph store during editing — this is the split-at-save step).
+ * Save: split the live canvas back into its channels. The graph block comes from the hunt
+ * nodes + edges (positions dropped, loose artifacts filtered out); the pool comes from the
+ * loose-artifact nodes; the active view's positions are refreshed from *all* nodes (positions
+ * ride the graph store during editing — this is the split-at-save step).
  */
 export function buildSaveRequest(
-  nodes: HuntFlowNode[],
+  nodes: CanvasNode[],
   edges: HuntFlowEdge[],
-  unplaced: ArtifactDTO[],
   workspace: WorkspaceDTO,
 ): SaveRequestDTO {
   const active = activeView(workspace)
   const views = active
     ? { ...workspace.views, [active.id]: { ...active.view, positions: toPositions(nodes) } }
     : workspace.views
-  // `unplaced` passes through unchanged — the editor doesn't edit the pool yet, but sending it
-  // back keeps a save from dropping artifacts the file already holds.
-  return { graph: toGraphBlock(nodes, edges), unplaced, workspace: { ...workspace, views } }
+  return { graph: toGraphBlock(nodes, edges), unplaced: toPool(nodes), workspace: { ...workspace, views } }
 }

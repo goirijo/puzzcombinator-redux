@@ -27,20 +27,21 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { FloatingEdge } from '../edges/FloatingEdge'
-import type { HuntFlowEdge, HuntFlowNode } from '../model/flow'
+import type { CanvasNode, HuntFlowEdge } from '../model/flow'
 import { isIdentityViewport, type ViewportDTO } from '../model/workspace'
 import { HuntNode } from '../nodes/HuntNode'
+import { LooseArtifactNode } from '../nodes/LooseArtifactNode'
 
 // Module scope so React Flow sees stable objects (it warns if these change each render).
-const nodeTypes: NodeTypes = { hunt: HuntNode }
+const nodeTypes: NodeTypes = { hunt: HuntNode, artifact: LooseArtifactNode }
 const edgeTypes: EdgeTypes = { floating: FloatingEdge }
 
 interface ViewportProps {
-  nodes: HuntFlowNode[]
+  nodes: CanvasNode[]
   edges: HuntFlowEdge[]
-  onNodesChange: OnNodesChange<HuntFlowNode>
+  onNodesChange: OnNodesChange<CanvasNode>
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
-  onSelectionChange: (params: OnSelectionChangeParams<HuntFlowNode, HuntFlowEdge>) => void
+  onSelectionChange: (params: OnSelectionChangeParams<CanvasNode, HuntFlowEdge>) => void
   /** Id of the active tab — changing it triggers a camera restore. */
   activeTabId?: string
   /** The active tab's saved framing (or undefined before load). */

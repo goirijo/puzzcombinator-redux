@@ -2,7 +2,7 @@
 // (rather than scattered through components) is what lets a new panel "fill a slot": it
 // receives `PanelProps` and nothing else, and never reaches into shell internals.
 
-import type { HuntFlowEdge, HuntFlowNode, NodeFields } from '../model/flow'
+import type { CanvasNode, HuntFlowEdge, NodeFields } from '../model/flow'
 
 /** What is currently selected on the canvas — the datum the canvas writes and the GRAPH
  *  panel reads. `null` when nothing is selected. */
@@ -27,7 +27,7 @@ export type SaveState =
  * the whole graph), not a per-panel concern — so panels never see `onSave`/`saveState`.
  */
 export interface PanelProps {
-  nodes: HuntFlowNode[]
+  nodes: CanvasNode[]
   edges: HuntFlowEdge[]
   selection: Selection
   /** Patch the editable fields (label/action/notes) of one node. */

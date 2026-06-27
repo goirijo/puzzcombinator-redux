@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest'
 import type { GraphBlockDTO } from './graph'
 import {
   applyPositions,
+  looseElementId,
+  makeLooseArtifact,
   makeNode,
+  toFlowArtifacts,
   toFlowEdges,
   toFlowNodes,
   toGraphBlock,
+  toPool,
   toPositions,
 } from './flow'
 import type { PositionDTO } from './workspace'
@@ -129,5 +133,42 @@ describe('makeNode', () => {
 
   it('cascades the spawn position by spawnIndex so creations do not stack', () => {
     expect(makeNode(1).position).not.toEqual(makeNode(0).position)
+  })
+})
+
+describe('loose artifacts on the canvas', () => {
+  const POOL = [{ type: 'text', id: 'u1', name: 'text', payload: { text: 'hi' } }]
+
+  it('toFlowArtifacts projects the pool into non-connectable artifact nodes with positions', () => {
+    const [node] = toFlowArtifacts(POOL, { 'loose:u1': { x: 5, y: 6 } })
+    expect(node.id).toBe(looseElementId('u1'))
+    expect(node.type).toBe('artifact')
+    expect(node.connectable).toBe(false)
+    expect(node.position).toEqual({ x: 5, y: 6 })
+    expect(node.data.artifact).toEqual(POOL[0])
+  })
+
+  it('toFlowArtifacts falls back to 0,0 when the artifact has no stored position', () => {
+    expect(toFlowArtifacts(POOL, {})[0].position).toEqual({ x: 0, y: 0 })
+  })
+
+  it('toPool extracts artifacts back out, ignoring hunt nodes', () => {
+    const mixed = [...toFlowNodes(GRAPH.nodes, {}), ...toFlowArtifacts(POOL, {})]
+    expect(toPool(mixed)).toEqual(POOL)
+  })
+
+  it('toGraphBlock drops artifact nodes from the hunt-data block', () => {
+    const mixed = [...toFlowNodes(GRAPH.nodes, {}), ...toFlowArtifacts(POOL, {})]
+    expect(toGraphBlock(mixed, []).nodes.map((n) => n.id)).toEqual(['n1', 'n2', 'n3'])
+  })
+
+  it('makeLooseArtifact builds a non-connectable node with a pre-baked, named text artifact', () => {
+    const node = makeLooseArtifact()
+    expect(node.type).toBe('artifact')
+    expect(node.connectable).toBe(false)
+    expect(node.data.artifact.type).toBe('text')
+    // Every artifact has a name (what the generic node renders) — not payload-specific.
+    expect(node.data.artifact.name).toBe('New artifact')
+    expect(node.id).toBe(looseElementId(node.data.artifact.id))
   })
 })

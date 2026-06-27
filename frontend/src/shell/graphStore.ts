@@ -27,12 +27,12 @@ import { temporal } from 'zundo'
 
 import {
   applyPositions,
+  makeLooseArtifact,
   makeNode,
+  type CanvasNode,
   type HuntFlowEdge,
-  type HuntFlowNode,
   type NodeFields,
 } from '../model/flow'
-import type { ArtifactDTO } from '../model/graph'
 import type { PositionDTO } from '../model/workspace'
 import { graphSignature, leadingDebounce, type TrackedState } from './history'
 
@@ -40,23 +40,23 @@ import { graphSignature, leadingDebounce, type TrackedState } from './history'
 const HISTORY_DEBOUNCE_MS = 350
 
 export interface GraphState {
-  nodes: HuntFlowNode[]
+  // One array of canvas nodes — hunt-graph nodes AND loose-artifact nodes (see flow.ts). The
+  // loose-artifact pool is no longer a separate held field: it rides here as `type: 'artifact'`
+  // nodes and is split back out at the save seam (`buildSaveRequest`).
+  nodes: CanvasNode[]
   edges: HuntFlowEdge[]
-  // The loose-artifact pool — hunt data, but not yet rendered or edited in the UI. It's held
-  // here (with the rest of the hunt data) purely so it survives load→save; it's intentionally
-  // left out of `partialize` until pool editing lands and needs undo (Phase 3+).
-  unplaced: ArtifactDTO[]
-  /** Replace the whole graph + pool (initial load). `unplaced` defaults to empty (most
-   *  callers — and every test — only care about nodes/edges). Caller clears history after. */
-  loadGraph: (nodes: HuntFlowNode[], edges: HuntFlowEdge[], unplaced?: ArtifactDTO[]) => void
-  /** Add a new blank node to the canvas (undoable), placed with a cascade offset. */
+  /** Replace the whole canvas (initial load). Caller clears history afterwards. */
+  loadGraph: (nodes: CanvasNode[], edges: HuntFlowEdge[]) => void
+  /** Add a new blank hunt node to the canvas (undoable), placed with a cascade offset. */
   createNode: () => void
-  /** Patch one node's editable fields (label/action/notes). */
+  /** Add a new pre-baked loose artifact to the canvas/pool (undoable), cascade-offset. */
+  createLooseArtifact: () => void
+  /** Patch one hunt node's editable fields (label/action/notes). */
   updateNode: (id: string, patch: Partial<NodeFields>) => void
   /** Re-place every node from a {id: {x,y}} map — view switching and auto-arrange. */
   setNodePositions: (positions: Record<string, PositionDTO>) => void
   /** React Flow change handlers — apply selection/position/etc. to the store. */
-  onNodesChange: OnNodesChange<HuntFlowNode>
+  onNodesChange: OnNodesChange<CanvasNode>
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
 }
 
@@ -65,17 +65,21 @@ export const useGraphStore = create<GraphState>()(
     (set, get) => ({
       nodes: [],
       edges: [],
-      unplaced: [],
-      loadGraph: (nodes, edges, unplaced = []) => set({ nodes, edges, unplaced }),
+      loadGraph: (nodes, edges) => set({ nodes, edges }),
       createNode: () => {
         const nodes = get().nodes
         // Cascade by the current node count so repeated clicks fan out instead of stacking.
         set({ nodes: [...nodes, makeNode(nodes.length)] })
       },
+      createLooseArtifact: () => {
+        const nodes = get().nodes
+        set({ nodes: [...nodes, makeLooseArtifact(nodes.length)] })
+      },
       updateNode: (id, patch) =>
         set({
+          // Only hunt nodes have editable fields; the narrow keeps the data spread well-typed.
           nodes: get().nodes.map((n) =>
-            n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
+            n.id === id && n.type === 'hunt' ? { ...n, data: { ...n.data, ...patch } } : n,
           ),
         }),
       setNodePositions: (positions) => set({ nodes: applyPositions(get().nodes, positions) }),
