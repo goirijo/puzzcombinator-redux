@@ -90,6 +90,21 @@ which is the active frontier.
   (touches `Edge.content`, the codec, and the binder's edge-reading code in
   `required_inputs`/`produced_outputs`/`Section.from_node`); no data migration since
   schemas are regenerated, not migrated.
+
+  *Also resolves a builder-API asymmetry.* Today the builder is **id-first for nodes**
+  (`node()` mints an id, `connect` wires node ids) but **value-first for artifacts** (built
+  directly, passed by value into `connect`, embedded in the edge). That's justified now —
+  a node is pure identity that *must* be referenced, an artifact *is* content and reads
+  naturally as an embedded value (`connect(a, b, *cipher.artifacts().values())`) — and it
+  underpins the value-equality round-trip and loose I/O coupling. But the **loose-artifact
+  pool already lets artifacts exist off any edge**, nudging them toward first-class,
+  id-referenced entities. The symmetry to reach for is *"everything is referenced by id,"*
+  **not** *"everything goes through the builder"*: artifact creation/identity should move to
+  a **separate, document-scoped artifact class** (a store/library that owns the instances and
+  hands out ids) — deliberately *not* folded into `GraphBuilder`, which is graph-scoped and
+  structural. The graph's edges and the pool then reference artifact ids. This respects that
+  artifacts are document-scoped with their own lifecycle, distinct from graph wiring.
+  Value-equality survives — id references are still values.
 - **Artifact creation, two paths.** One rail command → a puzzle/artifact *generator*;
   a separate rail command → make an *individual* artifact.
 - **Artifact preview.** Clicking an artifact renders its HTML preview.
