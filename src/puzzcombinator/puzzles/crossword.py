@@ -154,11 +154,13 @@ class CrosswordArtifact(Artifact):
         )
 
     def render(self) -> RenderFragment:
+        numbering, across, down = _analyze(self.solution)
         parts = [
             f'<section class="puzzle crossword" data-id="{html.escape(self.id)}">',
             "<h3>Crossword</h3>",
-            self._render_grid(),
-            self._render_clues(),
+            self._render_grid(numbering),
+            _render_clues_section("Across", across, self.across, reveal=self.reveal)
+            + _render_clues_section("Down", down, self.down, reveal=self.reveal),
         ]
         if self.reveal and self.highlight:
             parts.append(
@@ -168,8 +170,7 @@ class CrosswordArtifact(Artifact):
         parts.append("</section>")
         return RenderFragment.html("".join(parts), styles=_CSS)
 
-    def _render_grid(self) -> str:
-        numbering, _, _ = _analyze(self.solution)
+    def _render_grid(self, numbering: dict[tuple[int, int], int]) -> str:
         highlight = set(self.highlight)
         rows: list[str] = []
         for r, row in enumerate(self.solution):
@@ -186,21 +187,19 @@ class CrosswordArtifact(Artifact):
             rows.append("<tr>" + "".join(cells) + "</tr>")
         return f'<table class="grid">{"".join(rows)}</table>'
 
-    def _render_clues(self) -> str:
-        _, across, down = _analyze(self.solution)
 
-        def section(title: str, slots: list[Slot], clues: dict[int, str]) -> str:
-            items: list[str] = []
-            for slot in slots:
-                clue = html.escape(clues.get(slot.number, ""))
-                if self.reveal:
-                    extra = f' <span class="answer">{html.escape(slot.answer)}</span>'
-                else:
-                    extra = f' <span class="len">({len(slot.answer)})</span>'
-                items.append(f'<li value="{slot.number}">{clue}{extra}</li>')
-            return f'<div class="clues"><h4>{title}</h4><ol>{"".join(items)}</ol></div>'
-
-        return section("Across", across, self.across) + section("Down", down, self.down)
+def _render_clues_section(
+    title: str, slots: list[Slot], clues: dict[int, str], *, reveal: bool
+) -> str:
+    items: list[str] = []
+    for slot in slots:
+        clue = html.escape(clues.get(slot.number, ""))
+        if reveal:
+            extra = f' <span class="answer">{html.escape(slot.answer)}</span>'
+        else:
+            extra = f' <span class="len">({len(slot.answer)})</span>'
+        items.append(f'<li value="{slot.number}">{clue}{extra}</li>')
+    return f'<div class="clues"><h4>{title}</h4><ol>{"".join(items)}</ol></div>'
 
 
 class CrosswordPuzzle(Puzzle):

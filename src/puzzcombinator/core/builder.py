@@ -84,6 +84,10 @@ class GraphBuilder:
             raise GraphError(f"duplicate edge id {edge_id!r}")
         content: list[Artifact] = []
         for item in artifacts:
+            if isinstance(item, str):
+                # str is Iterable, so without this guard a stray string would be
+                # silently scattered into one "artifact" per character.
+                raise GraphError(f"connect() expected Artifact(s), got a string: {item!r}")
             if isinstance(item, Iterable):
                 content.extend(item)
             else:

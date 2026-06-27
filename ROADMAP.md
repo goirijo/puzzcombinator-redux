@@ -99,6 +99,22 @@ pleasant it is. Low-stakes, pick up opportunistically.
   when it already fits, no custom-tooltip machinery. A themed tooltip is the heavier
   alternative if the OS one ever feels off.
 
+## Code health (deferred audit items)
+
+From the 2026-06-27 code audit (full record in `AUDIT.md`). These were
+deliberately *not* done in that cleanup pass because they add behavior or are
+low-value polish — pick up when the adjacent work makes them natural:
+
+- **FastAPI request validation.** Pydantic request models on the `/api/graph`
+  endpoints + narrower exception handling (drop the catch-all 422). Pairs
+  naturally with the browser file-picker milestone.
+- **Frontend hardening.** A top-level React error boundary and explicit loading
+  states (`main.tsx` / `Shell.tsx`).
+- **Low-stakes nits:** `_wrap_graph_for_deserialization` helper for the repeated
+  graph-envelope in `server.py`; `DEFAULT_TAB_ID` constant; `.panel__title` CSS;
+  document the `350ms` history debounce; a few clarifying comments. See
+  `AUDIT.md` for the exact lines.
+
 ## Later layers (defer unless asked)
 
 - **More puzzle types.**

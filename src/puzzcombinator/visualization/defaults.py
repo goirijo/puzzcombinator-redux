@@ -19,6 +19,8 @@ Two jobs, both used by the ``app`` layer when serving a hunt:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from puzzcombinator.core.document import DEFAULT_GRAPH_ID
 from puzzcombinator.core.graph import Graph
 from puzzcombinator.visualization.layout import layered_layout
@@ -48,10 +50,16 @@ def default_workspace(graphs: dict[str, Graph], main_id: str = DEFAULT_GRAPH_ID)
 def resolve_workspace(
     stored: Workspace | None, graphs: dict[str, Graph], main_id: str = DEFAULT_GRAPH_ID
 ) -> Workspace:
-    """Complete a workspace so every node has a position (stored placements win)."""
+    """Complete a workspace so every node has a position (stored placements win).
+
+    Returns a fresh :class:`Workspace`; ``stored`` is left untouched.
+    """
     if stored is None:
         return default_workspace(graphs, main_id)
-    for view in stored.views.values():
-        if view.graph in graphs:
-            view.positions = {**_auto_positions(graphs[view.graph]), **view.positions}
-    return stored
+    views = {
+        vid: replace(view, positions={**_auto_positions(graphs[view.graph]), **view.positions})
+        if view.graph in graphs
+        else view
+        for vid, view in stored.views.items()
+    }
+    return replace(stored, views=views)

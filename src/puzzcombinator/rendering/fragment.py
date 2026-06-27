@@ -18,8 +18,22 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
+
+
+def dedupe_css(blocks: Iterable[str]) -> str:
+    """Join CSS blocks, keeping the first occurrence of each and preserving order.
+
+    Used wherever fragments are aggregated (the composite artifact, the binder) so a
+    style block declared by several pieces lands in the document exactly once.
+    """
+    seen: dict[str, None] = {}
+    for block in blocks:
+        if block and block not in seen:
+            seen[block] = None
+    return "".join(seen)
 
 
 @dataclass(frozen=True)

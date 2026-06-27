@@ -48,6 +48,22 @@ def test_resolve_keeps_stored_positions_and_fills_missing() -> None:
     assert positions["end"] != Position(999.0, 42.0)
 
 
+def test_resolve_does_not_mutate_stored() -> None:
+    # resolve_workspace must return a fresh workspace and leave the caller's input
+    # untouched (it fills positions, which used to mutate the stored view in place).
+    graph = _two_node_graph()
+    stored = Workspace(
+        views={"v1": View(graph="main", title="Main", positions={"start": Position(1.0, 2.0)})},
+        tabs=[Tab(id="t1", view="v1")],
+        active_tab="t1",
+    )
+    resolved = resolve_workspace(stored, {"main": graph})
+
+    assert stored.views["v1"].positions == {"start": Position(1.0, 2.0)}  # unchanged
+    assert "end" in resolved.views["v1"].positions  # the fresh copy got the fill
+    assert resolved is not stored
+
+
 def test_resolve_ignores_views_over_unknown_graphs() -> None:
     # A view referencing a graph that isn't present is left untouched (no crash).
     stored = Workspace(

@@ -144,8 +144,8 @@ Binder((Chapter.of_nodes(graph, branch_a, title="Branch A"),
         Chapter.of_nodes(graph, branch_b, title="Branch B"))).render()
 ```
 
-Every fragment's `styles` aggregate up and are **de-duplicated** (a local copy of
-`CompositeArtifact`'s `_dedupe`, since `rendering` must not import `artifacts`) into one
+Every fragment's `styles` aggregate up and are **de-duplicated** (via `dedupe_css` in
+`rendering/fragment.py`, shared by the binder and `CompositeArtifact`) into one
 `<head>`, so each artifact type's CSS appears once however many times it is embedded — and
 a new artifact type needs zero binder edits. `examples/hunts/mock_hunt/hunt.py` builds
 several binders from one graph to show all of this.

@@ -130,19 +130,23 @@ class Graph:
                 seen.add(artifact.id)
 
     def _check_acyclic(self) -> None:
+        # Kahn's algorithm in O(V+E). We build a local adjacency map rather than
+        # using self.outgoing(): validation runs *before* _rewire(), so per-node
+        # wiring isn't populated yet (see assemble()).
+        adjacency: dict[str, list[str]] = {nid: [] for nid in self.nodes}
         indegree: dict[str, int] = dict.fromkeys(self.nodes, 0)
         for edge in self.edges.values():
+            adjacency[edge.source].append(edge.target)
             indegree[edge.target] += 1
         ready = [nid for nid, deg in indegree.items() if deg == 0]
         seen = 0
         while ready:
             node_id = ready.pop()
             seen += 1
-            for edge in self.edges.values():
-                if edge.source == node_id:
-                    indegree[edge.target] -= 1
-                    if indegree[edge.target] == 0:
-                        ready.append(edge.target)
+            for target in adjacency[node_id]:
+                indegree[target] -= 1
+                if indegree[target] == 0:
+                    ready.append(target)
         if seen != len(self.nodes):
             stuck = sorted(nid for nid, deg in indegree.items() if deg > 0)
             raise GraphError(f"graph has a cycle involving: {stuck}")

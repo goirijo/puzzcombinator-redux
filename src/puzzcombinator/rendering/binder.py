@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from puzzcombinator.core.graph import Graph
 from puzzcombinator.core.ordering import produced_outputs, required_inputs
 from puzzcombinator.rendering.export import html_document
-from puzzcombinator.rendering.fragment import Artifact
+from puzzcombinator.rendering.fragment import Artifact, dedupe_css
 
 #: Divider HTML placed *between* items. A page break (its CSS lives in ``_BINDER_CSS``)
 #: separates chapters; a thin rule separates sections within a chapter. Pass either — or
@@ -58,19 +58,6 @@ _BINDER_CSS = """
                     letter-spacing: 0.05em; margin: 0.4rem 0 0.2rem; }
   .binder-io.binder-out { color: #060; }
 """
-
-
-def _dedupe(blocks: Iterable[str]) -> str:
-    """Join CSS blocks, keeping the first occurrence of each and preserving order.
-
-    A local copy of the same helper used by ``CompositeArtifact`` — the binder lives in
-    ``rendering`` and must not reach up into ``artifacts``.
-    """
-    seen: dict[str, None] = {}
-    for block in blocks:
-        if block and block not in seen:
-            seen[block] = None
-    return "".join(seen)
 
 
 def _render_run(artifacts: Iterable[Artifact]) -> tuple[str, tuple[str, ...]]:
@@ -251,5 +238,5 @@ class Binder:
         """Assemble the whole document: chapters joined by ``chapter_divider``, every
         fragment's CSS aggregated and de-duplicated into the ``<head>``."""
         body = self.chapter_divider.join(c._body(self.section_divider) for c in self.chapters)
-        styles = _dedupe([_BINDER_CSS, *(b for c in self.chapters for b in c._style_blocks())])
+        styles = dedupe_css([_BINDER_CSS, *(b for c in self.chapters for b in c._style_blocks())])
         return html_document(self.title, body, styles)

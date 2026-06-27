@@ -26,7 +26,7 @@ from puzzcombinator.artifacts.registry import (
     artifact_to_dict,
     register_artifact,
 )
-from puzzcombinator.rendering.fragment import Artifact, RenderFragment
+from puzzcombinator.rendering.fragment import Artifact, RenderFragment, dedupe_css
 
 #: Styling for the composite wrapper itself; children carry their own CSS.
 COMPOSITE_CSS = """
@@ -64,17 +64,8 @@ class CompositeArtifact(Artifact):
     def render(self) -> RenderFragment:
         fragments = [child.render() for child in self.children]
         body = "".join(f.markup for f in fragments)
-        styles = _dedupe([COMPOSITE_CSS, *(f.styles for f in fragments)])
+        styles = dedupe_css([COMPOSITE_CSS, *(f.styles for f in fragments)])
         return RenderFragment.html(
             f'<section class="pc-composite" data-id="{html.escape(self.id)}">{body}</section>',
             styles=styles,
         )
-
-
-def _dedupe(blocks: Iterable[str]) -> str:
-    """Join CSS blocks, keeping the first occurrence of each and preserving order."""
-    seen: dict[str, None] = {}
-    for block in blocks:
-        if block and block not in seen:
-            seen[block] = None
-    return "".join(seen)

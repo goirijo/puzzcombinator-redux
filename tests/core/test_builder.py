@@ -90,6 +90,16 @@ def test_connect_puts_artifacts_on_edge() -> None:
     assert content[0].ciphertext == cipher.ciphertext
 
 
+def test_connect_rejects_a_bare_string() -> None:
+    # A str is iterable, so without the guard "go north" would be scattered into one
+    # character-artifact per letter. It must fail loudly instead.
+    builder = GraphBuilder()
+    a = builder.node("a")
+    b = builder.node("b")
+    with pytest.raises(GraphError, match="got a string"):
+        builder.connect(a, b, "go north")  # type: ignore[arg-type]
+
+
 def test_explicit_edge_id_is_kept() -> None:
     builder = GraphBuilder()
     a = builder.node("a")

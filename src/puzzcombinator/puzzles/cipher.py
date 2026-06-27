@@ -71,25 +71,20 @@ class CipherArtifact(Artifact):
 
     def render(self) -> RenderFragment:
         if self.solution is not None:
-            return RenderFragment.html(
-                f'<section class="answer cipher" data-id="{html.escape(self.id)}">'
-                f"<p>Decoded: <strong>{html.escape(self.solution)}</strong></p>"
-                f"</section>",
-                styles=_CSS,
-            )
-        if self.shift is not None:
-            return RenderFragment.html(
-                f'<section class="hint cipher" data-id="{html.escape(self.id)}">'
-                f"<p>Caesar shift: <strong>{self.shift}</strong></p>"
-                f"</section>",
-                styles=_CSS,
+            kind = "answer"
+            body = f"<p>Decoded: <strong>{html.escape(self.solution)}</strong></p>"
+        elif self.shift is not None:
+            kind = "hint"
+            body = f"<p>Caesar shift: <strong>{self.shift}</strong></p>"
+        else:
+            kind = "puzzle"
+            body = (
+                "<h3>Cipher</h3>"
+                "<p>Decode this message:</p>"
+                f'<pre class="ciphertext">{html.escape(self.ciphertext)}</pre>'
             )
         return RenderFragment.html(
-            f'<section class="puzzle cipher" data-id="{html.escape(self.id)}">'
-            f"<h3>Cipher</h3>"
-            f"<p>Decode this message:</p>"
-            f'<pre class="ciphertext">{html.escape(self.ciphertext)}</pre>'
-            f"</section>",
+            f'<section class="{kind} cipher" data-id="{html.escape(self.id)}">{body}</section>',
             styles=_CSS,
         )
 

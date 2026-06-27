@@ -84,8 +84,8 @@ artifact-agnostic. Three nesting levels, each aggregating the one below, mirrori
 The two headline uses: `Binder.of_artifacts([p.artifacts("solution") for p in puzzles])`
 (an answer key) and `Binder.of_nodes(graph, topological_order(graph))` (a page-per-node
 walkthrough). Every fragment's `styles` aggregate and **de-duplicate** into one `<head>`
-(a local copy of `CompositeArtifact._dedupe`, since `rendering` must not import
-`artifacts`) — so a new artifact needs **zero binder edits**. See
+(via `dedupe_css` in `rendering/fragment.py`, shared by the binder and
+`CompositeArtifact`) — so a new artifact needs **zero binder edits**. See
 `rendering/RENDERING.md` and `examples/hunts/mock_hunt/hunt.py` (builds several binders
 from one graph).
 

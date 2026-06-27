@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections import Counter
 from typing import ClassVar, overload
 
 from puzzcombinator.errors import PuzzleError
@@ -63,11 +64,15 @@ class Puzzle(ABC):
         pieces across different edges. Each puzzle subclass documents the keys it
         emits on its ``_artifacts`` method.
         """
-        # TODO: guard against duplicate names. Two artifacts sharing a name silently
-        # collapse here (dict keeps the last), so a piece vanishes from the map with no
-        # error. Compare len(mapping) to the list length and raise PuzzleError on a
-        # collision so the puzzle implementer gets a loud failure instead.
-        mapping = {a.name: a for a in self._artifacts()}
+        # Guard against duplicate names: two artifacts sharing a name would silently
+        # collapse in the dict (last wins), dropping a piece. Fail loudly instead so the
+        # puzzle implementer notices immediately.
+        built = self._artifacts()
+        mapping = {a.name: a for a in built}
+        if len(mapping) != len(built):
+            counts = Counter(a.name for a in built)
+            dupes = sorted(n for n, c in counts.items() if c > 1)
+            raise PuzzleError(f"duplicate artifact names in {type(self).__name__}: {dupes}")
         if name is None:
             return mapping
         try:
