@@ -59,8 +59,10 @@ which is the active frontier.
 - **Lock nodes by default.** Commands generally lock nodes in place; rearranging happens
   only inside a dedicated command, which also offers layout/distribution options and the
   ability to create new views.
-- **Mass select & manipulate.** Once nodes/artifacts can carry extra tagged data, support
-  selecting many and editing them together.
+- **Mass select & manipulate.** Select multiple nodes and act on them as a group — move,
+  collapse, delete, and (once nodes/artifacts can carry extra tagged data) edit them
+  together. React Flow has built-in multi-selection (drag-box / shift-click) to build on;
+  the work is the group operations and how they interact with the per-view position model.
 
 ## Artifacts on the canvas
 
@@ -98,6 +100,13 @@ pleasant it is. Low-stakes, pick up opportunistically.
   measured on the hover the `TabBar` already handles) — full name when truncated, nothing
   when it already fits, no custom-tooltip machinery. A themed tooltip is the heavier
   alternative if the OS one ever feels off.
+- **Center the graph after auto-arrange.** When the VIEW panel's Horizontal/Vertical
+  arrange runs, recenter/fit the result in the viewport so the freshly laid-out graph isn't
+  left scrolled off-screen (React Flow's `fitView`, applied after the new positions land in
+  `ViewPanel.onArrange`).
+- **Indicate tabs showing the same view.** Several tabs can reference one view (vim windows
+  onto a buffer); give them a shared visual cue — a color/badge keyed off `tab.view` — so
+  it's obvious which open tabs are different framings of the same drawing.
 
 ## Code health (deferred audit items)
 
