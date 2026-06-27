@@ -41,17 +41,23 @@ which is the active frontier.
 
 ## Canvas & nodes
 
-- **Edge attachment & drawing connections.** *(Floating edges shipped.)* Edges attach to
-  whichever node sides face each other, recomputed from live geometry (`edges/FloatingEdge`),
-  and re-aim as nodes move — the graph isn't pinned to a shape (see the
-  [[graph-no-imposed-shape]] principle). **Interim state:** nodes show four discrete `source`
-  handles + `ConnectionMode.Loose` (Viewport). These are only the minimum React Flow needs to
-  *render* an edge — a finished edge ignores them and floats — but manual wiring isn't built, so
-  the four dots don't connect anything yet. They're left visible as-is (no point polishing an
-  interim look). **Decided design for when drawing connections lands:** drop the four dots for a
-  *single invisible handle covering the whole node* (React Flow's "Easy Connect" pattern) +
-  `ConnectionMode.Loose`, so a designer starts a drag from anywhere on a node and the resulting
-  edge floats like every other edge. Part of the near-term **Canvas interaction** milestone.
+- **Edge attachment & drawing connections.** *(Built.)* Edges attach to whichever node sides
+  face each other, recomputed from live geometry (`edges/FloatingEdge`), and re-aim as nodes
+  move — the graph isn't pinned to a shape (see the [[graph-no-imposed-shape]] principle).
+  Connecting works: nodes carry four `source` handles + `ConnectionMode.Loose`, and dragging
+  from a handle onto another node fires `onConnect` → `connectNodes` → a fresh floating edge
+  (undoable; self-loops ignored; parallel edges allowed). **Deferred refinement:** the four
+  side dots stay for now. An earlier "Easy Connect" idea (one invisible handle covering the
+  whole node, drag from anywhere) was reconsidered — a full-node handle **conflicts with node
+  dragging** (every mousedown would start a connection instead of a move), so it isn't the free
+  win it looked like. The likely path is **interaction modes** (next bullet) rather than a
+  always-on full-node handle.
+- **Canvas interaction modes.** Different rail commands will likely put the canvas in different
+  *modes* that change what a drag/click does (e.g. a connect mode where dragging from a node
+  body draws an edge, vs. a move/arrange mode where dragging repositions). This resolves the
+  drag-vs-connect conflict above and lets each command expose just the interactions it needs.
+  Still **exploring approaches** — deferred while we focus on functionality; noted here so the
+  handle/connection UX is revisited as part of this, not piecemeal.
 - **Node creation.** *(Built.)* Create new nodes (and loose artifacts — see below) from the
   UI; currently bare buttons in the scratch TESTING command, to be formalized into a real
   command (EDIT) once settled. Undoable via the `createNode`/`createLooseArtifact` store

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
-import { type OnSelectionChangeParams } from '@xyflow/react'
+import { type OnConnect, type OnSelectionChangeParams } from '@xyflow/react'
 import { useStore } from 'zustand'
 
 import { buildSaveRequest, fetchGraph, saveGraph, toFlowGraph } from '../model/api'
@@ -38,6 +38,7 @@ export function Shell() {
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange)
   const detachEdges = useGraphStore((s) => s.detachEdges)
+  const connectNodes = useGraphStore((s) => s.connectNodes)
 
   // Undo/redo come from the temporal store. The methods are stable (read once); the
   // can-undo/can-redo flags are subscribed so the buttons enable/disable reactively.
@@ -88,6 +89,14 @@ export function Shell() {
       else setSelection(null)
     },
     [setSelection],
+  )
+
+  // React Flow reports a finished node→node drag as a Connection; turn it into an edge.
+  const handleConnect = useCallback<OnConnect>(
+    (c) => {
+      if (c.source && c.target) connectNodes(c.source, c.target)
+    },
+    [connectNodes],
   )
 
   const onSave = useCallback(async () => {
@@ -209,6 +218,7 @@ export function Shell() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onEdgesDelete={detachEdges}
+                  onConnect={handleConnect}
                   onSelectionChange={handleSelectionChange}
                   activeTabId={displayedTab?.id}
                   viewport={displayedTab?.viewport}

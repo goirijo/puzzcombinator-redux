@@ -76,6 +76,31 @@ describe('createNode', () => {
   })
 })
 
+describe('connectNodes', () => {
+  it('adds a floating edge wiring source → target', () => {
+    loadScenario([node('n1', 0, 0), node('n2', 200, 0)], [])
+    useGraphStore.getState().connectNodes('n1', 'n2')
+    const edges = useGraphStore.getState().edges
+    expect(edges).toHaveLength(1)
+    expect(edges[0]).toMatchObject({ source: 'n1', target: 'n2', type: 'floating' })
+    expect(edges[0].data!.content).toEqual([])
+  })
+
+  it('ignores a self-loop', () => {
+    loadScenario([node('n1', 0, 0)], [])
+    useGraphStore.getState().connectNodes('n1', 'n1')
+    expect(useGraphStore.getState().edges).toEqual([])
+  })
+
+  it('is undoable — undo removes the connection', () => {
+    loadScenario([node('n1', 0, 0), node('n2', 200, 0)], [])
+    useGraphStore.getState().connectNodes('n1', 'n2')
+    expect(useGraphStore.getState().edges).toHaveLength(1)
+    useGraphStore.temporal.getState().undo()
+    expect(useGraphStore.getState().edges).toEqual([])
+  })
+})
+
 describe('createLooseArtifact', () => {
   it('adds a non-connectable artifact node carrying a pre-baked text artifact', () => {
     useGraphStore.getState().createLooseArtifact()

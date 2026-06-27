@@ -124,6 +124,23 @@ export function makeNode(spawnIndex = 0): HuntFlowNode {
 }
 
 /**
+ * Build a fresh edge wiring source → target, for an in-editor connection. Like makeNode it
+ * mints an opaque uuid id and does no validation (the Python codec re-checks the whole graph
+ * on save). Starts with no artifacts; it draws as a floating edge (attaches to whichever node
+ * sides face each other) and carries the arrowhead every edge has.
+ */
+export function makeEdge(source: string, target: string): HuntFlowEdge {
+  return {
+    id: crypto.randomUUID(),
+    source,
+    target,
+    type: 'floating',
+    markerEnd: { type: MarkerType.ArrowClosed },
+    data: { content: [] },
+  }
+}
+
+/**
  * Project the unplaced pool into loose-artifact canvas nodes: position from the active view
  * (keyed by the `loose:` element id, same 0,0 fallback as hunt nodes), data is the artifact.
  * They are flagged `connectable: false` — a loose artifact is never a wiring endpoint; it

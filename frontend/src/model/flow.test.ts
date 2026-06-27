@@ -5,6 +5,7 @@ import {
   applyPositions,
   detachedArtifactNodes,
   looseElementId,
+  makeEdge,
   makeLooseArtifact,
   makeNode,
   toFlowArtifacts,
@@ -137,6 +138,18 @@ describe('makeNode', () => {
 
   it('cascades the spawn position by spawnIndex so creations do not stack', () => {
     expect(makeNode(1).position).not.toEqual(makeNode(0).position)
+  })
+})
+
+describe('makeEdge', () => {
+  it('wires source → target as an empty floating edge with an opaque id', () => {
+    const e = makeEdge('n1', 'n2')
+    expect(e.source).toBe('n1')
+    expect(e.target).toBe('n2')
+    expect(e.type).toBe('floating')
+    expect(e.data!.content).toEqual([])
+    expect(e.id).toBeTruthy()
+    expect(makeEdge('n1', 'n2').id).not.toBe(e.id) // distinct each call
   })
 })
 

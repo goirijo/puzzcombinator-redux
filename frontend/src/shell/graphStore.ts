@@ -28,6 +28,7 @@ import { temporal } from 'zundo'
 import {
   applyPositions,
   detachedArtifactNodes,
+  makeEdge,
   makeLooseArtifact,
   makeNode,
   withArtifactDetached,
@@ -53,6 +54,8 @@ export interface GraphState extends CanvasGraph {
   createNode: () => void
   /** Add a new pre-baked loose artifact to the canvas/pool (undoable), cascade-offset. */
   createLooseArtifact: () => void
+  /** Wire a new edge source → target (a user-drawn connection). Self-loops are ignored. */
+  connectNodes: (source: string, target: string) => void
   /** Return a just-deleted edge's artifacts to the loose pool (don't destroy them). Called from
    *  React Flow's `onEdgesDelete`, which fires for both a directly-deleted edge and edges
    *  cascaded by a node delete. */
@@ -84,6 +87,12 @@ export const useGraphStore = create<GraphState>()(
       createLooseArtifact: () => {
         const nodes = get().nodes
         set({ nodes: [...nodes, makeLooseArtifact(nodes.length)] })
+      },
+      connectNodes: (source, target) => {
+        // Ignore a node dragged onto itself; parallel edges between two nodes are allowed
+        // (each can carry its own artifacts), so we don't dedupe by source/target.
+        if (source === target) return
+        set({ edges: [...get().edges, makeEdge(source, target)] })
       },
       placeArtifactOnEdge: (artifactId, edgeId) =>
         set(withArtifactPlaced(get(), artifactId, edgeId)),

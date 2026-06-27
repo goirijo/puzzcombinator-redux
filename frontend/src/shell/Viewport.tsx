@@ -20,6 +20,7 @@ import {
   useReactFlow,
   type EdgeTypes,
   type NodeTypes,
+  type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
   type OnSelectionChangeParams,
@@ -43,6 +44,8 @@ interface ViewportProps {
   onEdgesChange: OnEdgesChange<HuntFlowEdge>
   /** Deleted edges (Delete/Backspace, or cascaded by a node delete) — return their artifacts. */
   onEdgesDelete: (edges: HuntFlowEdge[]) => void
+  /** A user dragged a connection between two nodes — create the edge. */
+  onConnect: OnConnect
   onSelectionChange: (params: OnSelectionChangeParams<CanvasNode, HuntFlowEdge>) => void
   /** Id of the active tab — changing it triggers a camera restore. */
   activeTabId?: string
@@ -58,6 +61,7 @@ function ViewportInner({
   onNodesChange,
   onEdgesChange,
   onEdgesDelete,
+  onConnect,
   onSelectionChange,
   activeTabId,
   viewport,
@@ -122,6 +126,9 @@ function ViewportInner({
         // onNodesChange/onEdgesChange already apply (cascading a node's edges for free). We add
         // only onEdgesDelete, to return a removed edge's artifacts to the pool rather than lose them.
         onEdgesDelete={onEdgesDelete}
+        // A drag from one node's handle to another fires onConnect (ConnectionMode.Loose lets
+        // any side handle be either end); we create a floating edge from it.
+        onConnect={onConnect}
         onSelectionChange={onSelectionChange}
         onMoveEnd={(_, vp) => onViewportChange({ x: vp.x, y: vp.y, zoom: vp.zoom })}
       >

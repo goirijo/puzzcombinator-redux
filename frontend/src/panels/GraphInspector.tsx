@@ -6,16 +6,17 @@
 // nodes/edges + the mutating actions, the selection store for what's selected) and takes no
 // props; it owns no state of its own.
 
-import { toPool, type HuntFlowEdge } from '../model/flow'
+import { toPool, type HuntFlowEdge, type HuntFlowNode } from '../model/flow'
+import { shortId } from '../nodes/shortId'
 import { useGraphStore } from '../shell/graphStore'
 import { useSelectionStore } from '../shell/selectionStore'
 
-/** One related edge: the node on its other end plus the artifacts riding it. */
-function RelatedEdge({ otherId, edge }: { otherId: string; edge: HuntFlowEdge }) {
+/** One related edge: the node on its other end (by display name) plus the artifacts riding it. */
+function RelatedEdge({ otherLabel, edge }: { otherLabel: string; edge: HuntFlowEdge }) {
   const artifacts = edge.data?.content ?? []
   return (
     <li className="related__edge">
-      <span className="related__node">{otherId}</span>
+      <span className="related__node">{otherLabel}</span>
       {artifacts.length > 0 && (
         <ul className="related__artifacts">
           {artifacts.map((a) => (
@@ -29,16 +30,16 @@ function RelatedEdge({ otherId, edge }: { otherId: string; edge: HuntFlowEdge })
   )
 }
 
-/** A node's incoming or outgoing edges as a titled list. `edgeToOtherId` picks the node at
- *  the *far* end of each edge (its source for incoming, its target for outgoing). */
+/** A node's incoming or outgoing edges as a titled list. `edgeToOtherLabel` resolves the
+ *  *far*-end node's display name (its source for incoming, its target for outgoing). */
 function RelatedEdgeList({
   label,
   edges,
-  edgeToOtherId,
+  edgeToOtherLabel,
 }: {
   label: string
   edges: HuntFlowEdge[]
-  edgeToOtherId: (edge: HuntFlowEdge) => string
+  edgeToOtherLabel: (edge: HuntFlowEdge) => string
 }) {
   return (
     <section className="inspector__related">
@@ -50,7 +51,7 @@ function RelatedEdgeList({
       ) : (
         <ul className="related">
           {edges.map((e) => (
-            <RelatedEdge key={e.id} otherId={edgeToOtherId(e)} edge={e} />
+            <RelatedEdge key={e.id} otherLabel={edgeToOtherLabel(e)} edge={e} />
           ))}
         </ul>
       )}
@@ -90,6 +91,14 @@ export function GraphInspector() {
   const detachArtifact = useGraphStore((s) => s.detachArtifact)
   const selection = useSelectionStore((s) => s.selection)
 
+  // How an edge endpoint reads in the inspector: the node's label, or its short-id stub when
+  // unlabelled — exactly what the canvas draws on the node. Ids are internal; we don't surface
+  // the full one here (debugging affordances can come back later if we need them).
+  const nodeName = (id: string) => {
+    const n = nodes.find((node): node is HuntFlowNode => node.id === id && node.type === 'hunt')
+    return n?.data.label || shortId(id)
+  }
+
   if (!selection) {
     return <p className="inspector__empty">Select a node on the canvas to edit it.</p>
   }
@@ -105,7 +114,7 @@ export function GraphInspector() {
         <section className="inspector__selected">
           <h3 className="inspector__heading">Edge</h3>
           <p className="inspector__edge-ends">
-            {edge.source} → {edge.target}
+            {nodeName(edge.source)} → {nodeName(edge.target)}
           </p>
         </section>
 
@@ -188,8 +197,8 @@ export function GraphInspector() {
         </label>
       </section>
 
-      <RelatedEdgeList label="Incoming" edges={incoming} edgeToOtherId={(e) => e.source} />
-      <RelatedEdgeList label="Outgoing" edges={outgoing} edgeToOtherId={(e) => e.target} />
+      <RelatedEdgeList label="Incoming" edges={incoming} edgeToOtherLabel={(e) => nodeName(e.source)} />
+      <RelatedEdgeList label="Outgoing" edges={outgoing} edgeToOtherLabel={(e) => nodeName(e.target)} />
     </div>
   )
 }
