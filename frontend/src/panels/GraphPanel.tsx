@@ -83,7 +83,7 @@ function ArtifactRow({
   )
 }
 
-export function GraphInspector() {
+export function GraphPanel() {
   const nodes = useGraphStore((s) => s.nodes)
   const edges = useGraphStore((s) => s.edges)
   const updateNode = useGraphStore((s) => s.updateNode)
@@ -161,7 +161,7 @@ export function GraphInspector() {
 
   // The selection may be a loose-artifact node (it shares the canvas); this panel only edits
   // hunt nodes, so narrow to those. A selected artifact has no editor here yet.
-  const node = nodes.find((n) => n.id === selection.id && n.type === 'hunt')
+  const node = nodes.find((n): n is HuntFlowNode => n.id === selection.id && n.type === 'hunt')
   if (!node) return <p className="inspector__empty">No editable node selected.</p>
 
   const incoming = edges.filter((e) => e.target === node.id)

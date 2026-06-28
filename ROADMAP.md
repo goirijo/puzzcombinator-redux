@@ -31,6 +31,18 @@ which is the active frontier.
   shared hunt-data + active-view positions, and route the undo keybinding by focus (vim-style).
   The persisted format already separates the two channels, so this is additive and **in-memory
   only — no data migration**, not a rewrite. (See the data-flow section of `frontend/FRONTEND.md`.)
+- **Keyboard-driven command selection.** Beyond the existing global chords (`Ctrl/⌘+S`/`Z`/`Y`,
+  in `shell/useKeyboardShortcuts.ts`), let single keys activate rail commands (e.g. `e` → edit) so
+  the editor is drivable without the mouse — in keeping with the vim model. **Design (settled, not
+  built):** the binding is *data on the command registry* — a `key` field on each `Command` in
+  `shell/commands.ts` — not a hardcoded ladder in the hook, so adding a command keeps its one-entry
+  plug-in property. Dispatch lives in `useKeyboardShortcuts` (the one keyboard home), reading
+  `COMMANDS` → `onSelectCommand(id)`. **The sharp edge:** bare-key mnemonics *must* be
+  focus-guarded (ignore when an `input`/`textarea`/`contenteditable` is focused) or typing `e` in a
+  node's Label fires the command; chords deliberately are not guarded (`Ctrl+S` should save mid-edit).
+  So the two interaction classes stay separate branches in the hook. A later, richer extension —
+  vim-style key *sequences* (`g g`, leader keys, modes) — would also live here as a small state
+  machine; defer until wanted.
 - **Browser file-picker** to replace the `PUZZ_GRAPH` env var.
 - **Empty project by default.** Today a fresh load synthesizes a demo graph plus a default
   tab/view/auto-layout so there's always something to draw. Once the browser file-picker and
@@ -59,7 +71,7 @@ which is the active frontier.
   Still **exploring approaches** — deferred while we focus on functionality; noted here so the
   handle/connection UX is revisited as part of this, not piecemeal.
 - **Node creation.** *(Built.)* Create new nodes (and loose artifacts — see below) from the
-  UI; currently bare buttons in the scratch TESTING command, to be formalized into a real
+  UI; currently bare buttons in the SCRATCH command, to be formalized into a real
   command (EDIT) once settled. Undoable via the `createNode`/`createLooseArtifact` store
   actions; ids are opaque uuids minted client-side.
 - **Delete nodes / artifacts / edges.** *(Built.)* Delete via React Flow's native
@@ -134,7 +146,7 @@ which is the active frontier.
 - **Artifact creation, two paths.** One rail command → a puzzle/artifact *generator*;
   a separate rail command → make an *individual* artifact. *(Partial:* the individual path has
   a clunky stub — `createLooseArtifact` drops a pre-baked text artifact into the pool from the
-  TESTING command. Still to do: choosing the artifact type + editing its payload, and the
+  SCRATCH command. Still to do: choosing the artifact type + editing its payload, and the
   generator path.*)*
 - **Artifact preview.** Clicking an artifact renders its HTML preview.
 - **Grouping artifacts** on the canvas (the model already has `CompositeArtifact`).

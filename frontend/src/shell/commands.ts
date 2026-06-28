@@ -6,12 +6,12 @@
 
 import type { FC } from 'react'
 
-import { GraphInspector } from '../panels/GraphInspector'
+import { GraphPanel } from '../panels/GraphPanel'
 import { PlaceholderPanel } from '../panels/PlaceholderPanel'
-import { TestingPanel } from '../panels/testing/TestingPanel'
+import { ScratchPanel } from '../panels/scratch/ScratchPanel'
 import { ViewPanel } from '../panels/ViewPanel'
 
-/** The commands from the design (`frontend/design/ideas.txt`), plus TESTING — a scratch
+/** The commands from the design (`frontend/design/ideas.txt`), plus SCRATCH — a
  *  playground for in-progress features (not in the design). Its sections graduate into real
  *  commands (e.g. EDIT) once they settle, and then it goes away. */
 export type CommandId =
@@ -22,7 +22,7 @@ export type CommandId =
   | 'bind'
   | 'arrange'
   | 'manage'
-  | 'testing'
+  | 'scratch'
 
 export interface CommandDescriptor {
   id: CommandId
@@ -38,13 +38,13 @@ export interface CommandDescriptor {
 // uniform and the panel region just renders the active entry's `Panel`.
 export const COMMANDS: CommandDescriptor[] = [
   { id: 'view', label: 'View', icon: '▤', Panel: ViewPanel },
-  { id: 'graph', label: 'Graph', icon: '◆', Panel: GraphInspector },
+  { id: 'graph', label: 'Graph', icon: '◆', Panel: GraphPanel },
   { id: 'puzzle', label: 'Puzzle', icon: '✦', Panel: PlaceholderPanel },
   { id: 'saveload', label: 'Save / Load', icon: '🖫', Panel: PlaceholderPanel },
   { id: 'bind', label: 'Bind', icon: '❒', Panel: PlaceholderPanel },
   { id: 'arrange', label: 'Arrange', icon: '⊞', Panel: PlaceholderPanel },
   { id: 'manage', label: 'Manage', icon: '☰', Panel: PlaceholderPanel },
-  { id: 'testing', label: 'Testing', icon: '🧪', Panel: TestingPanel },
+  { id: 'scratch', label: 'Scratch', icon: '🧪', Panel: ScratchPanel },
 ]
 
 export function commandById(id: CommandId): CommandDescriptor {

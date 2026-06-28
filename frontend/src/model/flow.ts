@@ -26,7 +26,9 @@ export interface NodeFields {
   notes: string
 }
 
-/** The data our custom node component renders: the persisted fields. */
+/** `NodeFields` plus the `[key: string]: unknown` index signature React Flow forces on every
+ *  node's `data`. Same fields — the index signature is the only delta, and the reason
+ *  `NodeFields` exists separately (so `Partial<NodeFields>` patches stay typo-checked). */
 export interface HuntNodeData extends NodeFields {
   [key: string]: unknown
 }

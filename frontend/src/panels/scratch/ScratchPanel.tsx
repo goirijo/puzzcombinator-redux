@@ -1,4 +1,4 @@
-// The TESTING rail command: a scratch playground for in-progress editor features. It is NOT
+// The SCRATCH rail command: a playground for in-progress editor features. It is NOT
 // part of the command design — it exists to force each new feature to be a self-contained
 // <Section> that subscribes to the stores it needs, so once a feature settles it can be lifted
 // wholesale into its real command (EDIT, …) with no rewiring. Deliberately clunky: bare
@@ -7,9 +7,9 @@
 import { ArtifactCreateSection } from './ArtifactCreateSection'
 import { NodeCreateSection } from './NodeCreateSection'
 
-export function TestingPanel() {
+export function ScratchPanel() {
   return (
-    <div className="testing-panel">
+    <div className="scratch-panel">
       <NodeCreateSection />
       <ArtifactCreateSection />
     </div>

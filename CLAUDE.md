@@ -171,12 +171,12 @@ artifacts back to the pool), and has a **per-view "show unplaced artifacts" togg
 undoable. Storage for this is the `HuntDocument.unplaced` pool (per graph id) and the
 workspace `View.show_unplaced` flag. The frontend grew to three Zustand stores (`graphStore`
 undoable, `workspaceStore`, `selectionStore`); `PanelProps` was retired — panels subscribe to
-stores. Create/delete buttons currently live in a scratch **TESTING** rail command; placement
+stores. Create/delete buttons currently live in a **SCRATCH** rail command; placement
 buttons live in the GRAPH inspector.
 
 Likely next steps: the **drag-onto-edge gesture** for placement (buttons exist; the gesture
 needs edge hit-testing), a **browser file-picker** to replace the `PUZZ_GRAPH` env var,
-**"empty project by default"** (drop demo mode), formalizing the TESTING sections into real
+**"empty project by default"** (drop demo mode), formalizing the SCRATCH sections into real
 commands, and wiring **"generate a binder from the editor"** (unblocked — the binder is real).
 The user is **new to frontend** — pace GUI work incrementally. Later layers (more puzzle types,
 GUI authoring, the tracking/monitoring layer where answer-checking would live) stay deferred

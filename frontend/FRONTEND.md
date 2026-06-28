@@ -78,7 +78,10 @@ next to their source (`*.test.ts`).
 
 | File | What it is |
 | --- | --- |
-| `Shell.tsx` | The **orchestrator / I/O file**. Fetches both channels on mount (graph → the graph store, workspace → the workspace store), holds the little non-store UI state that's left (active command, save status + dirty), wires the regions with `react-resizable-panels`, projects the displayed nodes (honoring the active view's `show_unplaced`), routes the canvas's selection into the selection store, and drives global Save/Undo/Redo + keyboard shortcuts. |
+| `Shell.tsx` | The **orchestrator**. Wires the regions with `react-resizable-panels`, projects the displayed nodes (honoring the active view's `show_unplaced`), and routes the canvas's selection into the selection store. Self-contained behaviors live in hooks beside it — `usePersistence`, `useUndoRedo`, `useKeyboardShortcuts` — so this file stays "gather state, lay out regions" with only the small remaining UI state (active command) as plain hooks. |
+| `usePersistence.ts` | The **load/save lifecycle hook**, lifted out of `Shell`: seeds both stores from the backend on mount, exposes `onSave` + `saveState` + a memoized `isDirty` (a snapshot compare of the save payload). Subscribes to the stores it needs directly, like a panel. |
+| `useUndoRedo.ts` | The **undo/redo hook**: the temporal store's reactive `canUndo`/`canRedo` flags + the `onUndo`/`onRedo` actions (which end any hover-preview first, since undo/redo operate on the live nodes). |
+| `useKeyboardShortcuts.ts` | The **global keyboard hook**: binds the chords (`Ctrl/⌘+S` save, `Ctrl/⌘+Z` undo, `Ctrl/⌘+Shift+Z`/`Ctrl/⌘+Y` redo) to handlers passed in. The home for keyboard handling — registry-driven command mnemonics (focus-guarded) would land here too. |
 | `graphStore.ts` | The **graph store** — a Zustand + zundo `temporal` store holding the *undoable* canvas: `nodes` (hunt **and** loose-artifact nodes, positions *and* fields) + `edges`, and its mutators (`createNode`, `createLooseArtifact`, `updateNode`, `placeArtifactOnEdge`, `detachArtifact`, `detachEdges`, `setNodePositions`, the React Flow change handlers). One user action = one undo step (`equality` ignores selection/drag flags & rounds positions; a leading-edge `handleSet` debounce coalesces bursts). Positions ride here for now (see the data-flow section). |
 | `workspaceStore.ts` | The **workspace store** — a Zustand store (deliberately **not** undoable) holding the `WorkspaceDTO` (views/tabs/active tab) + the view/tab actions (`selectView`/`selectTab`/`createView`/`createTab`/`deleteView`/`deleteTab`/`renameView`/`setShowUnplaced`/viewport + hover-preview). Owns the position-lifecycle dance on view switches (flush live drags, reproject, reset history). |
 | `selectionStore.ts` | The **selection store** — a tiny Zustand store for the transient canvas `selection` (a node, an edge, or null). Not undoable, not saved; the canvas writes it, panels read it. |
@@ -97,9 +100,9 @@ next to their source (`*.test.ts`).
 
 | File | What it is |
 | --- | --- |
-| `GraphInspector.tsx` | The **GRAPH** command's panel: with a node selected, edit its label/action/notes and see its incoming/outgoing edges + artifacts; with an edge selected, list its artifacts (each with **Detach**) and the pool (each with **Place**). Subscribes to the graph + selection stores; takes no props. |
+| `GraphPanel.tsx` | The **GRAPH** command's panel: with a node selected, edit its label/action/notes and see its incoming/outgoing edges + artifacts; with an edge selected, list its artifacts (each with **Detach**) and the pool (each with **Place**). Subscribes to the graph + selection stores; takes no props. |
 | `ViewPanel.tsx` | The **VIEW** command's panel: list/switch/create/rename/delete views, auto-arrange, and the per-view **Show unplaced artifacts** toggle. Subscribes to the workspace (and graph) store. |
-| `testing/` | The **TESTING** rail command — a scratch playground whose self-contained `<Section>`s (node create, artifact create) subscribe to stores directly, so each lifts into its real command once it settles. |
+| `scratch/` | The **SCRATCH** rail command — a playground whose self-contained `<Section>`s (node create, artifact create) subscribe to stores directly, so each lifts into its real command once it settles. |
 | `PlaceholderPanel.tsx` | The stand-in every not-yet-built command opens, so the rail shows the full intended command set. |
 
 **Config — set once, rarely opened:** `index.html` (the page React loads into),

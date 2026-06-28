@@ -138,13 +138,13 @@ Create `src/panels/YourPanel.tsx`. A panel takes **no props**: it subscribes to 
 needs and holds no graph state of its own. Each `use*Store((s) => s.field)` call selects one
 slice and re-renders the panel when just that slice changes.
 
-The GRAPH panel (`src/panels/GraphInspector.tsx`) is the reference. Its shape:
+The GRAPH panel (`src/panels/GraphPanel.tsx`) is the reference. Its shape:
 
 ```tsx
 import { useGraphStore } from '../shell/graphStore'
 import { useSelectionStore } from '../shell/selectionStore'
 
-export function GraphInspector() {
+export function GraphPanel() {
   const nodes = useGraphStore((s) => s.nodes)
   const updateNode = useGraphStore((s) => s.updateNode)
   const selection = useSelectionStore((s) => s.selection)

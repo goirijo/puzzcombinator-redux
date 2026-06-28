@@ -10,12 +10,10 @@
 // ride the graph store's React Flow nodes during editing — split apart only at save. A second
 // store for independent move-undo is deferred until it has a UI.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { type OnConnect, type OnSelectionChangeParams } from '@xyflow/react'
-import { useStore } from 'zustand'
 
-import { buildSaveRequest, fetchGraph, saveGraph, toFlowGraph } from '../model/api'
 import { withLooseArtifactsHidden, type CanvasNode, type HuntFlowEdge } from '../model/flow'
 import { activeView } from '../model/workspace'
 import { CommandRail } from './CommandRail'
@@ -26,15 +24,16 @@ import { Viewport } from './Viewport'
 import { useGraphStore } from './graphStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useSelectionStore } from './selectionStore'
+import { usePersistence } from './usePersistence'
+import { useUndoRedo } from './useUndoRedo'
+import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 import type { CommandId } from './commands'
-import type { SaveState } from './types'
 import './shell.css'
 
 export function Shell() {
   // Graph state lives in the store (so it's undoable); subscribe to it here.
   const nodes = useGraphStore((s) => s.nodes)
   const edges = useGraphStore((s) => s.edges)
-  const loadGraph = useGraphStore((s) => s.loadGraph)
   const onNodesChange = useGraphStore((s) => s.onNodesChange)
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange)
   const detachEdges = useGraphStore((s) => s.detachEdges)
@@ -42,18 +41,13 @@ export function Shell() {
 
   // Undo/redo come from the temporal store. The methods are stable (read once); the
   // can-undo/can-redo flags are subscribed so the buttons enable/disable reactively.
-  const canUndo = useStore(useGraphStore.temporal, (s) => s.pastStates.length > 0)
-  const canRedo = useStore(useGraphStore.temporal, (s) => s.futureStates.length > 0)
-
   // The workspace channel (views/tabs/active tab) lives in its own store now (so panels can
   // subscribe to it directly); the active view's switch/create logic lives there too.
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const selectTab = useWorkspaceStore((s) => s.selectTab)
   const createTab = useWorkspaceStore((s) => s.createTab)
   const deleteTab = useWorkspaceStore((s) => s.deleteTab)
   const previewTab = useWorkspaceStore((s) => s.previewTab)
-  const clearPreview = useWorkspaceStore((s) => s.clearPreview)
   // The tab being hover-previewed (or null). The canvas shows this tab when set, else the
   // active tab — so hovering a tab previews exactly what clicking it would show.
   const previewTabId = useWorkspaceStore((s) => s.previewTabId)
@@ -63,24 +57,15 @@ export function Shell() {
   // the canvas writes it through this setter.
   const setSelection = useSelectionStore((s) => s.setSelection)
 
+  // Self-contained behaviors live in their own hooks: load/save + dirty (seeds the stores on
+  // mount), undo/redo (temporal-store flags + actions), and the global keyboard chords wiring
+  // both together.
+  const { saveState, isDirty, onSave } = usePersistence()
+  const { canUndo, canRedo, onUndo, onRedo } = useUndoRedo()
+  useKeyboardShortcuts({ onSave, onUndo, onRedo })
+
   // Non-undoable UI state.
   const [activeCommandId, setActiveCommandId] = useState<CommandId | null>('graph')
-  const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' })
-  // The serialized save payload as of the last load/save; null until first load. Drives `isDirty`.
-  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchGraph()
-      .then((res) => {
-        loadWorkspace(res.workspace)
-        const { nodes: n, edges: e } = toFlowGraph(res)
-        loadGraph(n, e)
-        // The initial load shouldn't be undoable, and is the clean baseline.
-        useGraphStore.temporal.getState().clear()
-        setSavedSnapshot(JSON.stringify(buildSaveRequest(n, e, res.workspace)))
-      })
-      .catch((err) => console.error('failed to load graph', err))
-  }, [loadGraph, loadWorkspace])
 
   const handleSelectionChange = useCallback(
     ({ nodes: sn, edges: se }: OnSelectionChangeParams<CanvasNode, HuntFlowEdge>) => {
@@ -99,55 +84,6 @@ export function Shell() {
     [connectNodes],
   )
 
-  const onSave = useCallback(async () => {
-    if (!workspace) return
-    // End any hover-preview first: save reads the live nodes directly, which would otherwise
-    // be the *previewed* arrangement. (Mouse-out already covers the pointer path; this covers
-    // Ctrl+S while the pointer still sits on a tab.)
-    clearPreview()
-    // Read straight from the store so we always serialize the latest graph.
-    const { nodes: n, edges: e } = useGraphStore.getState()
-    const body = buildSaveRequest(n, e, workspace)
-    setSaveState({ status: 'saving' })
-    try {
-      await saveGraph(body)
-      setSavedSnapshot(JSON.stringify(body))
-      setSaveState({ status: 'saved' })
-    } catch (err) {
-      setSaveState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
-    }
-  }, [workspace, clearPreview])
-
-  // Undo/redo also operate on the live nodes, so end any preview first (keyboard path).
-  const onUndo = useCallback(() => {
-    clearPreview()
-    useGraphStore.temporal.getState().undo()
-  }, [clearPreview])
-  const onRedo = useCallback(() => {
-    clearPreview()
-    useGraphStore.temporal.getState().redo()
-  }, [clearPreview])
-
-  // Keyboard shortcuts: Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z (or Ctrl/⌘+Y) redo.
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (!ev.metaKey && !ev.ctrlKey) return
-      const key = ev.key.toLowerCase()
-      if (key === 's') {
-        ev.preventDefault()
-        void onSave()
-      } else if (key === 'z' && !ev.shiftKey) {
-        ev.preventDefault()
-        onUndo()
-      } else if ((key === 'z' && ev.shiftKey) || key === 'y') {
-        ev.preventDefault()
-        onRedo()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onSave, onUndo, onRedo])
-
   // Clicking the active command again closes its panel.
   const onSelectCommand = useCallback((id: CommandId) => {
     setActiveCommandId((current) => (current === id ? null : id))
@@ -159,10 +95,6 @@ export function Shell() {
   // the store reprojects its view's positions; here we feed its id + camera to the Viewport.
   const displayedTabId = previewTabId ?? workspace?.active_tab ?? null
   const displayedTab = workspace?.tabs.find((t) => t.id === displayedTabId)
-  const isDirty =
-    workspace !== null &&
-    savedSnapshot !== null &&
-    JSON.stringify(buildSaveRequest(nodes, edges, workspace)) !== savedSnapshot
   // What the canvas actually draws: a projection of the store nodes that honors the *displayed*
   // view's per-view "show unplaced?" flag (the previewed view while hovering, else the active
   // one — so a hover-preview of a hide-pool view previews it hidden). The store/save always keep

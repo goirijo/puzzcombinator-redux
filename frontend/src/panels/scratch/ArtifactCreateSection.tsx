@@ -1,4 +1,4 @@
-// A TESTING-panel section: drop a pre-baked loose artifact onto the canvas (it joins the
+// A SCRATCH-panel section: drop a pre-baked loose artifact onto the canvas (it joins the
 // graph's unplaced pool, so it shows in every view). Like NodeCreateSection it subscribes to
 // the graph store's action directly and takes no props, so it lifts out cleanly later. One
 // button, pre-baked text artifact — clunky on purpose for now.
