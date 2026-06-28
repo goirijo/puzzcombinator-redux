@@ -3,7 +3,8 @@
 Orientation for a fresh session. Read this, skim `README.md` and
 `examples/hunts/mock_hunt/hunt.py`, and you're caught up — you do **not** need any prior
 chat transcript. Deeper rationale lives in the auto-loaded memory files
-(`design-principles`, `roadmap`) and in `git log` (commit messages are detailed).
+(`design-principles`, `roadmap`), the on-demand package docs (linked below), and `git log`
+(commit messages are detailed).
 
 ## What this is
 
@@ -14,27 +15,10 @@ hunt — there is no answer-checking anywhere (in a physical hunt, correctness i
 implicit when one puzzle's output is the next one's input). Live
 progress-tracking is a future, separate layer.
 
-## Refactor complete (bottom-up rebuild, 2026-06-04 → 2026-06-14)
-
-We rebuilt the library **one layer at a time, lowest first**. All phases are done and
-green:
-
-- **Phase 1 — Artifact layer.** Minimal single-thing primitives (`text`/`image`/`svg`),
-  a `CompositeArtifact`, the registry envelope helpers, and the single-artifact file
-  writers. See `src/puzzcombinator/artifacts/ARTIFACTS.md`.
-- **Phase 2 — Puzzles + serialization + core hooks.** The puzzle generators,
-  `serialization/codec.py`, and `core/graph.py`'s duplicate-id check; the old
-  player/game-master split (and the `Audience` enum) is **gone from the codebase**. A
-  puzzle emits *all* its pieces — prompt pieces and answer key — as one flat
-  `{name: Artifact}` map; which piece goes where is a placement decision.
-- **Phase 3 — The binder.** `rendering/binder.py` was rebuilt as composable
-  `Section`/`Chapter`/`Binder` primitives (see "Output / the binder" below). The old
-  `game_master_binder`/`player_pages`/`hunt_bundle` and the player-vs-answer-key routing
-  question are **gone** — a binder is now just whatever collection of renderings the
-  designer assembles.
-
-`pytest` is **171 passed / 0 skipped**, `ruff` + `mypy` clean. (Pre-existing lint/format
-drift in `examples/hunts/jgg_hunt/hunt.py` — the user's WIP hunt — is out of scope.)
+The library layers — **artifacts → puzzles → serialization → core → rendering** — are
+complete and green. A puzzle emits all its pieces (prompt pieces + answer key) as one flat
+`{name: Artifact}` map; there's no player-vs-answer-key tag. The active frontier is the
+**GUI editor** (`frontend/`). For how the bottom-up rebuild got here, see `git log`.
 
 ## Architecture — the model and the layer map
 
@@ -43,7 +27,7 @@ direction, and the **generated → stored → displayed** data lifecycle all liv
 **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — read it once to orient. Per-layer detail is in
 the package docs it links to (`artifacts/ARTIFACTS.md`, `puzzles/PUZZLES.md`,
 `core/GRAPHS.md`, `rendering/RENDERING.md`, `app/APP.md`). That is the canonical
-architecture reference; this file is the agent quickstart + current status.
+architecture reference; this file is the agent quickstart.
 
 A few practical facts for *writing code here* that the architecture doc doesn't dwell on:
 
@@ -61,33 +45,15 @@ A few practical facts for *writing code here* that the architecture doc doesn't 
 
 ## Output / the binder
 
-A **binder** is **not a fixed thing** — it is just *a collection of renderings that
-logically belong together*, chosen by the designer. There is **no player-vs-answer-key
-routing** and no opinion about what a hunt's output "should" be (that question dissolved
-with the `Audience` enum); you decide what goes in and `rendering/binder.py` gives you
-composition + layout. Pure (renders to a string — write with `Path.write_text`) and
-artifact-agnostic. Three nesting levels, each aggregating the one below, mirroring
-`CompositeArtifact`:
-
-- **`Section`** — one rendered item. `Section.from_artifact(artifact)`, or
-  `Section.from_node(graph, node_id, *, incoming=True, outgoing=True)` (a node's
-  header + the artifacts on its incoming/outgoing edges, via `required_inputs`/
-  `produced_outputs`). Node-facing binder methods take **ids** (the same handle
-  `node()`/`topological_order` give back) and materialize via `graph.node` internally.
-- **`Chapter`** — a group of closely-related sections under an optional title.
-  `Chapter.of_artifacts(...)` / `Chapter.of_nodes(graph, node_ids, ...)`.
-- **`Binder`** — a collection of chapters rendering to **one standalone HTML document**.
-  Layout knobs are fields: `title`, `chapter_divider` (page break, default) and
-  `section_divider` (thin rule, default), all overridable. `Binder.of_artifacts(...)` /
-  `Binder.of_nodes(graph, node_ids, ...)` wrap a single chapter for the ungrouped case.
-
-The two headline uses: `Binder.of_artifacts([p.artifacts("solution") for p in puzzles])`
-(an answer key) and `Binder.of_nodes(graph, topological_order(graph))` (a page-per-node
-walkthrough). Every fragment's `styles` aggregate and **de-duplicate** into one `<head>`
-(via `dedupe_css` in `rendering/fragment.py`, shared by the binder and
-`CompositeArtifact`) — so a new artifact needs **zero binder edits**. See
-`rendering/RENDERING.md` and `examples/hunts/mock_hunt/hunt.py` (builds several binders
-from one graph).
+A **binder** is just *a collection of renderings the designer assembles* — there's no
+player-vs-answer-key routing and no opinion about what a hunt "should" output. Three nesting
+levels mirror `CompositeArtifact`: **`Section`** (one rendering) → **`Chapter`** (titled
+group) → **`Binder`** (a collection of chapters → one standalone HTML doc; layout via the
+`title`/`chapter_divider`/`section_divider` fields). Pure (renders to a string) and
+artifact-agnostic — every fragment's CSS aggregates and de-duplicates into one `<head>` (via
+`dedupe_css` in `rendering/fragment.py`), so a new artifact needs **zero binder edits**. Full
+API + the headline uses (answer key, page-per-node walkthrough) are in `rendering/RENDERING.md`
+and `examples/hunts/mock_hunt/hunt.py`.
 
 ## Key design rules (don't violate without discussing)
 
@@ -105,79 +71,55 @@ from one graph).
   `__eq__`/`__hash__` is **value-based** (type + id + name + payload), which is what
   makes the round-trip `==` invariant hold. Puzzle generators are not serialized and
   are not compared.
-- **GUI = producer, binder = consumer, model+serialization = the seam.** A visual
-  hunt map is deferred (GUI-adjacent).
+- **GUI = producer, binder = consumer, model+serialization = the seam.**
 
-## Adding a type (the whole recipe)
+## Adding a type (the short version)
 
-1. **The artifact** (the serializable renderable). The full recipe — `type_name`,
-   `@register_artifact`, `to_payload`/`from_payload`, a pure `render()`, and where it
-   lives — is in `artifacts/ARTIFACTS.md` ("Writing a custom artifact"). A pure clue
-   can reuse `TextArtifact`; several things together is a `CompositeArtifact`.
-2. **The puzzle generator** (*only* if a single authoring object emits several
-   artifacts, or distinct prompt-vs-answer pieces). Subclass `Puzzle`, set
-   `type_name` (the id prefix), implement `_artifacts() -> list[Artifact]` building
-   **all** the instances (ids via `self.artifact_id(name)`); the base
-   `artifacts(name=None)` does the map/name dispatch. Emit every piece — where the
-   prompt and answer views differ, that's *two distinctly-named instances* (e.g.
-   cipher's `cipher`/`solution`, crossword's `crossword`/`solution`), not one with a
-   flag. **Skip this step for an orphan artifact** — one with nothing to generate
-   (text, image, a lat/long). It has no puzzle; the designer constructs it directly
-   (see `ImageArtifact` in the mock hunt). Convenience constructors (`from_file`, …)
-   go on the artifact as classmethods.
+Full recipe in `artifacts/ARTIFACTS.md` ("Writing a custom artifact") and `puzzles/PUZZLES.md`.
+The shape:
 
-Where it lives: an **orphan** artifact goes in `artifacts/` (beside `text.py` /
-`image.py`); a **puzzle-bound** artifact goes in `puzzles/` in the same file as its
-generator. Export the new classes from that package's `__init__.py` and the package
-`__init__.py`. **No edits to `core/`, `serialization/`, or `rendering/`.** Add a test
-file mirroring the others (payload round-trip + render; for a generator, the
-`artifacts()` map).
+1. **The artifact** (the serializable renderable): `type_name`, `@register_artifact`,
+   `to_payload`/`from_payload`, a pure `render()`. A pure clue can reuse `TextArtifact`;
+   several things together is a `CompositeArtifact`.
+2. **The puzzle generator** — *only* if one authoring object emits several artifacts or
+   distinct prompt-vs-answer pieces. Subclass `Puzzle`, set `type_name`, implement
+   `_artifacts()` building **all** instances (ids via `self.artifact_id(name)`). Emit every
+   piece as distinctly-named instances (cipher's `cipher`/`solution`), never one with a flag.
+   **Skip this for an orphan artifact** (text, image, lat/long) — the designer constructs it
+   directly.
+
+Where it lives: an **orphan** artifact → `artifacts/`; a **puzzle-bound** artifact →
+`puzzles/` (same file as its generator). Export from the package `__init__.py`s. **No edits
+to `core/`, `serialization/`, or `rendering/`.** Add a test mirroring the others.
 
 ## Commands / the "done" bar
 
 ```bash
 pip install -e ".[dev]"
-pytest                 # 171 passed, 0 skipped
+pytest                                     # all green, 0 skipped
 ruff check . && ruff format --check .
 mypy src/puzzcombinator
-python examples/hunts/mock_hunt/hunt.py   # regenerates its out/ (binder.html, solutions.html, …)
+python examples/hunts/mock_hunt/hunt.py    # regenerates its out/ (binder.html, solutions.html, …)
 ```
-All green. (Pre-existing lint/format drift in `examples/hunts/jgg_hunt/hunt.py` — the
-user's WIP hunt — is excluded from the bar; don't touch it without asking.) Still
-worthwhile to restore as a habit: `pytest --cov=puzzcombinator` (100% on `core/`).
-Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics
-used), free-form `action` strings, commit messages end with the Co-Authored-By
-trailer. Generated `examples/*_out/` and `*.html`/`*.svg` are gitignored.
 
-## Current status & likely next steps
+Conventions: `src/` layout, hatchling, `requires-python >=3.12` (PEP 695 generics used),
+free-form `action` strings, commit messages end with the Co-Authored-By trailer. Generated
+`examples/*_out/` and `*.html`/`*.svg` are gitignored. **`examples/hunts/jgg_hunt/hunt.py` is
+the user's WIP hunt — excluded from the bar; don't touch it without asking.**
 
-**Bottom-up refactor complete (see the banner).** All layers are migrated and green —
-artifacts, puzzles + serialization + core, and now the binder. A puzzle emits all its
-pieces in one `{name: Artifact}` map; a binder is whatever collection of renderings the
-designer assembles (no player/answer-key tag — the `Audience` enum is gone). Documented
-across `artifacts/ARTIFACTS.md`, `rendering/RENDERING.md`,
-`puzzles/PUZZLES.md`, `core/GRAPHS.md`, and `app/APP.md`.
+## Status & next steps
 
-**The long-term plan lives in [`ROADMAP.md`](ROADMAP.md)** — read it for the full,
-grouped backlog. It is a *tracking* doc, not a work queue: nothing there enters
-development until a prompt makes it the explicit subject (the `build-only-whats-asked`
-rule). New "nice to have" ideas get parked there, not coded speculatively.
+The library is complete; the **GUI editor** (`frontend/`) is the active frontier. It draws the
+hunt graph and edits content — create/delete nodes/edges/loose artifacts, move artifacts
+pool↔edge, a per-view show-unplaced toggle — all undoable. Storage: the `HuntDocument.unplaced`
+pool + workspace `View` flags. Frontend: three Zustand stores (`graphStore` undoable,
+`workspaceStore`, `selectionStore`); panels subscribe to stores (no props). See
+`frontend/FRONTEND.md` (frontend) and `app/APP.md` (the wire seam) for current detail.
 
-The GUI editor is the active frontier, and the **content-editing milestone has landed**:
-beyond drawing the graph (node drag with per-view positions persisted, pan/zoom, floating
-edges — all done), the editor now **creates and deletes** nodes/edges/loose artifacts,
-**moves artifacts between the unplaced pool and edges** (deleting an edge detaches its
-artifacts back to the pool), and has a **per-view "show unplaced artifacts" toggle** — all
-undoable. Storage for this is the `HuntDocument.unplaced` pool (per graph id) and the
-workspace `View.show_unplaced` flag. The frontend grew to three Zustand stores (`graphStore`
-undoable, `workspaceStore`, `selectionStore`); `PanelProps` was retired — panels subscribe to
-stores. Create/delete buttons currently live in a **SCRATCH** rail command; placement
-buttons live in the GRAPH inspector.
+**The backlog lives in [`ROADMAP.md`](ROADMAP.md)** — a *tracking* doc, not a work queue:
+nothing there enters development until a prompt makes it the explicit subject (the
+`build-only-whats-asked` rule). Park new ideas there; don't code them speculatively.
 
-Likely next steps: the **drag-onto-edge gesture** for placement (buttons exist; the gesture
-needs edge hit-testing), a **browser file-picker** to replace the `PUZZ_GRAPH` env var,
-**"empty project by default"** (drop demo mode), formalizing the SCRATCH sections into real
-commands, and wiring **"generate a binder from the editor"** (unblocked — the binder is real).
 The user is **new to frontend** — pace GUI work incrementally. Later layers (more puzzle types,
 GUI authoring, the tracking/monitoring layer where answer-checking would live) stay deferred
 unless asked.
