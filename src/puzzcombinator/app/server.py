@@ -41,7 +41,7 @@ from fastapi import FastAPI, HTTPException
 from puzzcombinator.artifacts.registry import artifact_from_dict, artifact_to_dict
 from puzzcombinator.core.document import DEFAULT_GRAPH_ID, HuntDocument
 from puzzcombinator.core.graph import Graph
-from puzzcombinator.errors import GraphError, SerializationError
+from puzzcombinator.errors import GraphError, RegistryError, SerializationError
 from puzzcombinator.serialization import (
     document_from_dict,
     document_to_dict,
@@ -224,6 +224,26 @@ def save_document_as(body: dict[str, Any]) -> dict[str, Any]:
     _write_document(path, body)
     _active_path = path
     return {"saved": True, "path": path}
+
+
+@app.post("/api/render")
+def render_artifact(body: dict[str, Any]) -> dict[str, Any]:
+    """Render a single artifact envelope to its HTML/SVG fragment, for live preview.
+
+    Stateless and file-independent, like :func:`arrange`: the editor sends one artifact's
+    ``{type, id, name, payload}`` envelope (a piece of its live, possibly-unsaved graph) and
+    gets back the :class:`~puzzcombinator.rendering.fragment.RenderFragment` fields —
+    ``{markup, kind, styles}`` — to drop into a sandboxed preview. Rendering stays the
+    backend's single source of truth (the artifact's pure ``render``); the frontend never
+    learns a concrete artifact's markup. Artifact-agnostic: the envelope flows through the
+    registry, so a new artifact type previews with no edit here. Returns 422 on an unknown
+    type or a malformed envelope/payload.
+    """
+    try:
+        fragment = artifact_from_dict(body).render()
+    except (RegistryError, SerializationError, GraphError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"cannot render: {exc}") from exc
+    return {"markup": fragment.markup, "kind": fragment.kind, "styles": fragment.styles}
 
 
 @app.post("/api/arrange")

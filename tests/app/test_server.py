@@ -374,3 +374,38 @@ def test_put_rejects_invalid_graph(tmp_path, monkeypatch) -> None:
         "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
     )
     assert response.status_code == 422
+
+
+def test_render_returns_artifact_fragment() -> None:
+    # Stateless like arrange: an artifact envelope in, its rendered fragment out. No document.
+    envelope = {
+        "type": "text",
+        "id": "text-1",
+        "name": "clue",
+        "payload": {"text": "to the kitchen"},
+    }
+    body = client.post("/api/render", json=envelope).json()
+    assert body["kind"] == "html"
+    assert "to the kitchen" in body["markup"]
+    # The fragment carries its own CSS so the preview can sandbox it standalone.
+    assert body["styles"]
+
+
+def test_render_matches_the_artifacts_own_render() -> None:
+    # The endpoint must be the artifact's pure render, not a reimplementation of it.
+    artifact = TextArtifact("hello", name="clue", id="text-9")
+    fragment = artifact.render()
+    envelope = {"type": "text", "id": "text-9", "name": "clue", "payload": artifact.to_payload()}
+    body = client.post("/api/render", json=envelope).json()
+    assert body == {"markup": fragment.markup, "kind": fragment.kind, "styles": fragment.styles}
+
+
+def test_render_rejects_unknown_artifact_type() -> None:
+    envelope = {"type": "nope", "id": "x", "name": "x", "payload": {}}
+    assert client.post("/api/render", json=envelope).status_code == 422
+
+
+def test_render_rejects_malformed_payload() -> None:
+    # A text artifact with no `text` field can't be rebuilt — surfaced as a 422, not a 500.
+    envelope = {"type": "text", "id": "x", "name": "x", "payload": {}}
+    assert client.post("/api/render", json=envelope).status_code == 422

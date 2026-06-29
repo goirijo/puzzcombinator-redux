@@ -7,6 +7,7 @@
 import { ArtifactCreateSection } from './ArtifactCreateSection'
 import { DocumentSection } from './DocumentSection'
 import { NodeCreateSection } from './NodeCreateSection'
+import { PreviewSection } from './PreviewSection'
 
 export function ScratchPanel() {
   return (
@@ -14,6 +15,7 @@ export function ScratchPanel() {
       <DocumentSection />
       <NodeCreateSection />
       <ArtifactCreateSection />
+      <PreviewSection />
     </div>
   )
 }

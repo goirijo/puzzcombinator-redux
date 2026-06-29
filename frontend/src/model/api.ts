@@ -144,6 +144,31 @@ export async function requestArrange(
   return body.positions
 }
 
+/** A rendered artifact: the `RenderFragment` fields the backend's `/api/render` returns —
+ *  the markup, whether it's HTML or inline SVG, and any CSS the markup depends on. */
+export interface RenderedArtifactDTO {
+  markup: string
+  kind: 'html' | 'svg'
+  styles: string
+}
+
+/**
+ * Render one artifact to its preview fragment: `POST /api/render` with the artifact's
+ * `{type, id, name, payload}` envelope, returning `{markup, kind, styles}`. Rendering lives in
+ * the backend (the artifact's pure `render`), so the frontend asks rather than duplicating it;
+ * the envelope travels because the editor's artifact may be unsaved. Surfaces the server's 422
+ * detail (unknown type / bad payload) the same way the other POSTs do.
+ */
+export async function renderArtifact(artifact: ArtifactDTO): Promise<RenderedArtifactDTO> {
+  const res = await fetch('/api/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(artifact),
+  })
+  if (!res.ok) await failWithDetail(res, '/api/render')
+  return res.json() as Promise<RenderedArtifactDTO>
+}
+
 // --- Composition: fuse the channels on load, split them on save. -------------------------
 // Pure (no fetch/state), so they're unit-testable. The load↔save pair is symmetric: load
 // fuses graph nodes + the loose-artifact pool into one canvas array and projects the active

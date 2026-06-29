@@ -75,6 +75,11 @@ and the workspace model live one layer down in
     auto-layout for the *live* (possibly unsaved) graph, so the editor can re-arrange
     without writing the file. `orientation` is `"horizontal"` (default) or `"vertical"`;
     422 on an unknown orientation or an un-layoutable graph (e.g. a cycle).
+  - `POST /api/render` takes one artifact's `{type, id, name, payload}` envelope and returns
+    its rendered fragment `{markup, kind, styles}` — the artifact's pure `render()`, run
+    through the registry so it is artifact-agnostic (a new type previews with no edit here).
+    Stateless and file-independent like `arrange`; the editor uses it for live artifact
+    preview. 422 on an unknown type or a malformed payload.
   - The **active document** is a file path that starts empty. `PUZZ_GRAPH`, if set, seeds
     the initial path (a launch convenience); New/Open switch it at runtime and take
     precedence. With no active path — and before a *New*-ed file's first save — `GET` draws
