@@ -18,7 +18,6 @@ export type CommandId =
   | 'view'
   | 'graph'
   | 'puzzle'
-  | 'saveload'
   | 'bind'
   | 'arrange'
   | 'manage'
@@ -40,7 +39,6 @@ export const COMMANDS: CommandDescriptor[] = [
   { id: 'view', label: 'View', icon: '▤', Panel: ViewPanel },
   { id: 'graph', label: 'Graph', icon: '◆', Panel: GraphPanel },
   { id: 'puzzle', label: 'Puzzle', icon: '✦', Panel: PlaceholderPanel },
-  { id: 'saveload', label: 'Save / Load', icon: '🖫', Panel: PlaceholderPanel },
   { id: 'bind', label: 'Bind', icon: '❒', Panel: PlaceholderPanel },
   { id: 'arrange', label: 'Arrange', icon: '⊞', Panel: PlaceholderPanel },
   { id: 'manage', label: 'Manage', icon: '☰', Panel: PlaceholderPanel },

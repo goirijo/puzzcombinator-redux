@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { buildSaveRequest, requestArrange, toFlowGraph, type GraphResponseDTO } from './api'
+import {
+  buildSaveRequest,
+  newDocument,
+  openDocument,
+  requestArrange,
+  saveDocumentAs,
+  toFlowGraph,
+  type GraphResponseDTO,
+} from './api'
 import type { GraphBlockDTO } from './graph'
 import type { WorkspaceDTO } from './workspace'
 
@@ -111,5 +119,71 @@ describe('requestArrange', () => {
     )
 
     await expect(requestArrange(GRAPH, 'horizontal')).rejects.toThrow('cannot arrange: cycle')
+  })
+})
+
+describe('newDocument / openDocument', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('each POSTs its endpoint with the path body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await newDocument('hunt.json')
+    await openDocument('other.json')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/document/new')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ path: 'hunt.json' })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/document/open')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ path: 'other.json' })
+  })
+
+  it('surfaces the server detail on a non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: () => Promise.resolve({ detail: 'file exists; use Open: hunt.json' }),
+      }),
+    )
+
+    await expect(newDocument('hunt.json')).rejects.toThrow('file exists; use Open: hunt.json')
+  })
+})
+
+describe('saveDocumentAs', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('POSTs the path alongside the save body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { nodes, edges } = toFlowGraph(RES)
+    const body = buildSaveRequest(nodes, edges, WS)
+    await saveDocumentAs('named.json', body)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/document/save-as')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ path: 'named.json', ...body })
+  })
+
+  it('surfaces the server detail on a non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: () => Promise.resolve({ detail: 'file exists; use Open: named.json' }),
+      }),
+    )
+
+    const { nodes, edges } = toFlowGraph(RES)
+    await expect(saveDocumentAs('named.json', buildSaveRequest(nodes, edges, WS))).rejects.toThrow(
+      'file exists; use Open: named.json',
+    )
   })
 })

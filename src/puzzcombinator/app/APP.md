@@ -49,11 +49,10 @@ don't change, only the view does.
 
 ## Backend (Python)
 
-Two small modules. They depend downward (on `core` + `serialization` + `visualization`,
-and on `puzzles`/`artifacts` only to build the demo) and never reach sideways or up. The
-**drawing logic itself is not here** — `layered_layout` and the workspace model live one
-layer down in [`visualization/`](../visualization/VISUALIZATION.md); `app` only imports
-and composes them.
+One small module. It depends downward (on `core` + `serialization` + `visualization`) and
+never reaches sideways or up. The **drawing logic itself is not here** — `layered_layout`
+and the workspace model live one layer down in
+[`visualization/`](../visualization/VISUALIZATION.md); `app` only imports and composes them.
 
 - **`server.py` — the thin FastAPI app, and the channel-composition layer.** Almost
   logic-free except for stitching the two channels together.
@@ -63,26 +62,27 @@ and composes them.
   - `PUT /api/graph` takes a `{graph, workspace}` body: the `graph` block reconstructs
     through `graph_from_dict` (which validates structure + rebuilds artifacts via the
     registry); the `workspace` round-trips through its own codec; the two compose into
-    one `HuntDocument`-shaped file with a sibling `workspace` key. Returns 409 in demo
-    mode (no file to save to) and 422 on an invalid body.
+    one `HuntDocument`-shaped file with a sibling `workspace` key. Returns 409 when there
+    is no active document (nowhere to write — start one with *New*) and 422 on an invalid body.
+  - `POST /api/document/new` takes a `{path}` body, writes an **empty** document to that
+    path and switches the active document onto it. 422 on a missing path; **409 if the file
+    already exists** (use *Open* for existing files, so a stray *New* can't clobber a hunt).
+  - `POST /api/document/open` takes a `{path}` body and switches the active document onto an
+    existing file. Validates it up front — 404 if missing, 422 if it does not parse as a
+    document — so the active document never points at a broken file.
   - `POST /api/arrange` takes a `{graph, orientation}` body and returns a
     `{positions: {node_id: {x, y}}}` map from `visualization.layout.layered_layout` —
     auto-layout for the *live* (possibly unsaved) graph, so the editor can re-arrange
     without writing the file. `orientation` is `"horizontal"` (default) or `"vertical"`;
     422 on an unknown orientation or an un-layoutable graph (e.g. a cycle).
-  - Which graph: the `PUZZ_GRAPH` environment variable, if set, points at a serialized
-    hunt JSON file — a hunt document — loaded via `serialization.from_json` and drawn as
-    its `.main` graph; otherwise the built-in demo graph is used (and saving is
-    disabled — nowhere to write).
+  - The **active document** is a file path that starts empty. `PUZZ_GRAPH`, if set, seeds
+    the initial path (a launch convenience); New/Open switch it at runtime and take
+    precedence. With no active path — and before a *New*-ed file's first save — `GET` draws
+    an **empty graph**, and saving is disabled (nowhere to write).
   - The app is **API-only** — it no longer serves the page. In development the React/Vite
     UI runs on `http://localhost:5173` and **proxies** `/api/*` to this app on `:8000`, so
     the browser still sees one origin and **no CORS config is needed**. (Serving a built
     `frontend/dist` from FastAPI is a deployment concern, deferred.)
-
-- **`demo.py` — a built-in sample hunt.** `build_demo_graph()` assembles a small
-  branch-and-merge hunt with `GraphBuilder`, so the page always has something
-  non-trivial to draw with zero setup and no dependency on the (still-stale) example
-  scripts or binder.
 
 ### The API response shape (the seam the browser reads)
 
@@ -126,17 +126,17 @@ UI `GET`s the `{graph, workspace}` pair and `PUT`s an edited `{graph, workspace}
 
 ### Data flow in one line
 
-`server` loads both channels from the `PUZZ_GRAPH` file → graph via `serialization`,
+`server` loads both channels from the active document file → graph via `serialization`,
 workspace via `visualization` (default-synthesized + position-resolved if absent) → JSON
 over `GET /api/graph` → the frontend draws it; on Save the frontend `PUT`s both channels
-back and `server` composes them into the one `PUZZ_GRAPH` document.
+back and `server` composes them into the active document.
 
 ## Running the backend
 
 ```bash
 pip install -e ".[gui]"                                   # fastapi + uvicorn
 python -m uvicorn puzzcombinator.app.server:app --reload  # API on http://127.0.0.1:8000
-# draw a real hunt instead of the demo:
+# seed the initial document (else the editor opens empty; New/Open switch it at runtime):
 PUZZ_GRAPH=/path/to/hunt.json python -m uvicorn puzzcombinator.app.server:app --reload
 ```
 
@@ -149,8 +149,8 @@ which proxies `/api` to this app.
 
 In `tests/app/`:
 - **`test_server.py`** — the real routes via FastAPI's in-process `TestClient` (GET
-  response shape, layout coordinates, `PUZZ_GRAPH` override, and the `PUT` save→reload
-  round-trip + its demo-mode rejection).
+  response shape, layout coordinates, `PUZZ_GRAPH` seed, New/Open document switching, and
+  the `PUT` save→reload round-trip + its no-active-document rejection).
 
 The pure layout + workspace round-trip tests moved with their code, to
 `tests/visualization/` (see [`VISUALIZATION.md`](../visualization/VISUALIZATION.md)).
@@ -159,9 +159,9 @@ Frontend testing is covered in [`frontend/FRONTEND.md`](../../../frontend/FRONTE
 
 ## Layering rules (don't violate without discussing)
 
-- **App is the top layer.** It imports `core`/`serialization` (and `puzzles`/`artifacts`
-  for the demo) and changes none of them. If a need pushes you to edit a lower layer,
-  that's a signal to rethink the seam, not to reach down.
+- **App is the top layer.** It imports `core`/`serialization`/`visualization` and changes
+  none of them. If a need pushes you to edit a lower layer, that's a signal to rethink the
+  seam, not to reach down.
 - **The JSON seam is the contract.** Anything the browser needs goes through the
   `GET`/`PUT /api/graph` shapes. Don't invent a side channel.
 - **Hard logic in Python, thin browser.** New computed structure (layout, validation,

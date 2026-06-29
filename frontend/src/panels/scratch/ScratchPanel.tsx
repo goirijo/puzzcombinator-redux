@@ -5,11 +5,13 @@
 // buttons, no polish yet.
 
 import { ArtifactCreateSection } from './ArtifactCreateSection'
+import { DocumentSection } from './DocumentSection'
 import { NodeCreateSection } from './NodeCreateSection'
 
 export function ScratchPanel() {
   return (
     <div className="scratch-panel">
+      <DocumentSection />
       <NodeCreateSection />
       <ArtifactCreateSection />
     </div>

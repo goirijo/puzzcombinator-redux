@@ -7,13 +7,23 @@ workspace) into one document and splitting them back out.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from puzzcombinator import GraphBuilder, HuntDocument, TextArtifact
+from puzzcombinator.app import server
 from puzzcombinator.app.server import app
 from puzzcombinator.serialization import to_json
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_active_path():
+    """The active-document override is module state that takes precedence over PUZZ_GRAPH.
+    Reset it after every test so a New/Open in one test can't leak into the env-based tests."""
+    yield
+    server._active_path = None
 
 
 def _seed_hunt(tmp_path, monkeypatch, graph) -> None:
@@ -23,11 +33,14 @@ def _seed_hunt(tmp_path, monkeypatch, graph) -> None:
     monkeypatch.setenv("PUZZ_GRAPH", str(path))
 
 
-def test_get_returns_graph_envelope_and_workspace() -> None:
+def test_get_with_no_active_document_returns_empty_graph(monkeypatch) -> None:
+    # No PUZZ_GRAPH and no New/Open override -> the editor opens on an empty graph (no demo).
+    monkeypatch.delenv("PUZZ_GRAPH", raising=False)
     body = client.get("/api/graph").json()
     assert body["schema_version"] == "3"
-    assert {n["id"] for n in body["graph"]["nodes"]} >= {"start", "solve", "combine", "end"}
-    # The UI channel rides alongside as an explicit sibling.
+    assert body["graph"] == {"nodes": [], "edges": []}
+    assert body["unplaced"] == []
+    # The UI channel still rides alongside as an explicit sibling (a synthesized default).
     ws = body["workspace"]
     assert set(ws) == {"views", "tabs", "active_tab"}
 
@@ -152,15 +165,134 @@ def test_put_persists_unplaced_pool(tmp_path, monkeypatch) -> None:
     assert reloaded[0]["payload"]["text"] == "scratch"
 
 
-def test_put_in_demo_mode_is_rejected(monkeypatch) -> None:
-    # With no PUZZ_GRAPH there is nowhere to save; the server says so rather than
-    # silently writing the demo somewhere.
+def test_put_with_no_active_document_is_rejected(monkeypatch) -> None:
+    # With no active document there is nowhere to save; the server says so (409) rather than
+    # silently writing somewhere.
     monkeypatch.delenv("PUZZ_GRAPH", raising=False)
     body = client.get("/api/graph").json()
     response = client.put(
         "/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]}
     )
     assert response.status_code == 409
+
+
+def test_new_creates_empty_document_and_enables_save(tmp_path, monkeypatch) -> None:
+    # New writes an empty document to a fresh path and switches onto it: GET then draws an
+    # empty graph and a save (which was 409 with no active document) now succeeds.
+    monkeypatch.delenv("PUZZ_GRAPH", raising=False)
+    target = tmp_path / "fresh.json"
+    created = client.post("/api/document/new", json={"path": str(target)})
+    assert created.status_code == 200
+    assert target.exists()
+
+    body = client.get("/api/graph").json()
+    assert body["graph"] == {"nodes": [], "edges": []}
+
+    saved = client.put("/api/graph", json={"graph": body["graph"], "workspace": body["workspace"]})
+    assert saved.status_code == 200
+
+
+def test_new_refuses_existing_file(tmp_path) -> None:
+    # New must not clobber an existing file — that's Open's job.
+    target = tmp_path / "exists.json"
+    target.write_text("{}", encoding="utf-8")
+    response = client.post("/api/document/new", json={"path": str(target)})
+    assert response.status_code == 409
+
+
+def test_new_rejects_missing_path() -> None:
+    assert client.post("/api/document/new", json={}).status_code == 422
+
+
+def test_open_switches_active_document(tmp_path, monkeypatch) -> None:
+    # Seed document A via env, then Open document B on disk: GET reflects B, not A.
+    a = GraphBuilder()
+    a.node("from_a")
+    _seed_hunt(tmp_path, monkeypatch, a.build())
+
+    b = GraphBuilder()
+    b.node("from_b")
+    other = tmp_path / "b.json"
+    other.write_text(to_json(HuntDocument.single(b.build())), encoding="utf-8")
+
+    opened = client.post("/api/document/open", json={"path": str(other)})
+    assert opened.status_code == 200
+    ids = {n["id"] for n in client.get("/api/graph").json()["graph"]["nodes"]}
+    assert ids == {"from_b"}
+
+
+def test_open_missing_file_is_404(tmp_path) -> None:
+    response = client.post("/api/document/open", json={"path": str(tmp_path / "nope.json")})
+    assert response.status_code == 404
+
+
+def test_open_malformed_file_is_422(tmp_path) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not valid json", encoding="utf-8")
+    response = client.post("/api/document/open", json={"path": str(bad)})
+    assert response.status_code == 422
+
+
+def test_save_as_writes_current_graph_and_switches(tmp_path, monkeypatch) -> None:
+    # The untitled-document workflow: start empty, build a node, Save As to a new path. The
+    # file gets the *current* graph (not an empty doc), and a later plain Save lands there.
+    monkeypatch.delenv("PUZZ_GRAPH", raising=False)
+    body = client.get("/api/graph").json()  # the empty startup document
+    body["graph"]["nodes"].append({"id": "n1", "action": None, "label": "Hi", "notes": None})
+
+    target = tmp_path / "named.json"
+    saved = client.post(
+        "/api/document/save-as",
+        json={
+            "path": str(target),
+            "graph": body["graph"],
+            "unplaced": body["unplaced"],
+            "workspace": body["workspace"],
+        },
+    )
+    assert saved.status_code == 200
+    assert target.exists()
+    # The new file is now active: GET reflects the saved node, and a plain Save succeeds.
+    assert {n["id"] for n in client.get("/api/graph").json()["graph"]["nodes"]} == {"n1"}
+    reput = client.get("/api/graph").json()
+    assert (
+        client.put(
+            "/api/graph", json={"graph": reput["graph"], "workspace": reput["workspace"]}
+        ).status_code
+        == 200
+    )
+
+
+def test_save_as_refuses_existing_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("PUZZ_GRAPH", raising=False)
+    target = tmp_path / "taken.json"
+    target.write_text("{}", encoding="utf-8")
+    body = client.get("/api/graph").json()
+    response = client.post(
+        "/api/document/save-as",
+        json={"path": str(target), "graph": body["graph"], "workspace": body["workspace"]},
+    )
+    assert response.status_code == 409
+
+
+def test_save_as_rejects_missing_path() -> None:
+    assert client.post("/api/document/save-as", json={}).status_code == 422
+
+
+def test_save_as_rejects_invalid_graph(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("PUZZ_GRAPH", raising=False)
+    body = client.get("/api/graph").json()
+    # A dangling edge (no such target) must be rejected by the serialization layer.
+    body["graph"]["edges"].append({"id": "x", "source": "n1", "target": "ghost", "content": []})
+    response = client.post(
+        "/api/document/save-as",
+        json={
+            "path": str(tmp_path / "x.json"),
+            "graph": body["graph"],
+            "workspace": body["workspace"],
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_arrange_returns_positions_for_each_node(tmp_path, monkeypatch) -> None:

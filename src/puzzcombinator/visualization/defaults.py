@@ -39,7 +39,7 @@ def _view_id(graph_id: str) -> str:
 def default_workspace(graphs: dict[str, Graph], main_id: str = DEFAULT_GRAPH_ID) -> Workspace:
     """A starting workspace: an auto-arranged view per graph, one tab on the main view."""
     views = {
-        _view_id(gid): View(graph=gid, title=gid.capitalize(), positions=_auto_positions(g))
+        _view_id(gid): View(graph=gid, title=gid, positions=_auto_positions(g))
         for gid, g in graphs.items()
     }
     main_view = _view_id(main_id if main_id in graphs else next(iter(graphs)))

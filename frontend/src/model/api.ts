@@ -68,6 +68,55 @@ export async function saveGraph(body: SaveRequestDTO): Promise<void> {
   }
 }
 
+/** Throw with the backend's `detail` (the way the save/arrange calls do), for a failed POST. */
+async function failWithDetail(res: Response, endpoint: string): Promise<never> {
+  const detail = await res
+    .json()
+    .then((b: { detail?: string }) => b.detail)
+    .catch(() => undefined)
+  throw new Error(detail ?? `POST ${endpoint} failed: ${res.status}`)
+}
+
+/** POST a `{ path, ...extra }` body to a document endpoint, surfacing the server detail. */
+async function postDocument(endpoint: string, body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) await failWithDetail(res, endpoint)
+}
+
+/**
+ * Start a fresh empty document at `path` and switch the backend onto it (`POST
+ * /api/document/new`). The backend refuses (409) if the file already exists — use
+ * {@link openDocument} for existing files. The caller reloads the page on success so the
+ * mount-load reseeds every store from the now-active document.
+ */
+export async function newDocument(path: string): Promise<void> {
+  await postDocument('/api/document/new', { path })
+}
+
+/**
+ * Switch the backend onto the existing document at `path` (`POST /api/document/open`),
+ * dropping the current one. The backend validates the file first (404 missing, 422
+ * unparseable). The caller reloads the page on success to draw the newly-active document.
+ */
+export async function openDocument(path: string): Promise<void> {
+  await postDocument('/api/document/open', { path })
+}
+
+/**
+ * Save the *current* graph to a new file at `path` and switch the backend onto it (`POST
+ * /api/document/save-as`) — the "name this untitled document" action. Sends the live save
+ * body alongside the path; the backend refuses (409) if the file already exists, like New.
+ * The caller reloads the page on success: the work is already on disk, so the mount-load
+ * reseeds from the now-saved, now-active document with a clean (not-dirty) state.
+ */
+export async function saveDocumentAs(path: string, body: SaveRequestDTO): Promise<void> {
+  await postDocument('/api/document/save-as', { path, ...body })
+}
+
 /**
  * Auto-layout the live graph: `POST /api/arrange` with the current `{ nodes, edges }` and an
  * orientation, returning a `{node_id: {x, y}}` positions map shaped exactly like a view's

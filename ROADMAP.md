@@ -43,11 +43,25 @@ which is the active frontier.
   So the two interaction classes stay separate branches in the hook. A later, richer extension —
   vim-style key *sequences* (`g g`, leader keys, modes) — would also live here as a small state
   machine; defer until wanted.
-- **Browser file-picker** to replace the `PUZZ_GRAPH` env var.
-- **Empty project by default.** Today a fresh load synthesizes a demo graph plus a default
-  tab/view/auto-layout so there's always something to draw. Once the browser file-picker and
-  in-UI graph creation land, drop that: a new project should start **empty** — no demo graph,
-  no auto-created tab/view — and the designer builds it up from nothing.
+- **Browser file-picker** to replace the `PUZZ_GRAPH` env var. *(Partial:* the SCRATCH command's
+  Document section now does **New** (empty doc at a path) and **Open** (switch to an existing file)
+  by typing a server-side path; the backend's active document is mutable at runtime and
+  `PUZZ_GRAPH` is just its launch-time seed. Still to do: a real picker UI — browse/list files
+  rather than type a path — and lifting it out of SCRATCH into the real Save/Load command.*)*
+- **In-app document reseed (drop the reload).** New/Open currently switch the backend's active
+  document and then do a **full page reload** (`window.location.reload()` in
+  `panels/scratch/DocumentSection`), which lets the existing `usePersistence` mount-load reseed
+  every store, undo history, and the dirty snapshot for free — minimal, but it flashes. The polish
+  is to reseed **in-app**: re-fetch the envelope and call `loadGraph`/`loadWorkspace` +
+  `temporal.clear()` directly. The blocker is the dirty snapshot — it lives as React state inside
+  `usePersistence`, unreachable from a no-props panel — so this means lifting that snapshot into a
+  store (or exposing a shared `loadDocument` action) so a switch can reset "clean" without a reload.
+  Do it when New/Open graduate out of SCRATCH into the real Save/Load command.
+- **Empty project by default.** *(Partial.)* A fresh load with no active document now starts
+  **empty** — the built-in demo graph is gone (`app/demo.py` deleted); the backend serves an empty
+  `Graph` and a synthesized default tab/view so the canvas still has somewhere to draw. Remaining:
+  once in-UI graph creation is richer, consider dropping even the auto-created tab/view so a new
+  project is truly blank and the designer builds it up from nothing.
 - **Generate a binder from the editor.** Unblocked now that the binder layer is real;
   wire the editor to the existing `Binder.of_artifacts` / `Binder.of_nodes`.
 
@@ -184,6 +198,15 @@ which is the active frontier.
 Non-functional UX niceties — nothing here changes what the editor *can do*, only how
 pleasant it is. Low-stakes, pick up opportunistically.
 
+- **Save As: assign the path, defer the write.** Today *Save As* (the Document section in
+  SCRATCH) writes the file eagerly on click, mirroring *New*. A nicer feel: typing a path and
+  hitting Save As would just *name* the untitled document (set the backend's active path)
+  without touching disk, so the file only appears on the next real *Save* (Ctrl+S) — matching
+  how most editors treat "untitled → named → saved". Small: split the backend's
+  `/api/document/save-as` into a path-only "claim this path" step (still refuse-if-exists) and
+  leave the write to the existing `PUT /api/graph`; the frontend would set the path and skip the
+  reload (no write to reseed from yet). Defer until Save As leaves SCRATCH for the real
+  Save/Load command, where the dirty-state UX gets designed properly anyway.
 - **Full tab name on hover.** When a tab's title is truncated (many tabs shrink the width,
   or a long view name), reveal the full name on hover. Leaning toward a native `title`
   attribute set only when the label actually overflows (`scrollWidth > clientWidth`,

@@ -102,7 +102,7 @@ next to their source (`*.test.ts`).
 | --- | --- |
 | `GraphPanel.tsx` | The **GRAPH** command's panel: with a node selected, edit its label/action/notes and see its incoming/outgoing edges + artifacts; with an edge selected, list its artifacts (each with **Detach**) and the pool (each with **Place**). Subscribes to the graph + selection stores; takes no props. |
 | `ViewPanel.tsx` | The **VIEW** command's panel: list/switch/create/rename/delete views, auto-arrange, and the per-view **Show unplaced artifacts** toggle. Subscribes to the workspace (and graph) store. |
-| `scratch/` | The **SCRATCH** rail command — a playground whose self-contained `<Section>`s (node create, artifact create) subscribe to stores directly, so each lifts into its real command once it settles. |
+| `scratch/` | The **SCRATCH** rail command — a playground whose self-contained `<Section>`s (document new/open, node create, artifact create) subscribe to stores directly (or, for document switching, hit the backend and reload), so each lifts into its real command once it settles. |
 | `PlaceholderPanel.tsx` | The stand-in every not-yet-built command opens, so the rail shows the full intended command set. |
 
 **Config — set once, rarely opened:** `index.html` (the page React loads into),
