@@ -24,14 +24,13 @@
   --artifact-tag-text: #ffffff;
 
   /* Exploded edge-artifact grid. Chips size to their own content (equal padding, so "crossword"
-     is wider than "text" but both are padded the same), capped at --edge-chip-max so an overlong
-     name can't overflow. --edge-grid-scale is the one size knob (renders the whole grid larger/
-     smaller). The box flex-wraps the chips and hugs them via fit-content, capped at --edge-grid-cols
-     chips wide (count picked per-edge in FloatingEdge). */
+     is wider than "text" but both are padded the same; nothing truncates). --edge-grid-scale is the
+     one size knob (renders the whole grid larger/smaller). The box flex-wraps the chips and hugs
+     them via a justified-rows width measured in FloatingEdge (--edge-grid-width); BLOCK_ASPECT there
+     controls how wide vs tall the block is. */
   --edge-grid-scale: 0.8;
   --edge-chip-gap: 6px;
   --edge-grid-pad: 8px;
-  --edge-chip-max: 140px;
 
   /* --- Shell chrome (rail / tabs / panel) --------------------------------- */
   --shell-bg: #f4f5f7;
@@ -167,14 +166,13 @@
  * each keeps its OWN width (no rigid grid cells), so a short "text" chip isn't blown up to the size
  * of a "crossword" chip. The box needs a DEFINITE width to wrap into rows — it's absolutely
  * positioned in a pill-sized containing block, so width:auto/min-content/fit-content all collapse
- * it to a single column. So we give it a definite width of --edge-grid-cols chips (count picked
- * per-edge in FloatingEdge); rows are centred within it. Hidden-but-mounted when closed: visibility
- * (not display/opacity alone) so it's fully inert — an opacity:0 element would still capture the
- * hover and never let go. The delayed visibility transition fades it out before it goes inert.
- * LIMITATION: because the width is definite (not content-hugging) rows that don't fill it leave
- * centred slack, and a single short chip sits centred in a chip-max-wide box. Getting BOTH own-width
- * chips AND a box that hugs them (a justified/masonry layout with length-balanced rows) can't be
- * done in pure CSS — it needs measuring each chip in JS. Deferred; see the note to the user. */
+ * it to a single column. FloatingEdge measures the chips and computes a justified-rows width (the
+ * widest packed row) into --edge-grid-width; flex-wrap then reproduces that packing and the box
+ * hugs it. box-sizing:content-box so the measured width lands on the content, not shrunk by padding.
+ * Before the first measure it falls back to max-content (one row, but it's hidden anyway). Rows
+ * narrower than the widest align left inside it. Hidden-but-mounted when closed: visibility (not display/
+ * opacity alone) so it's fully inert — an opacity:0 element would still capture the hover and never
+ * let go. The delayed visibility transition fades it out before it goes inert. */
 .edge-artifacts__grid {
   position: absolute;
   left: 50%;
@@ -182,11 +180,12 @@
   transform: translate(-50%, -50%) scale(calc(var(--edge-inv-zoom) * var(--edge-grid-scale)));
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-content: center;
   gap: var(--edge-chip-gap);
   padding: var(--edge-grid-pad);
-  width: calc(var(--edge-grid-cols) * (var(--edge-chip-max) + var(--edge-chip-gap)));
+  box-sizing: content-box;
+  width: var(--edge-grid-width, max-content);
   background: var(--shell-surface);
   border: 1px solid var(--shell-border);
   border-radius: var(--node-radius);
@@ -203,10 +202,12 @@
   transition: opacity 0.12s ease;
 }
 
-/* Grid chips size to their content — drop the canvas node's 96px min-width floor so a short name
- * ("text") isn't padded out to match a long one ("crossword"); both keep the same --node-pad. The
- * max-width cap only clips a runaway-long name (so it can't overflow the box), not normal ones. */
+/* Grid chips size to their content. min-width:min-content drops the canvas node's 96px floor (a
+ * short "text" chip stays narrow) while still forbidding flex from shrinking a chip below its own
+ * text — that sub-content shrink is what was ellipsis-truncating names when the box ran marginally
+ * tight. max-width:none lifts the 200px cap so a long name grows instead of truncating. Unbounded
+ * widths are safe: the measured --edge-grid-width sizes the box to whatever the chips come out to. */
 .edge-artifacts__grid .artifact-node {
-  min-width: 0;
-  max-width: var(--edge-chip-max);
+  min-width: min-content;
+  max-width: none;
 }

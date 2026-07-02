@@ -100,7 +100,7 @@ export function GraphPanel() {
   }
 
   if (!selection) {
-    return <p className="inspector__empty">Select a node on the canvas to edit it.</p>
+    return <p className="inspector__empty">Select a node or edge on the canvas to edit it.</p>
   }
 
   if (selection.kind === 'edge') {
