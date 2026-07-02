@@ -44,8 +44,8 @@ it's one screen built as a *shell* (stable regions) with *features* (panels) plu
 it.
 
 `src/` is grouped by role: entry + global CSS at the root, then `model/` (the backend seam),
-`nodes/` (canvas node components), `shell/` (the chrome), `panels/` (features). Tests live
-next to their source (`*.test.ts`).
+`nodes/` (canvas node components), `edges/` (the custom floating edge + its hover overlay),
+`shell/` (the chrome), `panels/` (features). Tests live next to their source (`*.test.ts`).
 
 **Entry + globals (`src/`):**
 
@@ -71,8 +71,18 @@ next to their source (`*.test.ts`).
 | File | What it is |
 | --- | --- |
 | `HuntNode.tsx` | The **hunt-node component**: renders one graph node's box from its `data` (label or a shortened id when unlabelled). No style values (class names); carries the four side `Handle`s a connection can start from. A new node *type* is another component here, registered in `shell/Viewport.tsx`'s `nodeTypes`. |
-| `LooseArtifactNode.tsx` | The **loose-artifact component**: draws an unplaced (pooled) artifact as a non-connectable card showing only its `type` + `name` (never the type-specific payload). No `Handle`s — a loose artifact isn't wired; it meets an edge by being placed on it. |
+| `LooseArtifactNode.tsx` | The **loose-artifact component**: draws an unplaced (pooled) artifact as a non-connectable card via the shared `ArtifactChip` (`type` + `name`, never the payload). No `Handle`s — a loose artifact isn't wired; it meets an edge by being placed on it. |
+| `ArtifactChip.tsx` | The **shared artifact chip**: the small `type`-tag + `name` card. Rendered by both `LooseArtifactNode` (a pooled artifact on the canvas) and `edges/EdgeArtifacts` (the explode grid), so an artifact looks identical in the pool and on an edge. Purely presentational. |
 | `shortId.ts` | `shortId(id)` — a node's 6-char id stub (git-hash style) shown when it has no label. |
+
+**Custom edges (`src/edges/`):**
+
+| File | What it is |
+| --- | --- |
+| `FloatingEdge.tsx` | The **edge component**: draws a floating edge whose path is recomputed from the two endpoints' live geometry — it attaches to whichever node sides face each other and re-aims as nodes move. Registered in `shell/Viewport.tsx`'s `edgeTypes`. When the edge carries artifacts it overlays `<EdgeArtifacts>` at the midpoint; otherwise it's just the path + arrowhead. |
+| `floating.ts` | Pure attachment geometry (`getEdgeParams`/`borderPoint`/`sideOf`): where the edge meets each node's perimeter, from the live node rects. No React. |
+| `EdgeArtifacts.tsx` | The **hover "explode" overlay**: a count pill at the edge midpoint that, on hover, reveals the edge's artifacts as a grid of `ArtifactChip`s. The reveal is pure CSS `:hover` (both pill and grid always rendered, so it can't get stuck); the grid counter-scales by 1/zoom for a fixed on-screen size at any zoom. It measures the chips and packs them into justified rows (`justifiedWidth`, tuned by `BLOCK_ASPECT`), then sets the flex box to the widest row so it hugs the chips — the one layout pure CSS can't do. |
+| `floating.test.ts` | Vitest units for the border-attachment geometry. |
 
 **The shell — the stable region skeleton (`src/shell/`):**
 
@@ -258,7 +268,7 @@ flowchart TD
     workspaceStore["workspaceStore.ts"]
     selectionStore["selectionStore.ts"]
     Viewport["Viewport.tsx"]
-    nodes["HuntNode + LooseArtifactNode"]
+    nodes["nodes/ + edges/<br/>canvas element components"]
     commands["commands.ts<br/>+ PanelRegion"]
     panels["panels/*"]
 
@@ -338,7 +348,8 @@ Find what you're adding; it tells you which file to touch:
   (`model/flow.test.ts`).
 - **A new look, or a new kind of node** → edit `nodes/HuntNode.tsx` (structure) + `theme.css`
   (colors). For a genuinely new node type, write another component in `nodes/` and register
-  it in `shell/Viewport.tsx`'s `nodeTypes` map.
+  it in `shell/Viewport.tsx`'s `nodeTypes` map. A new **edge** type is the analog in `edges/`
+  + the `edgeTypes` map (the floating edge and its hover artifact overlay live there).
 - **A new interaction, state, or network call** → an **undoable graph change** goes in the
   graph store (`shell/graphStore.ts`); **workspace** state (views/tabs/`show_unplaced`) goes in
   `shell/workspaceStore.ts`; transient **selection** is `shell/selectionStore.ts`. Panels reach
