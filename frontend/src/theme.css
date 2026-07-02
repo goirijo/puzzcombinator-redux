@@ -23,6 +23,16 @@
   --artifact-min-width: 96px;
   --artifact-tag-text: #ffffff;
 
+  /* Exploded edge-artifact grid. Chips size to their own content (equal padding, so "crossword"
+     is wider than "text" but both are padded the same), capped at --edge-chip-max so an overlong
+     name can't overflow. --edge-grid-scale is the one size knob (renders the whole grid larger/
+     smaller). The box flex-wraps the chips and hugs them via fit-content, capped at --edge-grid-cols
+     chips wide (count picked per-edge in FloatingEdge). */
+  --edge-grid-scale: 0.8;
+  --edge-chip-gap: 6px;
+  --edge-grid-pad: 8px;
+  --edge-chip-max: 140px;
+
   /* --- Shell chrome (rail / tabs / panel) --------------------------------- */
   --shell-bg: #f4f5f7;
   --shell-surface: #ffffff;
@@ -72,9 +82,11 @@
 
 /* Selection feedback: React Flow adds `.selected` to the node wrapper. Ring whichever card it
  * wraps (hunt or artifact) so a click reads as selected, without disturbing each node's own
- * identity border. */
+ * identity border. The chip under the mouse in an edge's exploded grid reuses the SAME ring, so
+ * hovering an artifact there reads exactly like selecting a loose one. */
 .react-flow__node.selected .hunt-node,
-.react-flow__node.selected .artifact-node {
+.react-flow__node.selected .artifact-node,
+.edge-artifacts__grid .artifact-node:hover {
   box-shadow: 0 0 0 2px var(--node-selected-ring);
 }
 
@@ -112,4 +124,89 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Edge artifact overlay: a small count pill at the edge midpoint (--edge-x/--edge-y; the
+ * translate(-50%,-50%) centres it there) that reveals the edge's artifacts on hover. Pure CSS
+ * :hover — the grid is always in the DOM (inert while hidden) and shown while the pointer is over
+ * the pill OR the grid (its descendant), so moving pill→grid→chip never drops the hover and it
+ * can't get stuck open. The pill scales with zoom like any label; the grid counter-scales by
+ * 1/zoom (--edge-inv-zoom) so it holds a fixed on-screen size at any zoom. Children carry
+ * `nodrag nopan`; we re-enable pointer events here (EdgeLabelRenderer's wrapper sets them none). */
+.edge-artifacts {
+  position: absolute;
+  transform: translate(var(--edge-x), var(--edge-y)) translate(-50%, -50%);
+  pointer-events: all;
+  z-index: 1;
+}
+
+.edge-artifacts:hover {
+  z-index: 10; /* the open grid floats above neighbouring edges/nodes */
+}
+
+/* The count pill (closed state). Hidden while the grid is open, but kept in place so it still
+ * anchors the hover region. */
+.edge-artifacts__count {
+  display: inline-block;
+  padding: 1px 7px;
+  background: var(--shell-surface);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  color: var(--node-text);
+  font-family: var(--font-ui);
+  font-size: var(--action-font-size);
+  cursor: default;
+}
+
+.edge-artifacts:hover .edge-artifacts__count {
+  opacity: 0;
+}
+
+/* The exploded chips, centred on the edge midpoint and counter-scaled by 1/zoom (fixed on-screen
+ * size) times --edge-grid-scale (the size knob). flex-wrap greedily packs the chips into rows —
+ * each keeps its OWN width (no rigid grid cells), so a short "text" chip isn't blown up to the size
+ * of a "crossword" chip. The box needs a DEFINITE width to wrap into rows — it's absolutely
+ * positioned in a pill-sized containing block, so width:auto/min-content/fit-content all collapse
+ * it to a single column. So we give it a definite width of --edge-grid-cols chips (count picked
+ * per-edge in FloatingEdge); rows are centred within it. Hidden-but-mounted when closed: visibility
+ * (not display/opacity alone) so it's fully inert — an opacity:0 element would still capture the
+ * hover and never let go. The delayed visibility transition fades it out before it goes inert.
+ * LIMITATION: because the width is definite (not content-hugging) rows that don't fill it leave
+ * centred slack, and a single short chip sits centred in a chip-max-wide box. Getting BOTH own-width
+ * chips AND a box that hugs them (a justified/masonry layout with length-balanced rows) can't be
+ * done in pure CSS — it needs measuring each chip in JS. Deferred; see the note to the user. */
+.edge-artifacts__grid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(calc(var(--edge-inv-zoom) * var(--edge-grid-scale)));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: var(--edge-chip-gap);
+  padding: var(--edge-grid-pad);
+  width: calc(var(--edge-grid-cols) * (var(--edge-chip-max) + var(--edge-chip-gap)));
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--node-radius);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    visibility 0s linear 0.12s;
+}
+
+.edge-artifacts:hover .edge-artifacts__grid {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+
+/* Grid chips size to their content — drop the canvas node's 96px min-width floor so a short name
+ * ("text") isn't padded out to match a long one ("crossword"); both keep the same --node-pad. The
+ * max-width cap only clips a runaway-long name (so it can't overflow the box), not normal ones. */
+.edge-artifacts__grid .artifact-node {
+  min-width: 0;
+  max-width: var(--edge-chip-max);
 }
